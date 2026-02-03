@@ -1,0 +1,3 @@
+[codespell]
+skip = ./.git,./.venv,./.ruff_cache,./dist,./build
+ignore-words-list = nd,cite

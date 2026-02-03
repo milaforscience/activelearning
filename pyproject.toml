@@ -1,0 +1,25 @@
+[project]
+name = "activelearning"
+version = "0.1.0"
+description = "Multi-fidelity active learning with GFlowNets"
+authors = [
+    {name = "pedromsferraz-mila", email = "pedro.ferraz@mila.quebec"},
+    {name = "alexhernandezgarcia", email = "alex.hernandez-garcia@mila.quebec"},
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    # Add actual project dependencies here, e.g.:
+    # "numpy>=1.20",
+    # "torch",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0",
+    "pre-commit>=3.0",
+]
+
+[build-system]
+requires = ["uv_build >= 0.9.26, <0.10.0"]
+build-backend = "uv_build"

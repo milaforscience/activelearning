@@ -1,0 +1,86 @@
+# Multi-Fidelity Active Learning with GFlowNets
+
+This repository extends the codebase accompanying the paper
+**[Multi-Fidelity Active Learning with GFlowNets](http://arxiv.org/abs/2306.11715)**.
+
+It builds on the original implementation at https://github.com/nikita-0209/mf-al-gfn, with a focus on modularity and extensibility, enabling flexible experimental configurations and easier integration of future methods.
+
+## Setup Instructions
+
+### 1. Install uv
+
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
+
+**On macOS (Homebrew)**
+```sh
+brew install uv
+```
+
+**On macOS or Linux**
+```sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**Using pip**
+```sh
+pip install uv
+```
+
+For more details see the [uv installation docs](https://docs.astral.sh/uv/getting-started/installation/).
+
+### 2. Set up the environment
+
+Install all dependencies (including dev dependencies) and pre-commit hooks:
+
+```sh
+make setup
+```
+
+### 3. Run tests
+
+```sh
+make test
+```
+
+## Project Layout
+
+- Package code: `src/activelearning/`
+- Tests: `tests/`
+
+## Development & Tooling Notes
+
+- Pre-commit hooks are installed by `make setup`.
+- Run all pre-commit checks locally:
+  ```sh
+  make check
+  ```
+- See available Makefile commands and descriptions:
+  ```sh
+  make help
+  ```
+- Clean generated files and caches:
+  ```sh
+  make clean
+  ```
+- Install uv via the Makefile (optional):
+  ```sh
+  make install-uv
+  ```
+- CI runs `make setup` and `make test`. Do not rename or remove these targets, as this will break GitHub Actions.
+- If hooks are not running, re-install manually:
+  ```sh
+  uv run pre-commit install
+  ```
+
+## Citation
+If you use this code in your work, please cite the original paper:
+```bibtex
+@misc{hernandezgarcia2023multifidelity,
+      title={Multi-Fidelity Active Learning with GFlowNets},
+      author={Alex Hernandez-Garcia and Nikita Saxena and Moksh Jain and Cheng-Hao Liu and Yoshua Bengio},
+      year={2023},
+      eprint={2306.11715},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG}
+}
+```
