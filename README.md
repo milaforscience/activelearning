@@ -86,12 +86,13 @@ make test
 ## Citation
 If you use this code in your work, please cite the original paper:
 ```bibtex
-@misc{hernandezgarcia2023multifidelity,
-      title={Multi-Fidelity Active Learning with GFlowNets},
+@article{hernandezgarcia2024multifidelity,
+      title={Multi-Fidelity Active Learning with {GF}lowNets},
       author={Alex Hernandez-Garcia and Nikita Saxena and Moksh Jain and Cheng-Hao Liu and Yoshua Bengio},
-      year={2023},
-      eprint={2306.11715},
-      archivePrefix={arXiv},
-      primaryClass={cs.LG}
+      journal={Transactions on Machine Learning Research},
+      year={2024},
+      issn={2835-8856},
+      url={https://openreview.net/forum?id=dLaazW9zuF},
+      note={Expert Certification}
 }
 ```
