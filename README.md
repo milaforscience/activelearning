@@ -36,6 +36,17 @@ Install all dependencies (including dev dependencies) and pre-commit hooks:
 make setup
 ```
 
+By default, `make setup` (via `uv`) creates and uses a local `.venv/`. If you want to install into an existing virtual environment, set `UV_PROJECT_ENVIRONMENT` to its path before running the command:
+
+```sh
+UV_PROJECT_ENVIRONMENT=/path/to/venv
+make setup
+```
+
+#### Note: This will sync the environment to the lockfile,  uninstalling any packages not defined in the project.
+
+See the [uv documentation](https://docs.astral.sh/uv/concepts/projects/config/#project-environment-path) for details.
+
 ### 3. Run tests
 
 ```sh
