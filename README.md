@@ -3,7 +3,7 @@
 This repository extends the codebase accompanying the paper
 **[Multi-Fidelity Active Learning with GFlowNets](http://arxiv.org/abs/2306.11715)**.
 
-It builds on the original implementation at https://github.com/nikita-0209/mf-al-gfn, with a focus on modularity and extensibility, enabling flexible experimental configurations and easier integration of future methods.
+This is a re-implementation of the original code base at https://github.com/nikita-0209/mf-al-gfn, with a focus on modularity and extensibility, enabling flexible experimental configurations and easier integration of future methods. Note that this is also inspired by a third, intermediate implementation in https://github.com/alexhernandezgarcia/activelearning, with significant contributions by [ginihumer](https://github.com/ginihumer).
 
 ## Setup Instructions
 
