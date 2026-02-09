@@ -1,5 +1,3 @@
-"""Tests for the active learning loop and utility functions."""
-
 import pytest
 
 from activelearning.acquisition.dummy_acquisition import DummyAcquisition
