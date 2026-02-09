@@ -6,7 +6,7 @@ from activelearning.oracle.dummy_oracle import DummyOracle
 from activelearning.sampler.pool_score_sampler import PoolScoreSampler
 from activelearning.selector.score_selector import ScoreSelector
 from activelearning.surrogate.dummy_surrogate import DummySurrogate
-from activelearning.active_learning import active_learning
+from activelearning.active_learning import active_learning, get_best_candidates
 from activelearning.utils.types import Candidate
 
 
@@ -26,18 +26,16 @@ def acquisition():
 
 
 @pytest.fixture
-def sampler(acquisition):
+def sampler():
     candidate_pool = [Candidate(i, 0) for i in range(100)] + [
         Candidate(i, 1) for i in range(100)
     ]
-    return PoolScoreSampler(
-        candidate_pool=candidate_pool, num_samples=100, score_fn=acquisition
-    )
+    return PoolScoreSampler(candidate_pool=candidate_pool, num_samples=100)
 
 
 @pytest.fixture
-def selector(acquisition):
-    return ScoreSelector(score_fn=acquisition, num_samples=5)
+def selector():
+    return ScoreSelector(num_samples=5)
 
 
 @pytest.fixture
@@ -61,7 +59,7 @@ def top_k():
 def test_active_learning_loop(
     dataset, surrogate, acquisition, sampler, selector, oracles, budget, top_k
 ):
-    best, cost, num_iter = active_learning(
+    dataset_out, cost, num_iter = active_learning(
         dataset=dataset,
         surrogate=surrogate,
         acquisition=acquisition,
@@ -69,8 +67,8 @@ def test_active_learning_loop(
         selector=selector,
         oracles=oracles,
         budget=budget,
-        top_k=top_k,
     )
+    best = get_best_candidates(dataset_out, k=top_k)
     assert isinstance(best, list)
     assert isinstance(cost, float)
     assert isinstance(num_iter, int)

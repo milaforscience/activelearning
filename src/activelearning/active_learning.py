@@ -17,6 +17,20 @@ def group_samples_by_fidelity(samples):
     return dict(grouped_samples)
 
 
+def get_best_candidates(dataset: Dataset, k: int = 1):
+    """Return the top-k observations by y value from a dataset.
+
+    This assumes observations have a scalar 'y' attribute that supports comparison.
+    """
+    observations = dataset.get_observations()
+    if not observations:
+        return []
+    # filter out None values if necessary, or assume y is valid
+    valid_obs = [o for o in observations if o.y is not None]
+    sorted_records = sorted(valid_obs, key=lambda r: r.y, reverse=True)
+    return sorted_records[:k]
+
+
 def active_learning(
     dataset: Dataset,
     surrogate: Surrogate,
@@ -25,7 +39,6 @@ def active_learning(
     selector: Selector,
     oracles: dict[int, Oracle],
     budget: float,
-    top_k: int,
 ):
     num_iterations = 0
     current_cost = 0.0
@@ -34,29 +47,35 @@ def active_learning(
         observations = dataset.get_observations()
         surrogate.fit(observations)
         acquisition.update(surrogate)
-        samples = sampler.sample()
-        selected_samples = selector(samples)
+
+        # Sampler can use observations to avoid re-sampling known points
+        samples = sampler.sample(acquisition=acquisition, observations=observations)
+
+        # Pass acquisition to selector to allow it to compute scores if needed
+        selected_samples = selector(samples, acquisition=acquisition)
 
         samples_by_fidelity = group_samples_by_fidelity(selected_samples)
+
+        samples_added_this_iter = False
+
         for fidelity, samples in samples_by_fidelity.items():
+            if fidelity not in oracles:
+                continue
+
             oracle = oracles[fidelity]
             cost = oracle.get_cost(samples)
             if current_cost + cost > budget:
                 continue
+
             scores = oracle.query(samples)
             dataset.add_samples(samples, scores)
             current_cost += cost
+            samples_added_this_iter = True
+
+        if not samples_added_this_iter:
+            # Prevent infinite loop if we can't afford any new samples
+            break
+
         num_iterations += 1
 
-    best_candidates = dataset.get_top_k(k=top_k)
-    return best_candidates, current_cost, num_iterations
-
-
-# Assumptions:
-# 1) Multi-fidelity setting: each candidate has an object x and a fidelity level m
-# 2) The surrogate model is a multi-fidelity surrogate that can be trained on the dataset and can
-#    make predictions for any fidelity level
-
-# Extensions to consider:
-# - Pool-based active learning
-# - Parallelization of oracle queries
+    return dataset, current_cost, num_iterations
