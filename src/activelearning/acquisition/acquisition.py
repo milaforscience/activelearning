@@ -6,20 +6,40 @@ from activelearning.utils.types import Candidate
 
 
 class Acquisition(ABC):
-    """Abstract acquisition interface used to score candidates."""
+    """Abstract acquisition interface used to score candidates.
 
-    def __init__(self):
+    Acquisition functions evaluate the utility of querying candidates
+    based on surrogate model predictions.
+    """
+
+    def __init__(self) -> None:
         self._surrogate: Optional[Surrogate] = None
 
     @property
     def surrogate(self) -> Optional[Surrogate]:
+        """Get the current surrogate model.
+
+        Returns:
+            The surrogate model or None if not yet set.
+        """
         return getattr(self, "_surrogate", None)
 
     def update(self, surrogate: Surrogate) -> None:
-        """Update internal state based on the surrogate."""
+        """Update internal state with a new surrogate model.
+
+        Args:
+            surrogate: The surrogate model to use for predictions.
+        """
         self._surrogate = surrogate
 
     @abstractmethod
-    def __call__(self, candidates: Sequence[Candidate]):
-        """Compute acquisition values for given candidates."""
+    def __call__(self, candidates: Sequence[Candidate]) -> Sequence[float]:
+        """Compute acquisition values for given candidates.
+
+        Args:
+            candidates: Sequence of candidates to score.
+
+        Returns:
+            Sequence of acquisition scores for each candidate.
+        """
         pass

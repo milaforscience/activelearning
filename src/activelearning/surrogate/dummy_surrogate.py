@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import Any, Mapping, Sequence
 
 from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import Candidate, Observation
@@ -7,17 +7,21 @@ from activelearning.utils.types import Candidate, Observation
 class DummySurrogate(Surrogate):
     """Minimal in-memory surrogate using cached observations.
 
-    Stores observations keyed by (x, fidelity). When predicting, it returns the
-    observed value for known candidates and falls back to the global mean for
-    unseen ones.
+    Stores observations keyed by (x, fidelity). When predicting, returns the
+    observed value for known candidates and the global mean for unseen ones.
+    Useful for testing and baseline comparisons.
     """
 
-    def __init__(self):
-        self._model = {}
-        self._mean_score = 0.0
+    def __init__(self) -> None:
+        self._model: dict[tuple[Any, Any], Any] = {}
+        self._mean_score: float = 0.0
 
     def fit(self, observations: Sequence[Observation]) -> None:
-        """Cache observations and update the global mean."""
+        """Fit the surrogate by caching observations and computing global mean.
+
+        Args:
+            observations: Sequence of observations to cache.
+        """
         if not observations:
             self._mean_score = 0.0
             self._model = {}
@@ -25,8 +29,17 @@ class DummySurrogate(Surrogate):
         self._model = {(obs.x, obs.fidelity): obs.y for obs in observations}
         self._mean_score = sum(obs.y for obs in observations) / len(observations)
 
-    def predict(self, candidates: Sequence[Candidate]):
-        """Return "mean" and optional "std" predictions for candidates."""
+    def predict(self, candidates: Sequence[Candidate]) -> Mapping[str, list[float]]:
+        """Predict mean and standard deviation for candidates.
+
+        Args:
+            candidates: Sequence of candidates to predict.
+
+        Returns:
+            Dictionary with "mean" and "std" keys containing predictions.
+            Known candidates return cached values with low std (0.1),
+            unknown candidates return global mean with high std (1.0).
+        """
         means = []
         stds = []
         for candidate in candidates:

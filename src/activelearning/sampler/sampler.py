@@ -1,16 +1,31 @@
 from abc import ABC, abstractmethod
+from typing import Any, Optional, Sequence
+
+from activelearning.utils.types import Candidate, Observation
 
 
 class Sampler(ABC):
-    """Abstract sampler interface used to propose candidate subsets."""
+    """Abstract sampler interface used to propose candidate subsets.
+
+    Samplers generate candidate pools from which selectors choose the
+    final candidates to query.
+    """
 
     @abstractmethod
-    def sample(self, acquisition=None, observations=None, **kwargs):
-        """Propose candidate subsets.
+    def sample(
+        self,
+        acquisition: Optional[Any] = None,
+        observations: Optional[Sequence[Observation]] = None,
+        **kwargs: Any,
+    ) -> Sequence[Candidate]:
+        """Generate a pool of candidate samples.
 
         Args:
-            acquisition: The acquisition function used to score candidates.
-            observations: The current set of observations (optional).
-            **kwargs: Additional arguments for specific sampler implementations.
+            acquisition: Acquisition function to score candidates (optional).
+            observations: Current observations to avoid resampling (optional).
+            **kwargs: Additional sampler-specific arguments.
+
+        Returns:
+            Sequence of sampled candidates.
         """
         pass
