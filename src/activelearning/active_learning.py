@@ -105,8 +105,8 @@ def active_learning(
                 continue
 
             # Query oracle and update dataset with new observations
-            scores = oracle.query(samples)
-            dataset.add_samples(samples, scores)
+            new_observations = oracle.query(samples)
+            dataset.add_observations(new_observations)
             current_cost += cost
             samples_added_this_iter = True
 

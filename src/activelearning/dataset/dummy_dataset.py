@@ -1,7 +1,7 @@
-from typing import Any, Sequence
+from typing import Sequence
 
 from activelearning.dataset.dataset import Dataset
-from activelearning.utils.types import Candidate, Observation
+from activelearning.utils.types import Observation
 
 
 class DummyDataset(Dataset):
@@ -10,17 +10,13 @@ class DummyDataset(Dataset):
     def __init__(self) -> None:
         self._records: list[Observation] = []
 
-    def add_samples(self, samples: Sequence[Candidate], scores: Sequence[Any]) -> None:
-        """Add new observations by pairing samples with their scores.
+    def add_observations(self, observations: Sequence[Observation]) -> None:
+        """Add new observations to the dataset by appending to the list of records.
 
         Args:
-            samples: Sequence of candidate samples.
-            scores: Corresponding scores for each sample.
+            observations: Sequence of observations to add.
         """
-        for sample, score in zip(samples, scores):
-            self._records.append(
-                Observation(x=sample.x, fidelity=sample.fidelity, y=score)
-            )
+        self._records.extend(observations)
 
     def get_observations(self) -> list[Observation]:
         """Retrieve all stored observations.

@@ -1,7 +1,7 @@
 from typing import Any, Callable, Optional, Sequence
 
 from activelearning.oracle.oracle import Oracle
-from activelearning.utils.types import Candidate
+from activelearning.utils.types import Candidate, Observation
 
 
 class DummyOracle(Oracle):
@@ -31,7 +31,7 @@ class DummyOracle(Oracle):
         """
         return self._cost_per_sample * len(candidates)
 
-    def query(self, candidates: Sequence[Candidate]) -> list[float]:
+    def query(self, candidates: Sequence[Candidate]) -> Sequence[Observation]:
         """Query oracle for labels of the given candidates.
 
         Args:
@@ -40,8 +40,11 @@ class DummyOracle(Oracle):
         Returns:
             List of scores computed via the scoring function.
         """
-        scores = []
+        observations = []
         for sample in candidates:
-            value = sample.x if hasattr(sample, "x") else sample
-            scores.append(self._score_fn(value))
-        return scores
+            value = sample.x
+            observation = Observation(
+                x=value, y=self._score_fn(value), fidelity=sample.fidelity
+            )
+            observations.append(observation)
+        return observations

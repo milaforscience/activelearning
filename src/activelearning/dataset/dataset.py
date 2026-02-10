@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Any, Sequence
+from typing import Sequence
 
-from activelearning.utils.types import Candidate, Observation
+from activelearning.utils.types import Observation
 
 
 class Dataset(ABC):
@@ -12,12 +12,11 @@ class Dataset(ABC):
     """
 
     @abstractmethod
-    def add_samples(self, samples: Sequence[Candidate], scores: Sequence[Any]) -> None:
-        """Add labeled samples to the dataset as observations.
+    def add_observations(self, observations: Sequence[Observation]) -> None:
+        """Add new observations to the dataset.
 
         Args:
-            samples: Sequence of candidates to add.
-            scores: Corresponding labels/scores for each candidate.
+            observations: Sequence of observations to add.
         """
         pass
 

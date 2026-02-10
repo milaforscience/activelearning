@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import Any, Sequence
+from typing import Sequence
 
-from activelearning.utils.types import Candidate
+from activelearning.utils.types import Candidate, Observation
 
 
 class Oracle(ABC):
@@ -24,7 +24,7 @@ class Oracle(ABC):
         pass
 
     @abstractmethod
-    def query(self, candidates: Sequence[Candidate]) -> Sequence[Any]:
+    def query(self, candidates: Sequence[Candidate]) -> Sequence[Observation]:
         """Query the oracle for labels of the given candidates.
 
         Args:
