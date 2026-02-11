@@ -15,11 +15,14 @@ def group_samples_by_fidelity(
 ) -> dict[Any, list[Candidate]]:
     """Group samples by their fidelity level.
 
+    Useful for multi-fidelity active learning where different fidelity
+    levels may have different oracles with different costs.
+
     Args:
         samples: Sequence of samples with optional fidelity attribute.
 
     Returns:
-        Dictionary mapping fidelity levels to lists of samples.
+        Dictionary mapping fidelity levels (including None) to lists of samples.
     """
     grouped_samples = defaultdict(list)
     for sample in samples:
@@ -62,20 +65,30 @@ def active_learning(
 ) -> tuple[Dataset, float, int]:
     """Execute the active learning loop with budget constraints.
 
+    Iteratively: (1) fits surrogate on current data, (2) samples candidates,
+    (3) selects candidates to label, (4) queries oracle(s) and adds observations.
+    Stops when budget is exhausted or no affordable candidates remain.
+
     Args:
         dataset: Dataset for storing and retrieving observations.
-        surrogate: Surrogate model to fit on observations and predict on candidates.
+        surrogate: Surrogate model to fit on observations.
         acquisition: Acquisition function to score candidate utility.
+            Must be compatible with the surrogate (see acquisition.update() docs).
         sampler: Sampler to propose candidate subsets.
         selector: Selector to choose final candidates from sampled pool.
         oracles: Mapping of fidelity levels to oracle instances.
+            Use {None: oracle} for single-fidelity scenarios.
         budget: Maximum allowed cost for querying oracles.
 
     Returns:
         Tuple containing:
             - Updated dataset with new observations
-            - Total cost incurred
+            - Total cost incurred across all queries
             - Number of iterations completed
+
+    Note:
+        The loop terminates early if no candidates can be afforded within
+        the remaining budget to prevent infinite loops.
     """
     current_cost = 0.0
     num_iterations = 0

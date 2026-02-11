@@ -10,6 +10,10 @@ class DummyAcquisition(Acquisition):
     Computes acquisition scores as mean + beta * std when std is available,
     otherwise returns mean values only.
 
+    Surrogate Requirements:
+        Requires surrogate.predict() to return a dict with "mean" key.
+        Optionally uses "std" key if available for uncertainty-based exploration.
+
     Args:
         beta: Exploration parameter controlling the weight of uncertainty.
     """
@@ -26,10 +30,22 @@ class DummyAcquisition(Acquisition):
 
         Returns:
             List of acquisition scores (mean + beta * std).
+
+        Raises:
+            ValueError: If surrogate is not set or does not implement predict().
+            ValueError: If predict() does not return required "mean" key.
         """
         if self.surrogate is None:
             return [0.0 for _ in candidates]
-        pred = self.surrogate.predict(candidates)
+
+        try:
+            pred = self.surrogate.predict(candidates)
+        except NotImplementedError as e:
+            raise ValueError(
+                f"DummyAcquisition requires surrogate.predict() but "
+                f"{self.surrogate.__class__.__name__} does not implement it."
+            ) from e
+
         means = pred.get("mean")
         if means is None:
             raise ValueError("DummyAcquisition expects prediction payload key 'mean'.")

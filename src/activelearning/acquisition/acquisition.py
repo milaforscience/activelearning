@@ -10,6 +10,13 @@ class Acquisition(ABC):
 
     Acquisition functions evaluate the utility of querying candidates
     based on surrogate model predictions.
+
+    Surrogate Coupling:
+        Most acquisition functions rely on the surrogate's predict() method,
+        expecting specific keys in the prediction payload (e.g., "mean", "std").
+        Some acquisitions may access surrogate internals directly (e.g., posterior
+        distributions) instead of using predict(). Implementations should document
+        their surrogate requirements.
     """
 
     def __init__(self) -> None:
@@ -29,9 +36,21 @@ class Acquisition(ABC):
     ) -> None:
         """Update internal state with a new surrogate model.
 
+        Called by the active learning loop when the surrogate is refitted.
+        The acquisition can use observations to estimate internal parameters
+        (e.g., best observed value for Expected Improvement).
+
+        Surrogate Compatibility:
+            Implementations should validate that the surrogate provides required
+            capabilities. If the acquisition needs predict() with specific keys,
+            consider calling predict() here to fail early. If the acquisition
+            accesses surrogate internals, validate the surrogate type/interface.
+
         Args:
-            surrogate: The surrogate model to use for predictions.
-            observations: Optional observations to estimate any internal parameters.
+            surrogate: The surrogate model to use for scoring candidates.
+                Must provide capabilities required by this acquisition function.
+            observations: Optional observations for estimating acquisition parameters
+                (e.g., best observed value, noise estimates).
         """
         self._surrogate = surrogate
 
@@ -43,6 +62,7 @@ class Acquisition(ABC):
             candidates: Sequence of candidates to score.
 
         Returns:
-            Sequence of acquisition scores for each candidate.
+            Sequence of acquisition scores, same length and order as input.
+            Higher scores typically indicate more valuable candidates to query.
         """
         pass

@@ -22,10 +22,11 @@ class Selector(ABC):
 
         Args:
             candidates: Pool of candidates to select from.
-            acquisition: Acquisition function to score candidates.
+            acquisition: Acquisition function to score candidates (optional).
+                Required by score-based selectors, unused by random selectors.
             **kwargs: Additional strategy-specific arguments.
 
         Returns:
-            Selected subset of candidates.
+            Selected subset of candidates (order may be significant).
         """
         pass

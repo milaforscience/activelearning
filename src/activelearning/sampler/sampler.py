@@ -22,6 +22,7 @@ class Sampler(ABC):
 
         Args:
             acquisition: Acquisition function to score candidates (optional).
+                Used by samplers that weight candidates by utility scores.
             observations: Current observations to avoid resampling (optional).
             **kwargs: Additional sampler-specific arguments.
 

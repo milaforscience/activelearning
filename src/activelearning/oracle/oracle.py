@@ -31,6 +31,6 @@ class Oracle(ABC):
             candidates: Sequence of candidates to label.
 
         Returns:
-            Sequence of labels/scores for each candidate.
+            Sequence of observations with same length and order as input candidates.
         """
         pass
