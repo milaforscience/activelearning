@@ -9,6 +9,7 @@ authors = [
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "numpy>=2.2.6",
     # Add actual project dependencies here, e.g.:
     # "numpy>=1.20",
     "torch>=2.5.1",
