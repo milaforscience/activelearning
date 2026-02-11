@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Sequence, Optional
 
 from activelearning.surrogate.surrogate import Surrogate
-from activelearning.utils.types import Candidate
+from activelearning.utils.types import Candidate, Observation
 
 
 class Acquisition(ABC):
@@ -24,11 +24,14 @@ class Acquisition(ABC):
         """
         return getattr(self, "_surrogate", None)
 
-    def update(self, surrogate: Surrogate) -> None:
+    def update(
+        self, surrogate: Surrogate, observations: Optional[Sequence[Observation]] = None
+    ) -> None:
         """Update internal state with a new surrogate model.
 
         Args:
             surrogate: The surrogate model to use for predictions.
+            observations: Optional observations to estimate any internal parameters.
         """
         self._surrogate = surrogate
 

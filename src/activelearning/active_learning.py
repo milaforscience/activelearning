@@ -84,7 +84,7 @@ def active_learning(
         # Fit surrogate on current dataset observations and update acquisition function
         observations = dataset.get_observations()
         surrogate.fit(observations)
-        acquisition.update(surrogate)
+        acquisition.update(surrogate, observations)
 
         # Sampler can use acquisition for scoring candidates and observations to avoid re-sampling
         samples = sampler.sample(acquisition=acquisition, observations=observations)
