@@ -1,4 +1,4 @@
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import Candidate, Observation
@@ -10,18 +10,27 @@ class DummySurrogate(Surrogate):
     Stores observations keyed by (x, fidelity). When predicting, returns the
     observed value for known candidates and the global mean for unseen ones.
     Useful for testing and baseline comparisons.
+
+    Note:
+        This surrogate requires a Sequence (supports len() and multiple iterations).
+        Automatically materializes iterables to lists as needed.
     """
 
     def __init__(self) -> None:
         self._model: dict[tuple[Any, Any], Any] = {}
         self._mean_score: float = 0.0
 
-    def fit(self, observations: Sequence[Observation]) -> None:
+    def fit(self, observations: Iterable[Observation]) -> None:
         """Fit the surrogate by caching observations and computing global mean.
 
         Args:
-            observations: Sequence of observations to cache.
+            observations: Iterable of observations to cache. Will be materialized
+                to a Sequence if needed for len() and multiple iteration.
         """
+        # Materialize to list if not already a Sequence
+        if not isinstance(observations, Sequence):
+            observations = list(observations)
+
         if not observations:
             self._mean_score = 0.0
             self._model = {}

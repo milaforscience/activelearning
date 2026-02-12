@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Mapping, Sequence, Any
+from typing import Iterable, Mapping, Sequence, Any
 
 from activelearning.utils.types import Candidate, Observation
 
@@ -16,7 +16,7 @@ class Surrogate(ABC):
     """
 
     @abstractmethod
-    def fit(self, observations: Sequence[Observation]) -> None:
+    def fit(self, observations: Iterable[Observation]) -> None:
         """Fit the surrogate model to observations.
 
         This method may be called multiple times during the active learning loop
@@ -24,7 +24,14 @@ class Surrogate(ABC):
         support incremental learning (full retraining is acceptable).
 
         Args:
-            observations: Sequence of observations to train on.
+            observations: Iterable of observations to train on. May be a Sequence
+                (list, tuple) for small datasets or a one-pass iterable (DataLoader)
+                for large datasets.
+
+        Note:
+            Implementations should validate their input requirements:
+            - If you need len() or multiple passes, materialize to list or assert Sequence
+            - If you can handle streaming data, consume the iterable directly
         """
         pass
 

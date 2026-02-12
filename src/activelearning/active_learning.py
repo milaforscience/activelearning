@@ -7,7 +7,7 @@ from activelearning.oracle.oracle import Oracle
 from activelearning.sampler.sampler import Sampler
 from activelearning.selector.selector import Selector
 from activelearning.surrogate.surrogate import Surrogate
-from activelearning.utils.types import Candidate, Observation
+from activelearning.utils.types import Candidate
 
 
 def group_samples_by_fidelity(
@@ -29,29 +29,6 @@ def group_samples_by_fidelity(
         fidelity = getattr(sample, "fidelity", None)
         grouped_samples[fidelity].append(sample)
     return dict(grouped_samples)
-
-
-def get_best_candidates(dataset: Dataset, k: int = 1) -> list[Observation]:
-    """Return the top-k observations by y value from a dataset.
-
-    Args:
-        dataset: Dataset containing observations.
-        k: Number of top observations to return.
-
-    Returns:
-        List of top-k observations sorted by y value (descending).
-        Returns empty list if no observations exist.
-
-    Note:
-        Filters out observations with None y values.
-        Assumes y values support comparison operations.
-    """
-    observations = dataset.get_observations()
-    if not observations:
-        return []
-    valid_obs = [o for o in observations if o.y is not None]
-    sorted_records = sorted(valid_obs, key=lambda r: r.y, reverse=True)
-    return sorted_records[:k]
 
 
 def active_learning(
@@ -94,13 +71,17 @@ def active_learning(
     num_iterations = 0
 
     while current_cost < budget:
+        # Note: get_observations_iterable() is called multiple times to avoid
+        # consuming the same iterable across multiple consumers
+
         # Fit surrogate on current dataset observations and update acquisition function
-        observations = dataset.get_observations()
-        surrogate.fit(observations)
-        acquisition.update(surrogate, observations)
+        surrogate.fit(dataset.get_observations_iterable())
+        acquisition.update(surrogate, dataset.get_observations_iterable())
 
         # Sampler can use acquisition for scoring candidates and observations to avoid re-sampling
-        samples = sampler.sample(acquisition=acquisition, observations=observations)
+        samples = sampler.sample(
+            acquisition=acquisition, observations=dataset.get_observations_iterable()
+        )
 
         # Pass acquisition to selector to allow it to compute scores if needed
         selected_samples = selector(samples, acquisition=acquisition)

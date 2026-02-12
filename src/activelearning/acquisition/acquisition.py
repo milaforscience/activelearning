@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Sequence, Optional
+from typing import Iterable, Optional, Sequence
 
 from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import Candidate, Observation
@@ -32,7 +32,7 @@ class Acquisition(ABC):
         return getattr(self, "_surrogate", None)
 
     def update(
-        self, surrogate: Surrogate, observations: Optional[Sequence[Observation]] = None
+        self, surrogate: Surrogate, observations: Optional[Iterable[Observation]] = None
     ) -> None:
         """Update internal state with a new surrogate model.
 
@@ -49,8 +49,9 @@ class Acquisition(ABC):
         Args:
             surrogate: The surrogate model to use for scoring candidates.
                 Must provide capabilities required by this acquisition function.
-            observations: Optional observations for estimating acquisition parameters
-                (e.g., best observed value, noise estimates).
+            observations: Optional iterable of observations for estimating acquisition
+                parameters (e.g., best observed value, noise estimates). May be a
+                one-pass iterable. Materialize to list if multiple passes are needed.
         """
         self._surrogate = surrogate
 

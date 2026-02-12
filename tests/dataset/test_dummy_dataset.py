@@ -26,7 +26,7 @@ def sample_y_values():
 
 def test_empty_dataset(dataset):
     """Test that a newly created dataset has no observations."""
-    observations = dataset.get_observations()
+    observations = dataset.get_observations_iterable()
     assert len(observations) == 0
     assert isinstance(observations, list)
 
@@ -39,7 +39,7 @@ def test_add_observations(dataset, sample_x_values, sample_y_values, fidelity):
     ]
 
     dataset.add_observations(observations_to_add)
-    observations = dataset.get_observations()
+    observations = dataset.get_observations_iterable()
 
     assert len(observations) == len(sample_x_values)
     for i, (x, y) in enumerate(zip(sample_x_values, sample_y_values)):
@@ -52,7 +52,7 @@ def test_add_observations_multiple_times(dataset):
     dataset.add_observations([Observation(x=2, y=20.0)])
     dataset.add_observations([Observation(x=3, y=30.0)])
 
-    observations = dataset.get_observations()
+    observations = dataset.get_observations_iterable()
     assert len(observations) == 3
     assert observations[0].x == 1
     assert observations[0].y == 10.0

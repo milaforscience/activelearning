@@ -18,7 +18,7 @@ class DummyDataset(Dataset):
         """
         self._records.extend(observations)
 
-    def get_observations(self) -> list[Observation]:
+    def get_observations_iterable(self) -> list[Observation]:
         """Retrieve all stored observations.
 
         Returns:

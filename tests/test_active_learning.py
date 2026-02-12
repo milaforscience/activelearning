@@ -6,7 +6,7 @@ from activelearning.oracle.dummy_oracle import DummyOracle
 from activelearning.sampler.pool_score_sampler import PoolScoreSampler
 from activelearning.selector.score_selector import ScoreSelector
 from activelearning.surrogate.dummy_surrogate import DummySurrogate
-from activelearning.active_learning import active_learning, get_best_candidates
+from activelearning.active_learning import active_learning
 from activelearning.utils.types import Candidate
 
 
@@ -77,7 +77,7 @@ def test_active_learning_loop(
         oracles=oracles,
         budget=budget,
     )
-    best = get_best_candidates(dataset_out, k=top_k)
+    best = dataset_out.get_best_candidates(k=top_k)
     assert isinstance(best, list)
     assert isinstance(cost, float)
     assert isinstance(num_iter, int)

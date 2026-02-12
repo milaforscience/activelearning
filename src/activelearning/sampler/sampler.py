@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Sequence
+from typing import Any, Iterable, Optional, Sequence
 
 from activelearning.utils.types import Candidate, Observation
 
@@ -15,7 +15,7 @@ class Sampler(ABC):
     def sample(
         self,
         acquisition: Optional[Any] = None,
-        observations: Optional[Sequence[Observation]] = None,
+        observations: Optional[Iterable[Observation]] = None,
         **kwargs: Any,
     ) -> Sequence[Candidate]:
         """Generate a pool of candidate samples.
