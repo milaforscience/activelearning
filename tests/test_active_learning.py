@@ -1,6 +1,7 @@
 import pytest
 
 from activelearning.acquisition.dummy_acquisition import DummyAcquisition
+from activelearning.budget.budget import Budget
 from activelearning.dataset.dummy_dataset import DummyDataset
 from activelearning.oracle.dummy_oracle import DummyOracle
 from activelearning.sampler.pool_score_sampler import PoolScoreSampler
@@ -55,7 +56,7 @@ def oracles():
 @pytest.fixture
 def budget():
     """Set the budget for active learning loop."""
-    return 100.0
+    return Budget(available_budget=100.0, schedule=lambda r: 20.0)
 
 
 @pytest.fixture

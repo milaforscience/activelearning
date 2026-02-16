@@ -2,6 +2,7 @@ from collections import defaultdict
 from typing import Any, Sequence
 
 from activelearning.acquisition.acquisition import Acquisition
+from activelearning.budget.budget import Budget
 from activelearning.dataset.dataset import Dataset
 from activelearning.oracle.oracle import Oracle
 from activelearning.sampler.sampler import Sampler
@@ -38,7 +39,7 @@ def active_learning(
     sampler: Sampler,
     selector: Selector,
     oracles: dict[int, Oracle],
-    budget: float,
+    budget: Budget,
 ) -> tuple[Dataset, float, int]:
     """Execute the active learning loop with budget constraints.
 
@@ -55,22 +56,22 @@ def active_learning(
         selector: Selector to choose final candidates from sampled pool.
         oracles: Mapping of fidelity levels to oracle instances.
             Use {None: oracle} for single-fidelity scenarios.
-        budget: Maximum allowed cost for querying oracles.
+        budget: Budget object managing allocation and consumption.
 
     Returns:
         Tuple containing:
             - Updated dataset with new observations
             - Total cost incurred across all queries
-            - Number of iterations completed
+            - Number of active learning rounds completed
 
     Note:
         The loop terminates early if no candidates can be afforded within
         the remaining budget to prevent infinite loops.
     """
-    current_cost = 0.0
-    num_iterations = 0
+    initial_budget = budget.available_budget
+    num_rounds = 0
 
-    while current_cost < budget:
+    while budget.available_budget > 0:
         # Note: get_observations_iterable() is called multiple times to avoid
         # consuming the same iterable across multiple consumers
 
@@ -83,31 +84,39 @@ def active_learning(
             acquisition=acquisition, observations=dataset.get_observations_iterable()
         )
 
-        # Pass acquisition to selector to allow it to compute scores if needed
-        selected_samples = selector(samples, acquisition=acquisition)
+        # Get round budget and pass to selector along with cost function
+        round_budget = budget.get_round_budget(num_rounds)
+
+        # Pass acquisition, cost_fn, and round budget to selector for cost-aware selection
+        selected_samples = selector(
+            samples,
+            acquisition=acquisition,
+            cost_fn=None,  # Will be set per-fidelity below
+            round_budget=round_budget,
+        )
         samples_by_fidelity = group_samples_by_fidelity(selected_samples)
 
         samples_added_this_iter = False
-        for fidelity, samples in samples_by_fidelity.items():
+        for fidelity, fidelity_samples in samples_by_fidelity.items():
             if fidelity not in oracles:
                 continue
 
-            # Check if we can afford to query this oracle with the number of samples
             oracle = oracles[fidelity]
-            cost = oracle.get_cost(samples)
-            if current_cost + cost > budget:
-                continue
 
-            # Query oracle and update dataset with new observations
-            new_observations = oracle.query(samples)
-            dataset.add_observations(new_observations)
-            current_cost += cost
-            samples_added_this_iter = True
+            # Query oracle - it will consume budget internally
+            try:
+                new_observations = oracle.query(fidelity_samples, budget)
+                dataset.add_observations(new_observations)
+                samples_added_this_iter = True
+            except ValueError:
+                # Budget exhausted during query - stop this fidelity
+                continue
 
         # Prevent infinite loop if we can't afford any new samples
         if not samples_added_this_iter:
             break
 
-        num_iterations += 1
+        num_rounds += 1
 
-    return dataset, current_cost, num_iterations
+    total_cost = initial_budget - budget.available_budget
+    return dataset, total_cost, num_rounds
