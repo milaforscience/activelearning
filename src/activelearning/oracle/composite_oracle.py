@@ -1,0 +1,154 @@
+from collections import defaultdict
+from typing import Callable, Sequence, TypeVar
+
+from activelearning.oracle.oracle import Oracle
+from activelearning.utils.types import Candidate, Observation
+
+T = TypeVar("T")
+
+
+class CompositeOracle(Oracle):
+    """Composite oracle that delegates to cheapest sub-oracle per fidelity level.
+
+    Routes candidates to sub-oracles based on fidelity, selecting the oracle
+    with the lowest per-candidate cost for each fidelity level.
+
+    Args:
+        sub_oracles: List of oracle instances to delegate to.
+    """
+
+    def __init__(self, sub_oracles: list[Oracle]) -> None:
+        if not sub_oracles:
+            raise ValueError("CompositeOracle requires at least one sub-oracle")
+        self._sub_oracles = sub_oracles
+
+    def get_supported_fidelities(self) -> list[int]:
+        """Return union of fidelities supported by all sub-oracles.
+
+        Returns:
+            Sorted list of all fidelity levels supported by any sub-oracle.
+        """
+        all_fidelities = set()
+        for oracle in self._sub_oracles:
+            all_fidelities.update(oracle.get_supported_fidelities())
+        return sorted(all_fidelities)
+
+    def _get_cheapest_oracle(
+        self, fidelity: int, candidates: list[Candidate]
+    ) -> Oracle:
+        """Find sub-oracle with lowest total cost for given fidelity.
+
+        Args:
+            fidelity: Fidelity level to query.
+            candidates: List of candidates at this fidelity (for cost calculation).
+
+        Returns:
+            Oracle with minimum total cost for this fidelity.
+
+        Raises:
+            ValueError: If no sub-oracle supports the requested fidelity.
+        """
+        # Filter to oracles that support this fidelity
+        valid_oracles = [
+            oracle
+            for oracle in self._sub_oracles
+            if fidelity in oracle.get_supported_fidelities()
+        ]
+
+        if not valid_oracles:
+            raise ValueError(
+                f"No oracle supports fidelity {fidelity}. "
+                f"Supported fidelities: {self.get_supported_fidelities()}"
+            )
+
+        # Return oracle with minimum total cost
+        return min(valid_oracles, key=lambda oracle: sum(oracle.get_costs(candidates)))
+
+    def _group_by_fidelity(
+        self, candidates: Sequence[Candidate]
+    ) -> dict[int, list[tuple[int, Candidate]]]:
+        """Group candidates by fidelity, preserving original indices.
+
+        Args:
+            candidates: Sequence of candidates to group.
+
+        Returns:
+            Dictionary mapping fidelity to list of (index, candidate) tuples.
+        """
+        fidelity_groups: dict[int, list[tuple[int, Candidate]]] = defaultdict(list)
+        for i, candidate in enumerate(candidates):
+            fidelity_groups[candidate.fidelity].append((i, candidate))
+        return fidelity_groups
+
+    def _process_by_fidelity(
+        self,
+        candidates: Sequence[Candidate],
+        process_fn: Callable[[Oracle, list[Candidate]], Sequence[T]],
+    ) -> list[T]:
+        """Process candidates in groups by fidelity using cheapest oracle.
+
+        Groups candidates by fidelity, applies process_fn to each group using
+        the cheapest oracle, and returns results in original order.
+
+        Args:
+            candidates: Sequence of candidates to process.
+            process_fn: Function that takes (oracle, group_candidates) and returns results.
+
+        Returns:
+            List of results in original candidate order.
+
+        Raises:
+            ValueError: If any candidate has unsupported fidelity.
+        """
+        if not candidates:
+            return []
+
+        fidelity_groups = self._group_by_fidelity(candidates)
+        results: list[T] = [None] * len(candidates)  # type: ignore
+
+        for fidelity, indexed_candidates in fidelity_groups.items():
+            group_candidates = [c for _, c in indexed_candidates]
+            cheapest = self._get_cheapest_oracle(fidelity, group_candidates)
+            group_results = process_fn(cheapest, group_candidates)
+
+            for (original_idx, _), result in zip(indexed_candidates, group_results):
+                results[original_idx] = result
+
+        return results
+
+    def get_costs(self, candidates: Sequence[Candidate]) -> list[float]:
+        """Calculate costs by delegating to cheapest oracle per fidelity.
+
+        Args:
+            candidates: Sequence of candidates to query.
+
+        Returns:
+            List of costs, one per candidate, in original order.
+
+        Raises:
+            ValueError: If any candidate has unsupported fidelity.
+        """
+        return self._process_by_fidelity(
+            candidates, lambda oracle, group: oracle.get_costs(group)
+        )
+
+    def query(self, candidates: Sequence[Candidate]) -> Sequence[Observation]:
+        """Query sub-oracles for labels, routing by fidelity.
+
+        Budget consumption is the caller's responsibility.
+
+        Args:
+            candidates: Sequence of candidates to label.
+
+        Returns:
+            List of observations in same order as input candidates.
+
+        Raises:
+            ValueError: If a candidate has an unsupported fidelity level.
+        """
+        if not candidates:
+            return []
+
+        return self._process_by_fidelity(
+            candidates, lambda oracle, group: oracle.query(group)
+        )

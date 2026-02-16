@@ -1,0 +1,93 @@
+from typing import Any, Sequence
+
+from activelearning.oracle.oracle import Oracle
+from activelearning.utils.types import Candidate, Observation
+
+
+class MultiFidelityOracle(Oracle):
+    """Oracle that supports multiple fidelity levels with per-fidelity costs.
+
+    Each fidelity level has its own cost_per_sample and score_fn.
+
+    Args:
+        fidelity_configs: Dictionary mapping fidelity level (int) to configuration.
+            Each config must contain:
+            - 'cost_per_sample': float - Cost per sample at this fidelity
+            - 'score_fn': Callable - Function mapping candidate.x to score
+    """
+
+    def __init__(
+        self,
+        fidelity_configs: dict[int, dict[str, Any]],
+    ) -> None:
+        """Initialize MultiFidelityOracle with fidelity configurations.
+
+        Raises:
+            ValueError: If fidelity is not an integer or required keys are missing.
+        """
+        # Validate fidelity configs
+        for fidelity, config in fidelity_configs.items():
+            if not isinstance(fidelity, int):
+                raise ValueError(f"Fidelity must be int, got {type(fidelity)}")
+            if "cost_per_sample" not in config:
+                raise ValueError(
+                    f"Missing 'cost_per_sample' in config for fidelity {fidelity}"
+                )
+            if "score_fn" not in config:
+                raise ValueError(
+                    f"Missing 'score_fn' in config for fidelity {fidelity}"
+                )
+
+        self.fidelity_configs = fidelity_configs
+
+    def get_supported_fidelities(self) -> list[int]:
+        """Return list of supported fidelity levels, sorted."""
+        return sorted(self.fidelity_configs.keys())
+
+    def get_costs(self, candidates: Sequence[Candidate]) -> list[float]:
+        """Get the cost of querying each candidate.
+
+        Args:
+            candidates: List of candidates with fidelity specified.
+
+        Returns:
+            List of costs, one per candidate.
+
+        Raises:
+            ValueError: If candidate has unsupported fidelity.
+        """
+        costs = []
+        for candidate in candidates:
+            if candidate.fidelity not in self.fidelity_configs:
+                raise ValueError(
+                    f"Unsupported fidelity {candidate.fidelity}. "
+                    f"Supported: {self.get_supported_fidelities()}"
+                )
+            costs.append(self.fidelity_configs[candidate.fidelity]["cost_per_sample"])
+        return costs
+
+    def query(self, candidates: Sequence[Candidate]) -> list[Observation]:
+        """Query the oracle for observations of the given candidates.
+
+        Budget consumption is the caller's responsibility.
+
+        Args:
+            candidates: List of candidates to query, each with fidelity specified.
+
+        Returns:
+            List of observations corresponding to each candidate.
+
+        Raises:
+            ValueError: If a candidate has an unsupported fidelity level.
+        """
+        observations = []
+        for candidate in candidates:
+            score_fn = self.fidelity_configs[candidate.fidelity]["score_fn"]
+            observation = Observation(
+                x=candidate.x,
+                y=score_fn(candidate.x),
+                fidelity=candidate.fidelity,
+            )
+            observations.append(observation)
+
+        return observations

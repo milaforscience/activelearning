@@ -70,3 +70,17 @@ class Budget:
             )
 
         self.available_budget -= cost
+
+    def can_afford(self, cost: float) -> bool:
+        """Check if the given cost can be afforded within available budget.
+
+        This is a pure query method with no side effects. Use this to check
+        affordability before attempting to consume budget.
+
+        Args:
+            cost: Amount to check affordability for.
+
+        Returns:
+            True if cost <= available_budget, False otherwise.
+        """
+        return cost <= self.available_budget

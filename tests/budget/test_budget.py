@@ -179,3 +179,44 @@ def test_schedule_exceeds_after_consumption(caplog):
 
     assert round_budget_1 == 20.0
     assert "exceeds available budget" in caplog.text
+
+
+def test_can_afford_sufficient_budget():
+    """Test can_afford returns True when budget is sufficient."""
+    budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+    assert budget.can_afford(50.0) is True
+    assert budget.can_afford(100.0) is True
+    assert budget.can_afford(1.0) is True
+
+
+def test_can_afford_insufficient_budget():
+    """Test can_afford returns False when budget is insufficient."""
+    budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+    assert budget.can_afford(101.0) is False
+    assert budget.can_afford(200.0) is False
+
+
+def test_can_afford_exact_budget():
+    """Test can_afford returns True when cost equals available budget."""
+    budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+    assert budget.can_afford(100.0) is True
+
+
+def test_can_afford_zero_cost():
+    """Test can_afford with zero cost."""
+    budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+    assert budget.can_afford(0.0) is True
+
+
+def test_can_afford_no_side_effects():
+    """Test that can_afford does not modify available_budget."""
+    budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+    initial_budget = budget.available_budget
+
+    # Call can_afford multiple times
+    budget.can_afford(50.0)
+    budget.can_afford(150.0)
+    budget.can_afford(100.0)
+
+    # Budget should remain unchanged
+    assert budget.available_budget == initial_budget

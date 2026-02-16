@@ -3,7 +3,7 @@ import pytest
 from activelearning.acquisition.dummy_acquisition import DummyAcquisition
 from activelearning.budget.budget import Budget
 from activelearning.dataset.dummy_dataset import DummyDataset
-from activelearning.oracle.dummy_oracle import DummyOracle
+from activelearning.oracle.multi_fidelity_oracle import MultiFidelityOracle
 from activelearning.sampler.pool_score_sampler import PoolScoreSampler
 from activelearning.selector.score_selector import ScoreSelector
 from activelearning.surrogate.dummy_surrogate import DummySurrogate
@@ -45,12 +45,21 @@ def selector():
 
 
 @pytest.fixture
-def oracles():
-    """Create multi-fidelity oracles with different costs and scoring functions."""
-    return {
-        0: DummyOracle(cost_per_sample=1.0, score_fn=lambda s: float(s)),
-        1: DummyOracle(cost_per_sample=2.0, score_fn=lambda s: float(s) + 0.5),
-    }
+def oracle():
+    """Create multi-fidelity oracle with different costs and scoring functions."""
+
+    def score_fn_0(s):
+        return float(s)
+
+    def score_fn_1(s):
+        return float(s) + 0.5
+
+    return MultiFidelityOracle(
+        fidelity_configs={
+            0: {"cost_per_sample": 1.0, "score_fn": score_fn_0},
+            1: {"cost_per_sample": 2.0, "score_fn": score_fn_1},
+        }
+    )
 
 
 @pytest.fixture
@@ -66,7 +75,7 @@ def top_k():
 
 
 def test_active_learning_loop(
-    dataset, surrogate, acquisition, sampler, selector, oracles, budget, top_k
+    dataset, surrogate, acquisition, sampler, selector, oracle, budget, top_k
 ):
     """Test that the active learning loop completes and returns expected types."""
     dataset_out, cost, num_iter = active_learning(
@@ -75,7 +84,7 @@ def test_active_learning_loop(
         acquisition=acquisition,
         sampler=sampler,
         selector=selector,
-        oracles=oracles,
+        oracle=oracle,
         budget=budget,
     )
     best = dataset_out.get_best_candidates(k=top_k)
