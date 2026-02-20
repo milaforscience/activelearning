@@ -11,6 +11,17 @@ from activelearning.active_learning import active_learning
 from activelearning.utils.types import Candidate
 
 
+class ConfidenceAwareDummySurrogate(DummySurrogate):
+    """Dummy surrogate variant that records fidelity confidences."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.fidelity_confidences: dict[int, float] | None = None
+
+    def set_fidelity_confidences(self, confidences: dict[int, float]) -> None:
+        self.fidelity_confidences = dict(confidences)
+
+
 @pytest.fixture
 def dataset():
     """Create a dummy dataset for testing."""
@@ -56,8 +67,16 @@ def oracle():
 
     return MultiFidelityOracle(
         fidelity_configs={
-            0: {"cost_per_sample": 1.0, "score_fn": score_fn_0},
-            1: {"cost_per_sample": 2.0, "score_fn": score_fn_1},
+            0: {
+                "cost_per_sample": 1.0,
+                "score_fn": score_fn_0,
+                "fidelity_confidence": 1.0,
+            },
+            1: {
+                "cost_per_sample": 2.0,
+                "score_fn": score_fn_1,
+                "fidelity_confidence": 1.0,
+            },
         }
     )
 
@@ -91,3 +110,20 @@ def test_active_learning_loop(
     assert isinstance(best, list)
     assert isinstance(cost, float)
     assert isinstance(num_iter, int)
+
+
+def test_active_learning_passes_fidelity_confidences_to_surrogate(
+    dataset, acquisition, sampler, selector, oracle, budget
+):
+    """Test the active learning loop passes oracle confidences to surrogate."""
+    surrogate = ConfidenceAwareDummySurrogate()
+    active_learning(
+        dataset=dataset,
+        surrogate=surrogate,
+        acquisition=acquisition,
+        sampler=sampler,
+        selector=selector,
+        oracle=oracle,
+        budget=budget,
+    )
+    assert surrogate.fidelity_confidences == oracle.get_fidelity_confidences()

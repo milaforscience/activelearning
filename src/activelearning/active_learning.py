@@ -45,6 +45,9 @@ def active_learning(
     initial_budget = budget.available_budget
     num_rounds = 0
 
+    # Set fidelity confidences in surrogate before starting the loop
+    surrogate.set_fidelity_confidences(oracle.get_fidelity_confidences())
+
     while budget.available_budget > 0:
         # Note: get_observations_iterable() is called multiple times to avoid
         # consuming the same iterable across multiple consumers
@@ -78,6 +81,7 @@ def active_learning(
             # Budget exhausted - stop iteration
             break
 
+        # Consume budget and query oracle for new observations, then add to dataset
         budget.consume(total_cost)
         new_observations = oracle.query(selected_samples)
         dataset.add_observations(new_observations)

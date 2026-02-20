@@ -23,8 +23,16 @@ def test_initialization_with_valid_configs():
 
     oracle = MultiFidelityOracle(
         fidelity_configs={
-            0: {"cost_per_sample": 1.0, "score_fn": score_fn},
-            1: {"cost_per_sample": 2.0, "score_fn": score_fn},
+            0: {
+                "cost_per_sample": 1.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            },
+            1: {
+                "cost_per_sample": 2.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            },
         }
     )
     assert oracle.get_supported_fidelities() == [0, 1]
@@ -37,13 +45,45 @@ def test_initialization_fails_with_missing_cost():
         return float(x)
 
     with pytest.raises(ValueError, match="Missing 'cost_per_sample'"):
-        MultiFidelityOracle(fidelity_configs={0: {"score_fn": score_fn}})
+        MultiFidelityOracle(
+            fidelity_configs={0: {"score_fn": score_fn, "fidelity_confidence": 1.0}}
+        )
 
 
 def test_initialization_fails_with_missing_score_fn():
     """Test initialization fails if score_fn is missing."""
     with pytest.raises(ValueError, match="Missing 'score_fn'"):
         MultiFidelityOracle(fidelity_configs={0: {"cost_per_sample": 1.0}})
+
+
+def test_initialization_fails_with_missing_fidelity_confidence():
+    """Test initialization fails if fidelity_confidence is missing."""
+
+    def score_fn(x):
+        return float(x)
+
+    with pytest.raises(ValueError, match="Missing 'fidelity_confidence'"):
+        MultiFidelityOracle(
+            fidelity_configs={0: {"cost_per_sample": 1.0, "score_fn": score_fn}}
+        )
+
+
+def test_initialization_fails_with_out_of_range_fidelity_confidence():
+    """Test initialization fails when fidelity_confidence is outside [0, 1]."""
+
+    def score_fn(x):
+        return float(x)
+
+    with pytest.raises(ValueError, match=r"fidelity_confidence must be in \[0, 1\]"):
+        MultiFidelityOracle(
+            fidelity_configs={
+                0: {
+                    "cost_per_sample": 1.0,
+                    "score_fn": score_fn,
+                    "fidelity_confidence": 1.5,
+                }
+            }
+        )
 
 
 def test_initialization_fails_with_non_int_fidelity():
@@ -54,7 +94,13 @@ def test_initialization_fails_with_non_int_fidelity():
 
     with pytest.raises(ValueError, match="Fidelity must be int"):
         MultiFidelityOracle(
-            fidelity_configs={"low": {"cost_per_sample": 1.0, "score_fn": score_fn}}
+            fidelity_configs={
+                "low": {
+                    "cost_per_sample": 1.0,
+                    "score_fn": score_fn,
+                    "fidelity_confidence": 1.0,
+                }
+            }
         )
 
 
@@ -66,12 +112,48 @@ def test_get_supported_fidelities():
 
     oracle = MultiFidelityOracle(
         fidelity_configs={
-            2: {"cost_per_sample": 1.0, "score_fn": score_fn},
-            0: {"cost_per_sample": 2.0, "score_fn": score_fn},
-            1: {"cost_per_sample": 1.5, "score_fn": score_fn},
+            2: {
+                "cost_per_sample": 1.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            },
+            0: {
+                "cost_per_sample": 2.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            },
+            1: {
+                "cost_per_sample": 1.5,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            },
         }
     )
     assert oracle.get_supported_fidelities() == [0, 1, 2]
+
+
+def test_get_fidelity_confidences():
+    """Test get_fidelity_confidences returns the expected mapping."""
+
+    def score_fn(x):
+        return float(x)
+
+    oracle = MultiFidelityOracle(
+        fidelity_configs={
+            2: {
+                "cost_per_sample": 1.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 0.6,
+            },
+            0: {
+                "cost_per_sample": 2.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 0.9,
+            },
+        }
+    )
+
+    assert oracle.get_fidelity_confidences() == {0: 0.9, 2: 0.6}
 
 
 def test_get_costs_single_fidelity(budget):
@@ -81,7 +163,13 @@ def test_get_costs_single_fidelity(budget):
         return float(x)
 
     oracle = MultiFidelityOracle(
-        fidelity_configs={0: {"cost_per_sample": 1.5, "score_fn": score_fn}}
+        fidelity_configs={
+            0: {
+                "cost_per_sample": 1.5,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            }
+        }
     )
     candidates = [Candidate(x=i, fidelity=0) for i in range(5)]
     costs = oracle.get_costs(candidates)
@@ -98,8 +186,16 @@ def test_get_costs_mixed_fidelities(budget):
 
     oracle = MultiFidelityOracle(
         fidelity_configs={
-            0: {"cost_per_sample": 1.0, "score_fn": score_fn},
-            1: {"cost_per_sample": 2.5, "score_fn": score_fn},
+            0: {
+                "cost_per_sample": 1.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            },
+            1: {
+                "cost_per_sample": 2.5,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            },
         }
     )
     candidates = [
@@ -120,7 +216,13 @@ def test_get_costs_unsupported_fidelity():
         return float(x)
 
     oracle = MultiFidelityOracle(
-        fidelity_configs={0: {"cost_per_sample": 1.0, "score_fn": score_fn}}
+        fidelity_configs={
+            0: {
+                "cost_per_sample": 1.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            }
+        }
     )
     candidates = [Candidate(x=1, fidelity=5)]
 
@@ -135,7 +237,13 @@ def test_query_single_fidelity(budget):
         return float(x) * 2
 
     oracle = MultiFidelityOracle(
-        fidelity_configs={0: {"cost_per_sample": 1.0, "score_fn": score_fn}}
+        fidelity_configs={
+            0: {
+                "cost_per_sample": 1.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            }
+        }
     )
     candidates = [Candidate(x=i, fidelity=0) for i in [5, 10, 15]]
     observations = oracle.query(candidates)
@@ -159,8 +267,16 @@ def test_query_mixed_fidelities(budget):
 
     oracle = MultiFidelityOracle(
         fidelity_configs={
-            0: {"cost_per_sample": 1.0, "score_fn": score_fn_0},
-            1: {"cost_per_sample": 2.0, "score_fn": score_fn_1},
+            0: {
+                "cost_per_sample": 1.0,
+                "score_fn": score_fn_0,
+                "fidelity_confidence": 1.0,
+            },
+            1: {
+                "cost_per_sample": 2.0,
+                "score_fn": score_fn_1,
+                "fidelity_confidence": 1.0,
+            },
         }
     )
     candidates = [
@@ -196,8 +312,16 @@ def test_query_consumes_budget():
 
     oracle = MultiFidelityOracle(
         fidelity_configs={
-            0: {"cost_per_sample": 2.0, "score_fn": score_fn},
-            1: {"cost_per_sample": 3.0, "score_fn": score_fn},
+            0: {
+                "cost_per_sample": 2.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            },
+            1: {
+                "cost_per_sample": 3.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            },
         }
     )
     budget = Budget(available_budget=100.0, schedule=schedule)
@@ -224,7 +348,13 @@ def test_query_raises_when_budget_insufficient():
         return float(x)
 
     oracle = MultiFidelityOracle(
-        fidelity_configs={0: {"cost_per_sample": 5.0, "score_fn": score_fn}}
+        fidelity_configs={
+            0: {
+                "cost_per_sample": 5.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            }
+        }
     )
     budget = Budget(available_budget=8.0, schedule=schedule)
     candidates = [Candidate(x=i, fidelity=0) for i in range(3)]  # Total cost: 15.0

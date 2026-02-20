@@ -12,13 +12,21 @@ class Oracle(ABC):
     fidelity levels and route candidates internally.
     """
 
-    @abstractmethod
     def get_supported_fidelities(self) -> list[int]:
         """Return list of fidelity levels this oracle can handle.
 
         Returns:
             List of integer fidelity levels supported by this oracle.
             For single-fidelity oracles, returns a single-element list.
+        """
+        return sorted(self.get_fidelity_confidences().keys())
+
+    @abstractmethod
+    def get_fidelity_confidences(self) -> dict[int, float]:
+        """Return confidence for each supported fidelity.
+
+        Returns:
+            Dictionary mapping each fidelity level to a confidence score in [0, 1].
         """
         pass
 

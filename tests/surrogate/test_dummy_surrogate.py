@@ -126,3 +126,10 @@ def test_predict_with_fidelity(surrogate, fidelity):
         expected_mean = (50.0 + 55.0) / 2
         assert predictions["mean"] == [expected_mean]
         assert predictions["std"] == [1.0]
+
+
+def test_set_fidelity_confidences_is_noop(surrogate):
+    """Test default surrogate confidence hook is a no-op."""
+    surrogate.set_fidelity_confidences({0: 0.8, 1: 0.4})
+    assert surrogate._model == {}
+    assert surrogate._mean_score == 0.0

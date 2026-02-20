@@ -35,6 +35,23 @@ class Surrogate(ABC):
         """
         pass
 
+    def set_fidelity_confidences(self, confidences: dict[int, float]) -> None:
+        """Set per-fidelity confidence metadata for multi-fidelity surrogate models.
+
+        This method is intended for surrogate models that operate in a multi-fidelity
+        setting, where different fidelity levels have associated confidence values.
+        The active learning loop calls this method before iterative fitting begins,
+        passing the confidence values provided by the oracle.
+
+        Surrogates that do not support or utilize fidelity-specific metadata can
+        safely ignore this method, as the default implementation is a no-op.
+
+        Args:
+            confidences: Mapping of fidelity levels (integer indices) to confidence
+                values in the range [0, 1], where 1 indicates maximum confidence.
+        """
+        return None
+
     def predict(self, candidates: Sequence[Candidate]) -> Mapping[str, Any]:
         """Predict values for candidates (optional method).
 

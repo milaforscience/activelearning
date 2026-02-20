@@ -22,16 +22,24 @@ class CompositeOracle(Oracle):
             raise ValueError("CompositeOracle requires at least one sub-oracle")
         self._sub_oracles = sub_oracles
 
-    def get_supported_fidelities(self) -> list[int]:
-        """Return union of fidelities supported by all sub-oracles.
-
-        Returns:
-            Sorted list of all fidelity levels supported by any sub-oracle.
-        """
-        all_fidelities = set()
+    def get_fidelity_confidences(self) -> dict[int, float]:
+        """Return per-fidelity confidences, enforcing cross-oracle consistency."""
+        fidelity_confidences: dict[int, float] = {}
         for oracle in self._sub_oracles:
-            all_fidelities.update(oracle.get_supported_fidelities())
-        return sorted(all_fidelities)
+            for fidelity, confidence in oracle.get_fidelity_confidences().items():
+                existing_confidence = fidelity_confidences.get(fidelity)
+                if existing_confidence is None:
+                    fidelity_confidences[fidelity] = confidence
+                    continue
+                if existing_confidence != confidence:
+                    raise ValueError(
+                        f"Inconsistent confidence for fidelity {fidelity}: "
+                        f"{existing_confidence} vs {confidence}"
+                    )
+        return {
+            fidelity: fidelity_confidences[fidelity]
+            for fidelity in sorted(fidelity_confidences)
+        }
 
     def _get_cheapest_oracle(
         self, fidelity: int, candidates: list[Candidate]

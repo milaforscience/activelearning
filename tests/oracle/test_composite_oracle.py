@@ -25,8 +25,16 @@ def cheap_oracle():
 
     return MultiFidelityOracle(
         fidelity_configs={
-            0: {"cost_per_sample": 1.0, "score_fn": score_fn},
-            1: {"cost_per_sample": 2.0, "score_fn": score_fn},
+            0: {
+                "cost_per_sample": 1.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            },
+            1: {
+                "cost_per_sample": 2.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            },
         }
     )
 
@@ -40,9 +48,21 @@ def expensive_oracle():
 
     return MultiFidelityOracle(
         fidelity_configs={
-            0: {"cost_per_sample": 3.0, "score_fn": score_fn},
-            1: {"cost_per_sample": 5.0, "score_fn": score_fn},
-            2: {"cost_per_sample": 7.0, "score_fn": score_fn},
+            0: {
+                "cost_per_sample": 3.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            },
+            1: {
+                "cost_per_sample": 5.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            },
+            2: {
+                "cost_per_sample": 7.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            },
         }
     )
 
@@ -71,6 +91,48 @@ def test_get_supported_fidelities_multiple_oracles(cheap_oracle, expensive_oracl
     composite = CompositeOracle(sub_oracles=[cheap_oracle, expensive_oracle])
     # cheap: [0, 1], expensive: [0, 1, 2] -> combined: [0, 1, 2]
     assert composite.get_supported_fidelities() == [0, 1, 2]
+
+
+def test_get_fidelity_confidences_single_oracle(cheap_oracle):
+    """Test get_fidelity_confidences with a single sub-oracle."""
+    composite = CompositeOracle(sub_oracles=[cheap_oracle])
+    assert composite.get_fidelity_confidences() == {0: 1.0, 1: 1.0}
+
+
+def test_get_fidelity_confidences_multiple_oracles(cheap_oracle, expensive_oracle):
+    """Test get_fidelity_confidences combines confidences across sub-oracles."""
+    composite = CompositeOracle(sub_oracles=[cheap_oracle, expensive_oracle])
+    assert composite.get_fidelity_confidences() == {0: 1.0, 1: 1.0, 2: 1.0}
+
+
+def test_get_fidelity_confidences_raises_on_conflict():
+    """Test conflicting confidence values for the same fidelity raise ValueError."""
+
+    def score_fn(x):
+        return float(x)
+
+    oracle_1 = MultiFidelityOracle(
+        fidelity_configs={
+            0: {
+                "cost_per_sample": 1.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 0.2,
+            }
+        }
+    )
+    oracle_2 = MultiFidelityOracle(
+        fidelity_configs={
+            0: {
+                "cost_per_sample": 2.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 0.8,
+            }
+        }
+    )
+    composite = CompositeOracle(sub_oracles=[oracle_1, oracle_2])
+
+    with pytest.raises(ValueError, match="Inconsistent confidence for fidelity 0"):
+        composite.get_fidelity_confidences()
 
 
 def test_get_costs_single_fidelity(cheap_oracle, expensive_oracle):
@@ -208,10 +270,22 @@ def test_cheapest_oracle_selection_with_equal_costs():
         return float(x) * 2.0
 
     oracle1 = MultiFidelityOracle(
-        fidelity_configs={0: {"cost_per_sample": 2.0, "score_fn": score_fn_1}}
+        fidelity_configs={
+            0: {
+                "cost_per_sample": 2.0,
+                "score_fn": score_fn_1,
+                "fidelity_confidence": 1.0,
+            }
+        }
     )
     oracle2 = MultiFidelityOracle(
-        fidelity_configs={0: {"cost_per_sample": 2.0, "score_fn": score_fn_2}}
+        fidelity_configs={
+            0: {
+                "cost_per_sample": 2.0,
+                "score_fn": score_fn_2,
+                "fidelity_confidence": 1.0,
+            }
+        }
     )
 
     composite = CompositeOracle(sub_oracles=[oracle1, oracle2])
@@ -257,28 +331,56 @@ def test_composite_of_composite_oracles():
     # Create base oracles with different costs and fidelities
     oracle_a = MultiFidelityOracle(
         fidelity_configs={
-            0: {"cost_per_sample": 1.0, "score_fn": score_fn_1},
-            1: {"cost_per_sample": 2.0, "score_fn": score_fn_1},
+            0: {
+                "cost_per_sample": 1.0,
+                "score_fn": score_fn_1,
+                "fidelity_confidence": 1.0,
+            },
+            1: {
+                "cost_per_sample": 2.0,
+                "score_fn": score_fn_1,
+                "fidelity_confidence": 1.0,
+            },
         }
     )
 
     oracle_b = MultiFidelityOracle(
         fidelity_configs={
-            0: {"cost_per_sample": 3.0, "score_fn": score_fn_2},
-            2: {"cost_per_sample": 5.0, "score_fn": score_fn_2},
+            0: {
+                "cost_per_sample": 3.0,
+                "score_fn": score_fn_2,
+                "fidelity_confidence": 1.0,
+            },
+            2: {
+                "cost_per_sample": 5.0,
+                "score_fn": score_fn_2,
+                "fidelity_confidence": 1.0,
+            },
         }
     )
 
     oracle_c = MultiFidelityOracle(
         fidelity_configs={
-            1: {"cost_per_sample": 1.5, "score_fn": score_fn_3},
-            2: {"cost_per_sample": 4.0, "score_fn": score_fn_3},
+            1: {
+                "cost_per_sample": 1.5,
+                "score_fn": score_fn_3,
+                "fidelity_confidence": 1.0,
+            },
+            2: {
+                "cost_per_sample": 4.0,
+                "score_fn": score_fn_3,
+                "fidelity_confidence": 1.0,
+            },
         }
     )
 
     oracle_d = MultiFidelityOracle(
         fidelity_configs={
-            3: {"cost_per_sample": 10.0, "score_fn": score_fn_4},
+            3: {
+                "cost_per_sample": 10.0,
+                "score_fn": score_fn_4,
+                "fidelity_confidence": 1.0,
+            },
         }
     )
 

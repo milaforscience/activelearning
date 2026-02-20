@@ -14,6 +14,7 @@ class MultiFidelityOracle(Oracle):
             Each config must contain:
             - 'cost_per_sample': float - Cost per sample at this fidelity
             - 'score_fn': Callable - Function mapping candidate.x to score
+            - 'fidelity_confidence': float - Confidence score in [0, 1]
     """
 
     def __init__(
@@ -37,12 +38,31 @@ class MultiFidelityOracle(Oracle):
                 raise ValueError(
                     f"Missing 'score_fn' in config for fidelity {fidelity}"
                 )
+            if "fidelity_confidence" not in config:
+                raise ValueError(
+                    f"Missing 'fidelity_confidence' in config for fidelity {fidelity}"
+                )
+            fidelity_confidence = config["fidelity_confidence"]
+            if not isinstance(fidelity_confidence, (int, float)) or isinstance(
+                fidelity_confidence, bool
+            ):
+                raise ValueError(
+                    "fidelity_confidence must be a number in [0, 1] "
+                    f"for fidelity {fidelity}"
+                )
+            if not 0.0 <= float(fidelity_confidence) <= 1.0:
+                raise ValueError(
+                    f"fidelity_confidence must be in [0, 1] for fidelity {fidelity}"
+                )
 
         self.fidelity_configs = fidelity_configs
 
-    def get_supported_fidelities(self) -> list[int]:
-        """Return list of supported fidelity levels, sorted."""
-        return sorted(self.fidelity_configs.keys())
+    def get_fidelity_confidences(self) -> dict[int, float]:
+        """Return confidence values by fidelity level, sorted by fidelity."""
+        return {
+            fidelity: float(self.fidelity_configs[fidelity]["fidelity_confidence"])
+            for fidelity in sorted(self.fidelity_configs.keys())
+        }
 
     def get_costs(self, candidates: Sequence[Candidate]) -> list[float]:
         """Get the cost of querying each candidate.
