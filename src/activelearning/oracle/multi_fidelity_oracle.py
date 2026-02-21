@@ -9,12 +9,17 @@ class MultiFidelityOracle(Oracle):
 
     Each fidelity level has its own cost_per_sample and score_fn.
 
-    Args:
-        fidelity_configs: Dictionary mapping fidelity level (int) to configuration.
+    Parameters
+    ----------
+        fidelity_configs : dict[int, dict[str, Any]]
+            Dictionary mapping fidelity level (int) to configuration.
             Each config must contain:
-            - 'cost_per_sample': float - Cost per sample at this fidelity
-            - 'score_fn': Callable - Function mapping candidate.x to score
-            - 'fidelity_confidence': float - Confidence score in [0, 1]
+            - 'cost_per_sample'
+                float - Cost per sample at this fidelity
+            - 'score_fn'
+                Callable - Function mapping candidate.x to score
+            - 'fidelity_confidence'
+                float - Confidence score in [0, 1]
     """
 
     def __init__(
@@ -23,8 +28,10 @@ class MultiFidelityOracle(Oracle):
     ) -> None:
         """Initialize MultiFidelityOracle with fidelity configurations.
 
-        Raises:
-            ValueError: If fidelity is not an integer or required keys are missing.
+        Raises
+        ------
+            ValueError
+                If fidelity is not an integer or required keys are missing.
         """
         # Validate fidelity configs
         for fidelity, config in fidelity_configs.items():
@@ -67,14 +74,20 @@ class MultiFidelityOracle(Oracle):
     def get_costs(self, candidates: Sequence[Candidate]) -> list[float]:
         """Get the cost of querying each candidate.
 
-        Args:
-            candidates: List of candidates with fidelity specified.
+        Parameters
+        ----------
+            candidates : Sequence[Candidate]
+                List of candidates with fidelity specified.
 
-        Returns:
+        Returns
+        -------
+            costs : list[float]
             List of costs, one per candidate.
 
-        Raises:
-            ValueError: If candidate has unsupported fidelity.
+        Raises
+        ------
+            ValueError
+                If candidate has unsupported fidelity.
         """
         costs = []
         for candidate in candidates:
@@ -91,14 +104,20 @@ class MultiFidelityOracle(Oracle):
 
         Budget consumption is the caller's responsibility.
 
-        Args:
-            candidates: List of candidates to query, each with fidelity specified.
+        Parameters
+        ----------
+            candidates : Sequence[Candidate]
+                List of candidates to query, each with fidelity specified.
 
-        Returns:
+        Returns
+        -------
+            result : list[Observation]
             List of observations corresponding to each candidate.
 
-        Raises:
-            ValueError: If a candidate has an unsupported fidelity level.
+        Raises
+        ------
+            ValueError
+                If a candidate has an unsupported fidelity level.
         """
         observations = []
         for candidate in candidates:

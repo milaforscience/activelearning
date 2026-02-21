@@ -26,7 +26,9 @@ class Acquisition(ABC):
     def surrogate(self) -> Optional[Surrogate]:
         """Get the current surrogate model.
 
-        Returns:
+        Returns
+        -------
+            result : Optional[Surrogate]
             The surrogate model or None if not yet set.
         """
         return getattr(self, "_surrogate", None)
@@ -46,10 +48,13 @@ class Acquisition(ABC):
             consider calling predict() here to fail early. If the acquisition
             accesses surrogate internals, validate the surrogate type/interface.
 
-        Args:
-            surrogate: The surrogate model to use for scoring candidates.
+        Parameters
+        ----------
+            surrogate : Surrogate
+                The surrogate model to use for scoring candidates.
                 Must provide capabilities required by this acquisition function.
-            observations: Optional iterable of observations for estimating acquisition
+            observations : Optional[Iterable[Observation]]
+                Optional iterable of observations for estimating acquisition
                 parameters (e.g., best observed value, noise estimates). May be a
                 one-pass iterable. Materialize to list if multiple passes are needed.
         """
@@ -59,10 +64,14 @@ class Acquisition(ABC):
     def __call__(self, candidates: Sequence[Candidate]) -> Sequence[float]:
         """Compute acquisition values for given candidates.
 
-        Args:
-            candidates: Sequence of candidates to score.
+        Parameters
+        ----------
+            candidates : Sequence[Candidate]
+                Sequence of candidates to score.
 
-        Returns:
+        Returns
+        -------
+            result : Sequence[float]
             Sequence of acquisition scores, same length and order as input.
             Higher scores typically indicate more valuable candidates to query.
         """

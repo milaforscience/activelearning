@@ -20,13 +20,19 @@ class Sampler(ABC):
     ) -> Sequence[Candidate]:
         """Generate a pool of candidate samples.
 
-        Args:
-            acquisition: Acquisition function to score candidates (optional).
+        Parameters
+        ----------
+            acquisition : Optional[Any]
+                Acquisition function to score candidates (optional).
                 Used by samplers that weight candidates by utility scores.
-            observations: Current observations to avoid resampling (optional).
-            **kwargs: Additional sampler-specific arguments.
+            observations : Optional[Iterable[Observation]]
+                Current observations to avoid resampling (optional).
+            **kwargs
+                Additional sampler-specific arguments.
 
-        Returns:
+        Returns
+        -------
+            result : Sequence[Candidate]
             Sequence of sampled candidates.
         """
         pass

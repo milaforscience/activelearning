@@ -8,10 +8,13 @@ class Candidate:
 
     Uses maximum type flexibility to support various data representations.
 
-    Attributes:
-        x: Input feature or identifier. Commonly: primitives (int, float, str),
+    Attributes
+    ----------
+        x : Any
+            Input feature or identifier. Commonly: primitives (int, float, str),
             arrays (numpy.ndarray), tensors (torch.Tensor), or structured data (dict, tuple).
-        fidelity: Optional fidelity level for multi-fidelity optimization.
+        fidelity : Optional[int]
+            Optional fidelity level for multi-fidelity optimization.
             Higher fidelity typically means more accurate but more expensive.
     """
 
@@ -25,11 +28,15 @@ class Observation:
 
     Uses maximum type flexibility to support various data representations.
 
-    Attributes:
-        x: Input feature or identifier. Same semantics as Candidate.x.
-        y: Observed output or label. Commonly: scalar (float), vector (list, array),
+    Attributes
+    ----------
+        x : Any
+            Input feature or identifier. Same semantics as Candidate.x.
+        y : Any
+            Observed output or label. Commonly: scalar (float), vector (list, array),
             or categorical label (str, int).
-        fidelity: Optional fidelity level at which the observation was made.
+        fidelity : Optional[int]
+            Optional fidelity level at which the observation was made.
     """
 
     x: Any
@@ -42,11 +49,16 @@ def label_candidates(
 ) -> Sequence[Observation]:
     """Convert a sequence of candidates and their corresponding labels into observations.
 
-    Args:
-        candidates: Sequence of Candidate objects.
-        labels: Sequence of label values corresponding to each candidate.
+    Parameters
+    ----------
+        candidates : Sequence[Candidate]
+            Sequence of Candidate objects.
+        labels : Sequence[Any]
+            Sequence of label values corresponding to each candidate.
 
-    Returns:
+    Returns
+    -------
+        result : Sequence[Observation]
         Sequence of Observation objects, where each observation combines the
         candidate's x and fidelity with its label as y.
     """

@@ -13,9 +13,12 @@ class PoolScoreSampler(Sampler):
     Converts acquisition scores to probabilities via softmax transformation,
     which handles negative scores and ensures numerical stability.
 
-    Args:
-        candidate_pool: Fixed pool of candidates to sample from.
-        num_samples: Number of candidates to sample per call.
+    Parameters
+    ----------
+        candidate_pool : Sequence[Candidate]
+            Fixed pool of candidates to sample from.
+        num_samples : int
+            Number of candidates to sample per call.
     """
 
     def __init__(self, candidate_pool: Sequence[Candidate], num_samples: int) -> None:
@@ -30,12 +33,18 @@ class PoolScoreSampler(Sampler):
     ) -> list[Candidate]:
         """Samples from the candidate pool weighted by acquisition scores.
 
-        Args:
-            acquisition: Acquisition function to score candidates.
-            observations: Optional iterable of observations (not used by this sampler).
-            **kwargs: Additional arguments (unused).
+        Parameters
+        ----------
+            acquisition : Optional[Acquisition]
+                Acquisition function to score candidates.
+            observations : Optional[Iterable[Observation]]
+                Optional iterable of observations (not used by this sampler).
+            **kwargs
+                Additional arguments (unused).
 
-        Returns:
+        Returns
+        -------
+            result : list[Candidate]
             List of sampled candidates weighted by softmax probabilities.
         """
         if self.num_samples >= len(self.candidate_pool):

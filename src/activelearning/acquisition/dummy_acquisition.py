@@ -14,8 +14,10 @@ class DummyAcquisition(Acquisition):
         Requires surrogate.predict() to return a dict with "mean" key.
         Optionally uses "std" key if available for uncertainty-based exploration.
 
-    Args:
-        beta: Exploration parameter controlling the weight of uncertainty.
+    Parameters
+    ----------
+        beta : float
+            Exploration parameter controlling the weight of uncertainty.
     """
 
     def __init__(self, beta: float = 1.0) -> None:
@@ -25,15 +27,22 @@ class DummyAcquisition(Acquisition):
     def __call__(self, candidates: Sequence[Candidate]) -> list[float]:
         """Compute UCB scores for candidates.
 
-        Args:
-            candidates: Sequence of candidates to score.
+        Parameters
+        ----------
+            candidates : Sequence[Candidate]
+                Sequence of candidates to score.
 
-        Returns:
+        Returns
+        -------
+            result : list[float]
             List of acquisition scores (mean + beta * std).
 
-        Raises:
-            ValueError: If surrogate is not set or does not implement predict().
-            ValueError: If predict() does not return required "mean" key.
+        Raises
+        ------
+            ValueError
+                If surrogate is not set or does not implement predict().
+            ValueError
+                If predict() does not return required "mean" key.
         """
         if self.surrogate is None:
             return [0.0 for _ in candidates]

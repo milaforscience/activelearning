@@ -15,8 +15,10 @@ class Dataset(ABC):
     def add_observations(self, observations: Sequence[Observation]) -> None:
         """Add new observations to the dataset.
 
-        Args:
-            observations: Sequence of observations to add.
+        Parameters
+        ----------
+            observations : Sequence[Observation]
+                Sequence of observations to add.
         """
         pass
 
@@ -28,20 +30,25 @@ class Dataset(ABC):
         (e.g., once for surrogate fitting, once for acquisition update, etc.).
         Each call should return a fresh iterable over the current observations.
 
-        Returns:
+        Returns
+        -------
+            observations_iterable : Iterable[Observation]
             Iterable of all observations in the dataset. May be:
+            Iterable[Observation]
             - A list for small in-memory datasets (cheap to return multiple times)
             - A DataLoader or generator for large datasets (creates fresh iterator each call)
             - Any iterable that can be traversed to access observations
 
-        Note:
+        Notes
+        -----
             Concrete implementations should ensure this method is efficient to call
             multiple times per active learning iteration. For example:
             - Returning a list reference is O(1)
             - Creating a new DataLoader is typically fast (just wraps existing data)
             - Avoid expensive recomputation on each call
 
-        Examples:
+        Examples
+        --------
             Simple list implementation (cheap multiple calls):
             ```python
             def get_observations_iterable(self):
@@ -59,14 +66,19 @@ class Dataset(ABC):
     def get_best_candidates(self, k: int = 1) -> list[Observation]:
         """Return the top-k observations by y value from the dataset.
 
-        Args:
-            k: Number of top observations to return.
+        Parameters
+        ----------
+            k : int
+                Number of top observations to return.
 
-        Returns:
+        Returns
+        -------
+            best_candidates : list[Observation]
             List of top-k observations sorted by y value (descending).
             Returns empty list if no observations exist.
 
-        Note:
+        Notes
+        -----
             Filters out observations with None y values.
             Assumes y values support comparison operations.
         """

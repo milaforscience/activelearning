@@ -8,8 +8,10 @@ from activelearning.utils.types import Candidate
 class ScoreSelector(Selector):
     """Selector that ranks candidates by acquisition score and selects the top-k.
 
-    Args:
-        num_samples: Number of top-scored candidates to select.
+    Parameters
+    ----------
+        num_samples : int
+            Number of top-scored candidates to select.
     """
 
     def __init__(self, num_samples: int) -> None:
@@ -25,14 +27,22 @@ class ScoreSelector(Selector):
     ) -> list[Candidate]:
         """Select the top num_samples candidates by acquisition score.
 
-        Args:
-            candidates: Pool of candidates to select from.
-            acquisition: Acquisition function to score candidates.
-            cost_fn: Cost function (ignored by this selector).
-            round_budget: Budget limit (ignored by this selector).
-            **kwargs: Additional arguments (unused).
+        Parameters
+        ----------
+            candidates : Sequence[Candidate]
+                Pool of candidates to select from.
+            acquisition : Optional[Acquisition]
+                Acquisition function to score candidates.
+            cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
+                Cost function (ignored by this selector).
+            round_budget : Optional[float]
+                Budget limit (ignored by this selector).
+            **kwargs
+                Additional arguments (unused).
 
-        Returns:
+        Returns
+        -------
+            result : list[Candidate]
             List of top-scored candidates.
         """
         if acquisition is None:

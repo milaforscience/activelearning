@@ -15,7 +15,9 @@ class Oracle(ABC):
     def get_supported_fidelities(self) -> list[int]:
         """Return list of fidelity levels this oracle can handle.
 
-        Returns:
+        Returns
+        -------
+            supported_fidelities : list[int]
             List of integer fidelity levels supported by this oracle.
             For single-fidelity oracles, returns a single-element list.
         """
@@ -25,7 +27,9 @@ class Oracle(ABC):
     def get_fidelity_confidences(self) -> dict[int, float]:
         """Return confidence for each supported fidelity.
 
-        Returns:
+        Returns
+        -------
+            fidelity_confidences : dict[int, float]
             Dictionary mapping each fidelity level to a confidence score in [0, 1].
         """
         pass
@@ -36,14 +40,20 @@ class Oracle(ABC):
 
         Costs are determined based on each candidate's fidelity level.
 
-        Args:
-            candidates: Sequence of candidates to query.
+        Parameters
+        ----------
+            candidates : Sequence[Candidate]
+                Sequence of candidates to query.
 
-        Returns:
+        Returns
+        -------
+            costs : list[float]
             List of costs, one per candidate, in the same order as input.
 
-        Raises:
-            ValueError: If a candidate has an unsupported fidelity level.
+        Raises
+        ------
+            ValueError
+                If a candidate has an unsupported fidelity level.
         """
         pass
 
@@ -55,13 +65,19 @@ class Oracle(ABC):
         Budget consumption is the caller's responsibility - calculate costs
         with get_costs() and consume budget before calling this method.
 
-        Args:
-            candidates: Sequence of candidates to label.
+        Parameters
+        ----------
+            candidates : Sequence[Candidate]
+                Sequence of candidates to label.
 
-        Returns:
+        Returns
+        -------
+            result : Sequence[Observation]
             Sequence of observations with same length and order as input candidates.
 
-        Raises:
-            ValueError: If a candidate has an unsupported fidelity level.
+        Raises
+        ------
+            ValueError
+                If a candidate has an unsupported fidelity level.
         """
         pass

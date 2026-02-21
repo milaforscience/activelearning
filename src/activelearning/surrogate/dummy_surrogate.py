@@ -11,7 +11,8 @@ class DummySurrogate(Surrogate):
     observed value for known candidates and the global mean for unseen ones.
     Useful for testing and baseline comparisons.
 
-    Note:
+    Notes
+    -----
         This surrogate requires a Sequence (supports len() and multiple iterations).
         Automatically materializes iterables to lists as needed.
     """
@@ -23,8 +24,10 @@ class DummySurrogate(Surrogate):
     def fit(self, observations: Iterable[Observation]) -> None:
         """Fit the surrogate by caching observations and computing global mean.
 
-        Args:
-            observations: Iterable of observations to cache. Will be materialized
+        Parameters
+        ----------
+            observations : Iterable[Observation]
+                Iterable of observations to cache. Will be materialized
                 to a Sequence if needed for len() and multiple iteration.
         """
         # Materialize to list if not already a Sequence
@@ -41,10 +44,14 @@ class DummySurrogate(Surrogate):
     def predict(self, candidates: Sequence[Candidate]) -> Mapping[str, list[float]]:
         """Predict mean and standard deviation for candidates.
 
-        Args:
-            candidates: Sequence of candidates to predict.
+        Parameters
+        ----------
+            candidates : Sequence[Candidate]
+                Sequence of candidates to predict.
 
-        Returns:
+        Returns
+        -------
+            result : Mapping[str, list[float]]
             Dictionary with "mean" and "std" keys containing predictions.
             Known candidates return cached values with low std (0.1),
             unknown candidates return global mean with high std (1.0).

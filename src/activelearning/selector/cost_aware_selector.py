@@ -28,18 +28,28 @@ class CostAwareSelector(Selector):
         3. Rank candidates by utility/cost ratio (descending)
         4. Greedily select candidates until budget exhausted
 
-        Args:
-            candidates: Pool of candidates to select from.
-            acquisition: Acquisition function to score candidates.
-            cost_fn: Function returning per-candidate costs.
-            round_budget: Maximum budget for this selection round.
-            **kwargs: Additional arguments (unused).
+        Parameters
+        ----------
+            candidates : Sequence[Candidate]
+                Pool of candidates to select from.
+            acquisition : Optional[Acquisition]
+                Acquisition function to score candidates.
+            cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
+                Function returning per-candidate costs.
+            round_budget : Optional[float]
+                Maximum budget for this selection round.
+            **kwargs
+                Additional arguments (unused).
 
-        Returns:
+        Returns
+        -------
+            result : list[Candidate]
             List of selected candidates within budget constraint.
 
-        Raises:
-            ValueError: If acquisition, cost_fn, or round_budget not provided.
+        Raises
+        ------
+            ValueError
+                If acquisition, cost_fn, or round_budget not provided.
         """
         if acquisition is None:
             raise ValueError("Acquisition function is required for CostAwareSelector.")

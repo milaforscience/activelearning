@@ -9,9 +9,12 @@ from activelearning.utils.types import Candidate, Observation
 class PoolUniformSampler(Sampler):
     """Samples uniformly at random from a fixed candidate pool.
 
-    Args:
-        candidate_pool: Fixed pool of candidates to sample from.
-        num_samples: Number of candidates to sample per call.
+    Parameters
+    ----------
+        candidate_pool : Sequence[Candidate]
+            Fixed pool of candidates to sample from.
+        num_samples : int
+            Number of candidates to sample per call.
     """
 
     def __init__(self, candidate_pool: Sequence[Candidate], num_samples: int) -> None:
@@ -26,12 +29,18 @@ class PoolUniformSampler(Sampler):
     ) -> list[Candidate]:
         """Samples uniformly from the candidate pool.
 
-        Args:
-            acquisition: Optional acquisition function (not used by this sampler).
-            observations: Optional iterable of observations (not used by this sampler).
-            **kwargs: Additional arguments (unused).
+        Parameters
+        ----------
+            acquisition : Optional[Acquisition]
+                Optional acquisition function (not used by this sampler).
+            observations : Optional[Iterable[Observation]]
+                Optional iterable of observations (not used by this sampler).
+            **kwargs
+                Additional arguments (unused).
 
-        Returns:
+        Returns
+        -------
+            result : list[Candidate]
             List of randomly sampled candidates.
         """
         if self.num_samples >= len(self.candidate_pool):

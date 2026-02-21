@@ -11,9 +11,12 @@ class Budget:
     allocation via a configurable schedule function. It ensures costs do not
     exceed available budget and provides consumption tracking.
 
-    Attributes:
-        available_budget: Remaining budget available for consumption.
-        schedule: Function mapping round number to allocated budget for that round.
+    Attributes
+    ----------
+        available_budget : float
+            Remaining budget available for consumption.
+        schedule : Callable[[int], float]
+            Function mapping round number to allocated budget for that round.
     """
 
     def __init__(
@@ -21,9 +24,12 @@ class Budget:
     ) -> None:
         """Initialize the Budget with total budget and scheduling function.
 
-        Args:
-            available_budget: Total budget available for all active learning rounds.
-            schedule: Callable taking round number (int) and returning budget
+        Parameters
+        ----------
+            available_budget : float
+                Total budget available for all active learning rounds.
+            schedule : Callable[[int], float]
+                Callable taking round number (int) and returning budget
                 allocation (float) for that round.
         """
         self.available_budget = float(available_budget)
@@ -36,11 +42,15 @@ class Budget:
         it does not exceed the currently available budget. If the schedule
         returns more than available, caps at available_budget and logs a warning.
 
-        Args:
-            current_round: The active learning round number (0-indexed or 1-indexed
+        Parameters
+        ----------
+            current_round : int
+                The active learning round number (0-indexed or 1-indexed
                 depending on schedule implementation).
 
-        Returns:
+        Returns
+        -------
+            round_budget : float
             Budget allocated for the specified round, capped at available_budget.
         """
         scheduled_budget = self.schedule(current_round)
@@ -58,11 +68,15 @@ class Budget:
     def consume(self, cost: float) -> None:
         """Consume budget by deducting the specified cost.
 
-        Args:
-            cost: Amount to deduct from available_budget.
+        Parameters
+        ----------
+            cost : float
+                Amount to deduct from available_budget.
 
-        Raises:
-            ValueError: If cost exceeds available_budget.
+        Raises
+        ------
+            ValueError
+                If cost exceeds available_budget.
         """
         if cost > self.available_budget:
             raise ValueError(
@@ -77,10 +91,14 @@ class Budget:
         This is a pure query method with no side effects. Use this to check
         affordability before attempting to consume budget.
 
-        Args:
-            cost: Amount to check affordability for.
+        Parameters
+        ----------
+            cost : float
+                Amount to check affordability for.
 
-        Returns:
+        Returns
+        -------
+            can_afford : bool
             True if cost <= available_budget, False otherwise.
         """
         return cost <= self.available_budget

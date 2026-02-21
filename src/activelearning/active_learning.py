@@ -22,23 +22,34 @@ def active_learning(
     (3) selects candidates to label, (4) queries oracle and adds observations.
     Stops when budget is exhausted or no affordable candidates remain.
 
-    Args:
-        dataset: Dataset for storing and retrieving observations.
-        surrogate: Surrogate model to fit on observations.
-        acquisition: Acquisition function to score candidate utility.
+    Parameters
+    ----------
+        dataset : Dataset
+            Dataset for storing and retrieving observations.
+        surrogate : Surrogate
+            Surrogate model to fit on observations.
+        acquisition : Acquisition
+            Acquisition function to score candidate utility.
             Must be compatible with the surrogate (see acquisition.update() docs).
-        sampler: Sampler to propose candidate subsets.
-        selector: Selector to choose final candidates from sampled pool.
-        oracle: Oracle instance that handles all fidelity levels internally.
-        budget: Budget object managing allocation and consumption.
+        sampler : Sampler
+            Sampler to propose candidate subsets.
+        selector : Selector
+            Selector to choose final candidates from sampled pool.
+        oracle : Oracle
+            Oracle instance that handles all fidelity levels internally.
+        budget : Budget
+            Budget object managing allocation and consumption.
 
-    Returns:
+    Returns
+    -------
+        result : tuple[Dataset, float, int]
         Tuple containing:
             - Updated dataset with new observations
             - Total cost incurred across all queries
             - Number of active learning rounds completed
 
-    Note:
+    Notes
+    -----
         The loop terminates early if no candidates can be afforded within
         the remaining budget to prevent infinite loops.
     """

@@ -13,15 +13,19 @@ class DummyDataset(Dataset):
     def add_observations(self, observations: Sequence[Observation]) -> None:
         """Add new observations to the dataset by appending to the list of records.
 
-        Args:
-            observations: Sequence of observations to add.
+        Parameters
+        ----------
+            observations : Sequence[Observation]
+                Sequence of observations to add.
         """
         self._records.extend(observations)
 
     def get_observations_iterable(self) -> list[Observation]:
         """Retrieve all stored observations.
 
-        Returns:
+        Returns
+        -------
+            observations_iterable : list[Observation]
             List of all observations stored in the dataset.
         """
         return list(self._records)

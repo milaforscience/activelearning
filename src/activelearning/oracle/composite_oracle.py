@@ -13,8 +13,10 @@ class CompositeOracle(Oracle):
     Routes candidates to sub-oracles based on fidelity, selecting the oracle
     with the lowest per-candidate cost for each fidelity level.
 
-    Args:
-        sub_oracles: List of oracle instances to delegate to.
+    Parameters
+    ----------
+        sub_oracles : list[Oracle]
+            List of oracle instances to delegate to.
     """
 
     def __init__(self, sub_oracles: list[Oracle]) -> None:
@@ -46,15 +48,22 @@ class CompositeOracle(Oracle):
     ) -> Oracle:
         """Find sub-oracle with lowest total cost for given fidelity.
 
-        Args:
-            fidelity: Fidelity level to query.
-            candidates: List of candidates at this fidelity (for cost calculation).
+        Parameters
+        ----------
+            fidelity : int
+                Fidelity level to query.
+            candidates : list[Candidate]
+                List of candidates at this fidelity (for cost calculation).
 
-        Returns:
+        Returns
+        -------
+            result : Oracle
             Oracle with minimum total cost for this fidelity.
 
-        Raises:
-            ValueError: If no sub-oracle supports the requested fidelity.
+        Raises
+        ------
+            ValueError
+                If no sub-oracle supports the requested fidelity.
         """
         # Filter to oracles that support this fidelity
         valid_oracles = [
@@ -77,10 +86,14 @@ class CompositeOracle(Oracle):
     ) -> dict[int, list[tuple[int, Candidate]]]:
         """Group candidates by fidelity, preserving original indices.
 
-        Args:
-            candidates: Sequence of candidates to group.
+        Parameters
+        ----------
+            candidates : Sequence[Candidate]
+                Sequence of candidates to group.
 
-        Returns:
+        Returns
+        -------
+            result : dict[int, list[tuple[int, Candidate]]]
             Dictionary mapping fidelity to list of (index, candidate) tuples.
         """
         fidelity_groups: dict[int, list[tuple[int, Candidate]]] = defaultdict(list)
@@ -98,15 +111,22 @@ class CompositeOracle(Oracle):
         Groups candidates by fidelity, applies process_fn to each group using
         the cheapest oracle, and returns results in original order.
 
-        Args:
-            candidates: Sequence of candidates to process.
-            process_fn: Function that takes (oracle, group_candidates) and returns results.
+        Parameters
+        ----------
+            candidates : Sequence[Candidate]
+                Sequence of candidates to process.
+            process_fn : Callable[[Oracle, list[Candidate]], Sequence[T]]
+                Function that takes (oracle, group_candidates) and returns results.
 
-        Returns:
+        Returns
+        -------
+            result : list[T]
             List of results in original candidate order.
 
-        Raises:
-            ValueError: If any candidate has unsupported fidelity.
+        Raises
+        ------
+            ValueError
+                If any candidate has unsupported fidelity.
         """
         if not candidates:
             return []
@@ -127,14 +147,20 @@ class CompositeOracle(Oracle):
     def get_costs(self, candidates: Sequence[Candidate]) -> list[float]:
         """Calculate costs by delegating to cheapest oracle per fidelity.
 
-        Args:
-            candidates: Sequence of candidates to query.
+        Parameters
+        ----------
+            candidates : Sequence[Candidate]
+                Sequence of candidates to query.
 
-        Returns:
+        Returns
+        -------
+            costs : list[float]
             List of costs, one per candidate, in original order.
 
-        Raises:
-            ValueError: If any candidate has unsupported fidelity.
+        Raises
+        ------
+            ValueError
+                If any candidate has unsupported fidelity.
         """
         return self._process_by_fidelity(
             candidates, lambda oracle, group: oracle.get_costs(group)
@@ -145,14 +171,20 @@ class CompositeOracle(Oracle):
 
         Budget consumption is the caller's responsibility.
 
-        Args:
-            candidates: Sequence of candidates to label.
+        Parameters
+        ----------
+            candidates : Sequence[Candidate]
+                Sequence of candidates to label.
 
-        Returns:
+        Returns
+        -------
+            result : Sequence[Observation]
             List of observations in same order as input candidates.
 
-        Raises:
-            ValueError: If a candidate has an unsupported fidelity level.
+        Raises
+        ------
+            ValueError
+                If a candidate has an unsupported fidelity level.
         """
         if not candidates:
             return []

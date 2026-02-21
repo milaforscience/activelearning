@@ -10,9 +10,11 @@ class Surrogate(ABC):
     Surrogate models approximate the true evaluation function based on
     observed data, enabling efficient candidate evaluation.
 
-    Note: The predict() method is optional. Surrogates that only work with
-    specific acquisition functions (e.g., those using internal posterior
-    representations) may not implement general prediction.
+    Notes
+    -----
+        The predict() method is optional. Surrogates that only work with
+        specific acquisition functions (e.g., those using internal posterior
+        representations) may not implement general prediction.
     """
 
     @abstractmethod
@@ -23,12 +25,15 @@ class Surrogate(ABC):
         as new observations are collected. Implementations are not required to
         support incremental learning (full retraining is acceptable).
 
-        Args:
-            observations: Iterable of observations to train on. May be a Sequence
+        Parameters
+        ----------
+            observations : Iterable[Observation]
+                Iterable of observations to train on. May be a Sequence
                 (list, tuple) for small datasets or a one-pass iterable (DataLoader)
                 for large datasets.
 
-        Note:
+        Notes
+        -----
             Implementations should validate their input requirements:
             - If you need len() or multiple passes, materialize to list or assert Sequence
             - If you can handle streaming data, consume the iterable directly
@@ -46,8 +51,10 @@ class Surrogate(ABC):
         Surrogates that do not support or utilize fidelity-specific metadata can
         safely ignore this method, as the default implementation is a no-op.
 
-        Args:
-            confidences: Mapping of fidelity levels (integer indices) to confidence
+        Parameters
+        ----------
+            confidences : dict[int, float]
+                Mapping of fidelity levels (integer indices) to confidence
                 values in the range [0, 1], where 1 indicates maximum confidence.
         """
         return None
@@ -68,15 +75,21 @@ class Surrogate(ABC):
         specific acquisition functions that access internal model representations
         directly rather than through a general prediction interface.
 
-        Args:
-            candidates: Sequence of candidates to predict.
+        Parameters
+        ----------
+            candidates : Sequence[Candidate]
+                Sequence of candidates to predict.
 
-        Returns:
+        Returns
+        -------
+            result : Mapping[str, Any]
             Dictionary mapping prediction types to values. All sequences should
             have the same length and order as the input candidates.
 
-        Raises:
-            NotImplementedError: If this surrogate does not support general prediction.
+        Raises
+        ------
+            NotImplementedError
+                If this surrogate does not support general prediction.
         """
         raise NotImplementedError(
             f"{self.__class__.__name__} does not implement predict(). "

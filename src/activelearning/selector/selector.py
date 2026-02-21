@@ -22,17 +22,25 @@ class Selector(ABC):
     ) -> Sequence[Candidate]:
         """Select candidates from a pool based on a specific strategy.
 
-        Args:
-            candidates: Pool of candidates to select from.
-            acquisition: Acquisition function to score candidates (optional).
+        Parameters
+        ----------
+            candidates : Sequence[Candidate]
+                Pool of candidates to select from.
+            acquisition : Optional[Any]
+                Acquisition function to score candidates (optional).
                 Required by score-based selectors, unused by random selectors.
-            cost_fn: Function to compute per-candidate costs (optional).
+            cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
+                Function to compute per-candidate costs (optional).
                 Required by cost-aware selectors.
-            round_budget: Budget limit for this round (optional).
+            round_budget : Optional[float]
+                Budget limit for this round (optional).
                 Required by cost-aware selectors.
-            **kwargs: Additional strategy-specific arguments.
+            **kwargs
+                Additional strategy-specific arguments.
 
-        Returns:
+        Returns
+        -------
+            result : Sequence[Candidate]
             Selected subset of candidates (order may be significant).
         """
         pass
