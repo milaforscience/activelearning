@@ -62,7 +62,8 @@ def label_candidates(
         Sequence of Observation objects, where each observation combines the
         candidate's x and fidelity with its label as y.
     """
-    assert len(candidates) == len(labels), "Length of candidates and labels must match."
+    if len(candidates) != len(labels):
+        raise ValueError("Length of candidates and labels must match.")
     return [
         Observation(x=candidate.x, y=label, fidelity=candidate.fidelity)
         for candidate, label in zip(candidates, labels)
