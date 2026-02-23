@@ -17,7 +17,7 @@ class Oracle(ABC):
 
         Returns
         -------
-            supported_fidelities : list[int]
+        supported_fidelities : list[int]
             List of integer fidelity levels supported by this oracle.
             For single-fidelity oracles, returns a single-element list.
         """
@@ -29,7 +29,7 @@ class Oracle(ABC):
 
         Returns
         -------
-            fidelity_confidences : dict[int, float]
+        fidelity_confidences : dict[int, float]
             Dictionary mapping each fidelity level to a confidence score in [0, 1].
         """
         pass
@@ -42,18 +42,18 @@ class Oracle(ABC):
 
         Parameters
         ----------
-            candidates : Sequence[Candidate]
-                Sequence of candidates to query.
+        candidates : Sequence[Candidate]
+            Sequence of candidates to query.
 
         Returns
         -------
-            costs : list[float]
+        costs : list[float]
             List of costs, one per candidate, in the same order as input.
 
         Raises
         ------
-            ValueError
-                If a candidate has an unsupported fidelity level.
+        ValueError
+            If a candidate has an unsupported fidelity level.
         """
         pass
 
@@ -67,17 +67,17 @@ class Oracle(ABC):
 
         Parameters
         ----------
-            candidates : Sequence[Candidate]
-                Sequence of candidates to label.
+        candidates : Sequence[Candidate]
+            Sequence of candidates to label.
 
         Returns
         -------
-            result : Sequence[Observation]
+        result : Sequence[Observation]
             Sequence of observations with same length and order as input candidates.
 
         Raises
         ------
-            ValueError
-                If a candidate has an unsupported fidelity level.
+        ValueError
+            If a candidate has an unsupported fidelity level.
         """
         pass

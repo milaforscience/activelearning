@@ -16,8 +16,8 @@ class DummyAcquisition(Acquisition):
 
     Parameters
     ----------
-        beta : float
-            Exploration parameter controlling the weight of uncertainty.
+    beta : float
+        Exploration parameter controlling the weight of uncertainty.
     """
 
     def __init__(self, beta: float = 1.0) -> None:
@@ -29,20 +29,20 @@ class DummyAcquisition(Acquisition):
 
         Parameters
         ----------
-            candidates : Sequence[Candidate]
-                Sequence of candidates to score.
+        candidates : Sequence[Candidate]
+            Sequence of candidates to score.
 
         Returns
         -------
-            result : list[float]
+        result : list[float]
             List of acquisition scores (mean + beta * std).
 
         Raises
         ------
-            ValueError
-                If surrogate is not set or does not implement predict().
-            ValueError
-                If predict() does not return required "mean" key.
+        ValueError
+            If surrogate is not set or does not implement predict().
+        ValueError
+            If predict() does not return required "mean" key.
         """
         if self.surrogate is None:
             return [0.0 for _ in candidates]

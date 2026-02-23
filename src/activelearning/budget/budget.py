@@ -13,10 +13,10 @@ class Budget:
 
     Attributes
     ----------
-        available_budget : float
-            Remaining budget available for consumption.
-        schedule : Callable[[int], float]
-            Function mapping round number to allocated budget for that round.
+    available_budget : float
+        Remaining budget available for consumption.
+    schedule : Callable[[int], float]
+        Function mapping round number to allocated budget for that round.
     """
 
     def __init__(
@@ -26,11 +26,11 @@ class Budget:
 
         Parameters
         ----------
-            available_budget : float
-                Total budget available for all active learning rounds.
-            schedule : Callable[[int], float]
-                Callable taking round number (int) and returning budget
-                allocation (float) for that round.
+        available_budget : float
+            Total budget available for all active learning rounds.
+        schedule : Callable[[int], float]
+            Callable taking round number (int) and returning budget
+            allocation (float) for that round.
         """
         available_budget = float(available_budget)
         if available_budget < 0:
@@ -49,13 +49,13 @@ class Budget:
 
         Parameters
         ----------
-            current_round : int
-                The active learning round number (0-indexed or 1-indexed
-                depending on schedule implementation).
+        current_round : int
+            The active learning round number (0-indexed or 1-indexed
+            depending on schedule implementation).
 
         Returns
         -------
-            round_budget : float
+        round_budget : float
             Budget allocated for the specified round, capped at available_budget.
         """
         scheduled_budget = self.schedule(current_round)
@@ -75,13 +75,13 @@ class Budget:
 
         Parameters
         ----------
-            cost : float
-                Amount to deduct from available_budget.
+        cost : float
+            Amount to deduct from available_budget.
 
         Raises
         ------
-            ValueError
-                If cost exceeds available_budget.
+        ValueError
+            If cost exceeds available_budget.
         """
         if cost > self.available_budget:
             raise ValueError(
@@ -98,12 +98,12 @@ class Budget:
 
         Parameters
         ----------
-            cost : float
-                Amount to check affordability for.
+        cost : float
+            Amount to check affordability for.
 
         Returns
         -------
-            can_afford : bool
+        can_afford : bool
             True if cost <= available_budget, False otherwise.
         """
         return cost <= self.available_budget

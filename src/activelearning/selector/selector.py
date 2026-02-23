@@ -24,23 +24,23 @@ class Selector(ABC):
 
         Parameters
         ----------
-            candidates : Sequence[Candidate]
-                Pool of candidates to select from.
-            acquisition : Optional[Any]
-                Acquisition function to score candidates (optional).
-                Required by score-based selectors, unused by random selectors.
-            cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
-                Function to compute per-candidate costs (optional).
-                Required by cost-aware selectors.
-            round_budget : Optional[float]
-                Budget limit for this round (optional).
-                Required by cost-aware selectors.
-            **kwargs
-                Additional strategy-specific arguments.
+        candidates : Sequence[Candidate]
+            Pool of candidates to select from.
+        acquisition : Optional[Any]
+            Acquisition function to score candidates (optional).
+            Required by score-based selectors, unused by random selectors.
+        cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
+            Function to compute per-candidate costs (optional).
+            Required by cost-aware selectors.
+        round_budget : Optional[float]
+            Budget limit for this round (optional).
+            Required by cost-aware selectors.
+        **kwargs
+            Additional strategy-specific arguments.
 
         Returns
         -------
-            result : Sequence[Candidate]
+        result : Sequence[Candidate]
             Selected subset of candidates (order may be significant).
         """
         pass

@@ -30,26 +30,26 @@ class CostAwareSelector(Selector):
 
         Parameters
         ----------
-            candidates : Sequence[Candidate]
-                Pool of candidates to select from.
-            acquisition : Optional[Acquisition]
-                Acquisition function to score candidates.
-            cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
-                Function returning per-candidate costs.
-            round_budget : Optional[float]
-                Maximum budget for this selection round.
-            **kwargs
-                Additional arguments (unused).
+        candidates : Sequence[Candidate]
+            Pool of candidates to select from.
+        acquisition : Optional[Acquisition]
+            Acquisition function to score candidates.
+        cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
+            Function returning per-candidate costs.
+        round_budget : Optional[float]
+            Maximum budget for this selection round.
+        **kwargs
+            Additional arguments (unused).
 
         Returns
         -------
-            result : list[Candidate]
+        result : list[Candidate]
             List of selected candidates within budget constraint.
 
         Raises
         ------
-            ValueError
-                If acquisition, cost_fn, or round_budget not provided.
+        ValueError
+            If acquisition, cost_fn, or round_budget not provided.
         """
         if acquisition is None:
             raise ValueError("Acquisition function is required for CostAwareSelector.")

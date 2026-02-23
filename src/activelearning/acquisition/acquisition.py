@@ -28,7 +28,7 @@ class Acquisition(ABC):
 
         Returns
         -------
-            result : Optional[Surrogate]
+        result : Optional[Surrogate]
             The surrogate model or None if not yet set.
         """
         return getattr(self, "_surrogate", None)
@@ -50,13 +50,13 @@ class Acquisition(ABC):
 
         Parameters
         ----------
-            surrogate : Surrogate
-                The surrogate model to use for scoring candidates.
-                Must provide capabilities required by this acquisition function.
-            observations : Optional[Iterable[Observation]]
-                Optional iterable of observations for estimating acquisition
-                parameters (e.g., best observed value, noise estimates). May be a
-                one-pass iterable. Materialize to list if multiple passes are needed.
+        surrogate : Surrogate
+            The surrogate model to use for scoring candidates.
+            Must provide capabilities required by this acquisition function.
+        observations : Optional[Iterable[Observation]]
+            Optional iterable of observations for estimating acquisition
+            parameters (e.g., best observed value, noise estimates). May be a
+            one-pass iterable. Materialize to list if multiple passes are needed.
         """
         self._surrogate = surrogate
 
@@ -66,12 +66,12 @@ class Acquisition(ABC):
 
         Parameters
         ----------
-            candidates : Sequence[Candidate]
-                Sequence of candidates to score.
+        candidates : Sequence[Candidate]
+            Sequence of candidates to score.
 
         Returns
         -------
-            result : Sequence[float]
+        result : Sequence[float]
             Sequence of acquisition scores, same length and order as input.
             Higher scores typically indicate more valuable candidates to query.
         """

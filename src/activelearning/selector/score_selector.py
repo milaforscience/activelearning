@@ -10,8 +10,8 @@ class ScoreSelector(Selector):
 
     Parameters
     ----------
-        num_samples : int
-            Number of top-scored candidates to select.
+    num_samples : int
+        Number of top-scored candidates to select.
     """
 
     def __init__(self, num_samples: int) -> None:
@@ -29,20 +29,20 @@ class ScoreSelector(Selector):
 
         Parameters
         ----------
-            candidates : Sequence[Candidate]
-                Pool of candidates to select from.
-            acquisition : Optional[Acquisition]
-                Acquisition function to score candidates.
-            cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
-                Cost function (ignored by this selector).
-            round_budget : Optional[float]
-                Budget limit (ignored by this selector).
-            **kwargs
-                Additional arguments (unused).
+        candidates : Sequence[Candidate]
+            Pool of candidates to select from.
+        acquisition : Optional[Acquisition]
+            Acquisition function to score candidates.
+        cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
+            Cost function (ignored by this selector).
+        round_budget : Optional[float]
+            Budget limit (ignored by this selector).
+        **kwargs
+            Additional arguments (unused).
 
         Returns
         -------
-            result : list[Candidate]
+        result : list[Candidate]
             List of top-scored candidates.
         """
         if acquisition is None:

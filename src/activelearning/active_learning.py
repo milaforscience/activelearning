@@ -24,25 +24,25 @@ def active_learning(
 
     Parameters
     ----------
-        dataset : Dataset
-            Dataset for storing and retrieving observations.
-        surrogate : Surrogate
-            Surrogate model to fit on observations.
-        acquisition : Acquisition
-            Acquisition function to score candidate utility.
-            Must be compatible with the surrogate (see acquisition.update() docs).
-        sampler : Sampler
-            Sampler to propose candidate subsets.
-        selector : Selector
-            Selector to choose final candidates from sampled pool.
-        oracle : Oracle
-            Oracle instance that handles all fidelity levels internally.
-        budget : Budget
-            Budget object managing allocation and consumption.
+    dataset : Dataset
+        Dataset for storing and retrieving observations.
+    surrogate : Surrogate
+        Surrogate model to fit on observations.
+    acquisition : Acquisition
+        Acquisition function to score candidate utility.
+        Must be compatible with the surrogate (see acquisition.update() docs).
+    sampler : Sampler
+        Sampler to propose candidate subsets.
+    selector : Selector
+        Selector to choose final candidates from sampled pool.
+    oracle : Oracle
+        Oracle instance that handles all fidelity levels internally.
+    budget : Budget
+        Budget object managing allocation and consumption.
 
     Returns
     -------
-        result : tuple[Dataset, float, int]
+    result : tuple[Dataset, float, int]
         Tuple containing:
             - Updated dataset with new observations
             - Total cost incurred across all queries

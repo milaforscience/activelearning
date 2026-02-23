@@ -17,8 +17,8 @@ class Dataset(ABC):
 
         Parameters
         ----------
-            observations : Sequence[Observation]
-                Sequence of observations to add.
+        observations : Sequence[Observation]
+            Sequence of observations to add.
         """
         pass
 
@@ -32,7 +32,7 @@ class Dataset(ABC):
 
         Returns
         -------
-            observations_iterable : Iterable[Observation]
+        observations_iterable : Iterable[Observation]
             Iterable of all observations in the dataset. May be:
             Iterable[Observation]
             - A list for small in-memory datasets (cheap to return multiple times)
@@ -68,12 +68,12 @@ class Dataset(ABC):
 
         Parameters
         ----------
-            k : int
-                Number of top observations to return.
+        k : int
+            Number of top observations to return.
 
         Returns
         -------
-            best_candidates : list[Observation]
+        best_candidates : list[Observation]
             List of top-k observations sorted by y value (descending).
             Returns empty list if no observations exist.
 

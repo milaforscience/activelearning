@@ -15,8 +15,8 @@ class CompositeOracle(Oracle):
 
     Parameters
     ----------
-        sub_oracles : list[Oracle]
-            List of oracle instances to delegate to.
+    sub_oracles : list[Oracle]
+        List of oracle instances to delegate to.
     """
 
     def __init__(self, sub_oracles: list[Oracle]) -> None:
@@ -50,20 +50,20 @@ class CompositeOracle(Oracle):
 
         Parameters
         ----------
-            fidelity : int
-                Fidelity level to query.
-            candidates : list[Candidate]
-                List of candidates at this fidelity (for cost calculation).
+        fidelity : int
+            Fidelity level to query.
+        candidates : list[Candidate]
+            List of candidates at this fidelity (for cost calculation).
 
         Returns
         -------
-            result : Oracle
+        result : Oracle
             Oracle with minimum total cost for this fidelity.
 
         Raises
         ------
-            ValueError
-                If no sub-oracle supports the requested fidelity.
+        ValueError
+            If no sub-oracle supports the requested fidelity.
         """
         # Filter to oracles that support this fidelity
         valid_oracles = [
@@ -88,12 +88,12 @@ class CompositeOracle(Oracle):
 
         Parameters
         ----------
-            candidates : Sequence[Candidate]
-                Sequence of candidates to group.
+        candidates : Sequence[Candidate]
+            Sequence of candidates to group.
 
         Returns
         -------
-            result : dict[int, list[tuple[int, Candidate]]]
+        result : dict[int, list[tuple[int, Candidate]]]
             Dictionary mapping fidelity to list of (index, candidate) tuples.
         """
         fidelity_groups: dict[int, list[tuple[int, Candidate]]] = defaultdict(list)
@@ -113,20 +113,20 @@ class CompositeOracle(Oracle):
 
         Parameters
         ----------
-            candidates : Sequence[Candidate]
-                Sequence of candidates to process.
-            process_fn : Callable[[Oracle, list[Candidate]], Sequence[T]]
-                Function that takes (oracle, group_candidates) and returns results.
+        candidates : Sequence[Candidate]
+            Sequence of candidates to process.
+        process_fn : Callable[[Oracle, list[Candidate]], Sequence[T]]
+            Function that takes (oracle, group_candidates) and returns results.
 
         Returns
         -------
-            result : list[T]
+        result : list[T]
             List of results in original candidate order.
 
         Raises
         ------
-            ValueError
-                If any candidate has unsupported fidelity.
+        ValueError
+            If any candidate has unsupported fidelity.
         """
         if not candidates:
             return []
@@ -149,18 +149,18 @@ class CompositeOracle(Oracle):
 
         Parameters
         ----------
-            candidates : Sequence[Candidate]
-                Sequence of candidates to query.
+        candidates : Sequence[Candidate]
+            Sequence of candidates to query.
 
         Returns
         -------
-            costs : list[float]
+        costs : list[float]
             List of costs, one per candidate, in original order.
 
         Raises
         ------
-            ValueError
-                If any candidate has unsupported fidelity.
+        ValueError
+            If any candidate has unsupported fidelity.
         """
         return self._process_by_fidelity(
             candidates, lambda oracle, group: oracle.get_costs(group)
@@ -173,18 +173,18 @@ class CompositeOracle(Oracle):
 
         Parameters
         ----------
-            candidates : Sequence[Candidate]
-                Sequence of candidates to label.
+        candidates : Sequence[Candidate]
+            Sequence of candidates to label.
 
         Returns
         -------
-            result : Sequence[Observation]
+        result : Sequence[Observation]
             List of observations in same order as input candidates.
 
         Raises
         ------
-            ValueError
-                If a candidate has an unsupported fidelity level.
+        ValueError
+            If a candidate has an unsupported fidelity level.
         """
         if not candidates:
             return []

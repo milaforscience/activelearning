@@ -26,9 +26,9 @@ class DummySurrogate(Surrogate):
 
         Parameters
         ----------
-            observations : Iterable[Observation]
-                Iterable of observations to cache. Will be materialized
-                to a Sequence if needed for len() and multiple iteration.
+        observations : Iterable[Observation]
+            Iterable of observations to cache. Will be materialized
+            to a Sequence if needed for len() and multiple iteration.
         """
         # Materialize to list if not already a Sequence
         if not isinstance(observations, Sequence):
@@ -46,12 +46,12 @@ class DummySurrogate(Surrogate):
 
         Parameters
         ----------
-            candidates : Sequence[Candidate]
-                Sequence of candidates to predict.
+        candidates : Sequence[Candidate]
+            Sequence of candidates to predict.
 
         Returns
         -------
-            result : Mapping[str, list[float]]
+        result : Mapping[str, list[float]]
             Dictionary with "mean" and "std" keys containing predictions.
             Known candidates return cached values with low std (0.1),
             unknown candidates return global mean with high std (1.0).

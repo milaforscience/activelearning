@@ -15,8 +15,8 @@ class DummyDataset(Dataset):
 
         Parameters
         ----------
-            observations : Sequence[Observation]
-                Sequence of observations to add.
+        observations : Sequence[Observation]
+            Sequence of observations to add.
         """
         self._records.extend(observations)
 
@@ -25,7 +25,7 @@ class DummyDataset(Dataset):
 
         Returns
         -------
-            observations_iterable : list[Observation]
+        observations_iterable : list[Observation]
             List of all observations stored in the dataset.
         """
         return list(self._records)

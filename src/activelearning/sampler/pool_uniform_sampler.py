@@ -11,10 +11,10 @@ class PoolUniformSampler(Sampler):
 
     Parameters
     ----------
-        candidate_pool : Sequence[Candidate]
-            Fixed pool of candidates to sample from.
-        num_samples : int
-            Number of candidates to sample per call.
+    candidate_pool : Sequence[Candidate]
+        Fixed pool of candidates to sample from.
+    num_samples : int
+        Number of candidates to sample per call.
     """
 
     def __init__(self, candidate_pool: Sequence[Candidate], num_samples: int) -> None:
@@ -31,16 +31,16 @@ class PoolUniformSampler(Sampler):
 
         Parameters
         ----------
-            acquisition : Optional[Acquisition]
-                Optional acquisition function (not used by this sampler).
-            observations : Optional[Iterable[Observation]]
-                Optional iterable of observations (not used by this sampler).
-            **kwargs
-                Additional arguments (unused).
+        acquisition : Optional[Acquisition]
+            Optional acquisition function (not used by this sampler).
+        observations : Optional[Iterable[Observation]]
+            Optional iterable of observations (not used by this sampler).
+        **kwargs
+            Additional arguments (unused).
 
         Returns
         -------
-            result : list[Candidate]
+        result : list[Candidate]
             List of randomly sampled candidates.
         """
         if self.num_samples >= len(self.candidate_pool):

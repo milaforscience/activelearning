@@ -11,15 +11,15 @@ class MultiFidelityOracle(Oracle):
 
     Parameters
     ----------
-        fidelity_configs : dict[int, dict[str, Any]]
-            Dictionary mapping fidelity level (int) to configuration.
-            Each config must contain:
-            - 'cost_per_sample'
-                float - Cost per sample at this fidelity
-            - 'score_fn'
-                Callable - Function mapping candidate.x to score
-            - 'fidelity_confidence'
-                float - Confidence score in [0, 1]
+    fidelity_configs : dict[int, dict[str, Any]]
+        Dictionary mapping fidelity level (int) to configuration.
+        Each config must contain:
+        - 'cost_per_sample'
+            float - Cost per sample at this fidelity
+        - 'score_fn'
+            Callable - Function mapping candidate.x to score
+        - 'fidelity_confidence'
+            float - Confidence score in [0, 1]
     """
 
     def __init__(
@@ -30,8 +30,8 @@ class MultiFidelityOracle(Oracle):
 
         Raises
         ------
-            ValueError
-                If fidelity is not an integer or required keys are missing.
+        ValueError
+            If fidelity is not an integer or required keys are missing.
         """
         # Validate fidelity configs
         for fidelity, config in fidelity_configs.items():
@@ -87,18 +87,18 @@ class MultiFidelityOracle(Oracle):
 
         Parameters
         ----------
-            candidates : Sequence[Candidate]
-                List of candidates with fidelity specified.
+        candidates : Sequence[Candidate]
+            List of candidates with fidelity specified.
 
         Returns
         -------
-            costs : list[float]
+        costs : list[float]
             List of costs, one per candidate.
 
         Raises
         ------
-            ValueError
-                If candidate has unsupported fidelity.
+        ValueError
+            If candidate has unsupported fidelity.
         """
         costs = []
         for candidate in candidates:
@@ -113,18 +113,18 @@ class MultiFidelityOracle(Oracle):
 
         Parameters
         ----------
-            candidates : Sequence[Candidate]
-                List of candidates to query, each with fidelity specified.
+        candidates : Sequence[Candidate]
+            List of candidates to query, each with fidelity specified.
 
         Returns
         -------
-            result : list[Observation]
+        result : list[Observation]
             List of observations corresponding to each candidate.
 
         Raises
         ------
-            ValueError
-                If a candidate has an unsupported fidelity level.
+        ValueError
+            If a candidate has an unsupported fidelity level.
         """
         observations = []
         for candidate in candidates:

@@ -27,10 +27,10 @@ class Surrogate(ABC):
 
         Parameters
         ----------
-            observations : Iterable[Observation]
-                Iterable of observations to train on. May be a Sequence
-                (list, tuple) for small datasets or a one-pass iterable (DataLoader)
-                for large datasets.
+        observations : Iterable[Observation]
+            Iterable of observations to train on. May be a Sequence
+            (list, tuple) for small datasets or a one-pass iterable (DataLoader)
+            for large datasets.
 
         Notes
         -----
@@ -53,9 +53,9 @@ class Surrogate(ABC):
 
         Parameters
         ----------
-            confidences : dict[int, float]
-                Mapping of fidelity levels (integer indices) to confidence
-                values in the range [0, 1], where 1 indicates maximum confidence.
+        confidences : dict[int, float]
+            Mapping of fidelity levels (integer indices) to confidence
+            values in the range [0, 1], where 1 indicates maximum confidence.
         """
         return None
 
@@ -77,19 +77,19 @@ class Surrogate(ABC):
 
         Parameters
         ----------
-            candidates : Sequence[Candidate]
-                Sequence of candidates to predict.
+        candidates : Sequence[Candidate]
+            Sequence of candidates to predict.
 
         Returns
         -------
-            result : Mapping[str, Any]
+        result : Mapping[str, Any]
             Dictionary mapping prediction types to values. All sequences should
             have the same length and order as the input candidates.
 
         Raises
         ------
-            NotImplementedError
-                If this surrogate does not support general prediction.
+        NotImplementedError
+            If this surrogate does not support general prediction.
         """
         raise NotImplementedError(
             f"{self.__class__.__name__} does not implement predict(). "

@@ -22,17 +22,17 @@ class Sampler(ABC):
 
         Parameters
         ----------
-            acquisition : Optional[Any]
-                Acquisition function to score candidates (optional).
-                Used by samplers that weight candidates by utility scores.
-            observations : Optional[Iterable[Observation]]
-                Current observations to avoid resampling (optional).
-            **kwargs
-                Additional sampler-specific arguments.
+        acquisition : Optional[Any]
+            Acquisition function to score candidates (optional).
+            Used by samplers that weight candidates by utility scores.
+        observations : Optional[Iterable[Observation]]
+            Current observations to avoid resampling (optional).
+        **kwargs
+            Additional sampler-specific arguments.
 
         Returns
         -------
-            result : Sequence[Candidate]
+        result : Sequence[Candidate]
             Sequence of sampled candidates.
         """
         pass
