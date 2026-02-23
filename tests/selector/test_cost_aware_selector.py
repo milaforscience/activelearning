@@ -187,7 +187,7 @@ def test_zero_cost_candidate(selector):
 
 
 def test_negative_cost_candidate(selector):
-    """Test handling of candidate with negative cost (infinite ratio)."""
+    """Test that negative candidate costs raise ValueError."""
     candidates = [Candidate(x=0), Candidate(x=1), Candidate(x=2)]
     acquisition = Mock()
     acquisition.return_value = [10.0, 20.0, 30.0]
@@ -195,12 +195,10 @@ def test_negative_cost_candidate(selector):
     def cost_fn(c):
         return [-5.0, 5.0, 10.0]  # First candidate has negative cost
 
-    selected = selector(
-        candidates, acquisition=acquisition, cost_fn=cost_fn, round_budget=15.0
-    )
-
-    # Negative cost candidate treated as infinite ratio, selected first
-    assert selected[0].x == 0
+    with pytest.raises(ValueError, match="negative cost"):
+        selector(
+            candidates, acquisition=acquisition, cost_fn=cost_fn, round_budget=15.0
+        )
 
 
 def test_zero_budget(selector, candidates, mock_acquisition, uniform_cost_fn):

@@ -65,11 +65,13 @@ class CostAwareSelector(Selector):
         utilities = acquisition(candidates)
         costs = cost_fn(candidates)
 
-        # Calculate bang-for-buck ratios, handling zero/negative costs
+        # Reject negative costs and calculate bang-for-buck ratios
         ratios = []
         for i, (utility, cost) in enumerate(zip(utilities, costs)):
-            if cost <= 0:
-                # Infinite value for zero/negative cost - select first
+            if cost < 0:
+                raise ValueError("Cost function returned a negative cost.")
+            if cost == 0:
+                # Infinite value for zero cost - select first
                 ratio = float("inf")
             else:
                 ratio = utility / cost
