@@ -32,7 +32,12 @@ class Budget:
                 Callable taking round number (int) and returning budget
                 allocation (float) for that round.
         """
-        self.available_budget = float(available_budget)
+        available_budget = float(available_budget)
+        if available_budget < 0:
+            raise ValueError(
+                f"Initial available_budget {available_budget:.2f} must be non-negative"
+            )
+        self.available_budget = available_budget
         self.schedule = schedule
 
     def get_round_budget(self, current_round: int) -> float:
