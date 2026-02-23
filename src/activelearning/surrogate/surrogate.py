@@ -95,3 +95,19 @@ class Surrogate(ABC):
             f"{self.__class__.__name__} does not implement predict(). "
             "This surrogate may only work with specific acquisition functions."
         )
+    
+    def update(self, new_observations: Iterable[Observation]) -> None:
+        """Update the surrogate model with new observations (optional method). 
+
+        This method allows for incremental updates to the surrogate model without
+        full retraining. Implementations that do not support incremental learning
+        can simply call fit() with the combined dataset of old and new observations.
+
+        Args:
+            new_observations: Iterable of new observations to incorporate into the model.
+        """
+        # Default implementation: materialize existing data and call fit()
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement update(). "
+            "This surrogate may require full retraining with fit()."
+        )
