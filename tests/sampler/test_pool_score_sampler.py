@@ -67,3 +67,14 @@ def test_sampling_with_multi_fidelity_pool(acquisition_with_surrogate, num_sampl
 
     assert len(samples) == num_samples
     assert all(s in pool for s in samples)
+
+
+def test_samples_are_unique(candidate_pool, acquisition_with_surrogate, num_samples):
+    """Test weighted score sampling without replacement produces unique samples."""
+    if num_samples > len(candidate_pool):
+        pytest.skip("num_samples exceeds pool size for this test")
+
+    sampler = PoolScoreSampler(candidate_pool=candidate_pool, num_samples=num_samples)
+    samples = sampler.sample(acquisition=acquisition_with_surrogate)
+
+    assert len(samples) == len(set(samples))

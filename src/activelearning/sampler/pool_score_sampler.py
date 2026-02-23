@@ -1,7 +1,6 @@
-import random
 import torch
-from typing import Any, Iterable, Optional, Sequence
 
+from typing import Any, Iterable, Optional, Sequence
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.sampler import Sampler
 from activelearning.utils.types import Candidate, Observation
@@ -45,7 +44,8 @@ class PoolScoreSampler(Sampler):
         Returns
         -------
             result : list[Candidate]
-            List of sampled candidates weighted by softmax probabilities.
+            List of sampled candidates weighted by softmax probabilities,
+            without replacement.
         """
         if self.num_samples >= len(self.candidate_pool):
             return list(self.candidate_pool)
@@ -56,8 +56,8 @@ class PoolScoreSampler(Sampler):
         scores = acquisition(self.candidate_pool)
 
         # Apply softmax to convert scores to valid probabilities
-        weights = torch.softmax(torch.tensor(scores), dim=0).tolist()
-
-        return random.choices(
-            population=list(self.candidate_pool), weights=weights, k=self.num_samples
-        )
+        weights = torch.softmax(torch.tensor(scores), dim=0)
+        sampled_indices = torch.multinomial(
+            weights, num_samples=self.num_samples, replacement=False
+        ).tolist()
+        return [self.candidate_pool[i] for i in sampled_indices]
