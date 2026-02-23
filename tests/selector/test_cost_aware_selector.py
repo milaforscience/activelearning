@@ -233,7 +233,7 @@ def test_exact_budget_fit(selector):
 
 
 def test_greedy_not_optimal(selector):
-    """Test that greedy approach may not find optimal solution (knapsack limitation)."""
+    """Test that greedy utility/cost ranking can miss the max-utility feasible set."""
     # Classic knapsack counter-example
     candidates = [Candidate(x=0), Candidate(x=1)]
     acquisition = Mock()
@@ -242,8 +242,9 @@ def test_greedy_not_optimal(selector):
     def cost_fn(c):
         return [6.0, 5.0]  # Candidate 0 costs more
 
-    # Budget 10.0 - greedy picks candidate 0 (ratio 10/6=1.67)
-    # But candidate 1 (ratio 9/5=1.8) is actually better and would fit twice
+    # Budget 10.0 - greedy by ratio picks candidate 1 first (ratio 9/5=1.8),
+    # then cannot fit candidate 0 (cost 6.0) in the remaining budget.
+    # The true max-utility feasible set is candidate 0 alone (utility 10.0 > 9.0).
     selected = selector(
         candidates, acquisition=acquisition, cost_fn=cost_fn, round_budget=10.0
     )
