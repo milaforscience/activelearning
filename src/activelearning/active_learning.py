@@ -83,6 +83,10 @@ def active_learning(
             round_budget=round_budget,
         )
 
+        # No candidates selected for this round; terminate to avoid stalling.
+        if not selected_samples:
+            break
+
         # Query oracle to obtain total cost for the samples
         costs = oracle.get_costs(selected_samples)
         total_cost = sum(costs)

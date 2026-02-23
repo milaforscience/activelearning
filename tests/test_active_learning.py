@@ -1,3 +1,5 @@
+from unittest.mock import Mock
+
 import pytest
 
 from activelearning.acquisition.dummy_acquisition import DummyAcquisition
@@ -127,3 +129,25 @@ def test_active_learning_passes_fidelity_confidences_to_surrogate(
         budget=budget,
     )
     assert surrogate.fidelity_confidences == oracle.get_fidelity_confidences()
+
+
+def test_active_learning_stops_when_selector_returns_empty(
+    dataset, surrogate, acquisition, sampler, oracle, budget
+):
+    """Test loop terminates when selector returns no candidates."""
+    empty_selector = Mock()
+    empty_selector.return_value = []
+
+    dataset_out, cost, num_iter = active_learning(
+        dataset=dataset,
+        surrogate=surrogate,
+        acquisition=acquisition,
+        sampler=sampler,
+        selector=empty_selector,
+        oracle=oracle,
+        budget=budget,
+    )
+
+    assert dataset_out.get_observations_iterable() == []
+    assert cost == 0.0
+    assert num_iter == 0
