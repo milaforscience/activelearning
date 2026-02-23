@@ -63,13 +63,24 @@ class MultiFidelityOracle(Oracle):
                 )
 
         self.fidelity_configs = fidelity_configs
+        self._supported_fidelities = sorted(self.fidelity_configs.keys())
 
     def get_fidelity_confidences(self) -> dict[int, float]:
         """Return confidence values by fidelity level, sorted by fidelity."""
         return {
             fidelity: float(self.fidelity_configs[fidelity]["fidelity_confidence"])
-            for fidelity in sorted(self.fidelity_configs.keys())
+            for fidelity in self._supported_fidelities
         }
+
+    def _get_config_for_fidelity(self, fidelity: int) -> dict[str, Any]:
+        """Return per-fidelity config or raise ValueError if unsupported."""
+        config = self.fidelity_configs.get(fidelity)
+        if config is None:
+            raise ValueError(
+                f"Unsupported fidelity {fidelity}. "
+                f"Supported: {self._supported_fidelities}"
+            )
+        return config
 
     def get_costs(self, candidates: Sequence[Candidate]) -> list[float]:
         """Get the cost of querying each candidate.
@@ -91,12 +102,8 @@ class MultiFidelityOracle(Oracle):
         """
         costs = []
         for candidate in candidates:
-            if candidate.fidelity not in self.fidelity_configs:
-                raise ValueError(
-                    f"Unsupported fidelity {candidate.fidelity}. "
-                    f"Supported: {self.get_supported_fidelities()}"
-                )
-            costs.append(self.fidelity_configs[candidate.fidelity]["cost_per_sample"])
+            fidelity_config = self._get_config_for_fidelity(candidate.fidelity)
+            costs.append(fidelity_config["cost_per_sample"])
         return costs
 
     def query(self, candidates: Sequence[Candidate]) -> list[Observation]:
@@ -121,7 +128,8 @@ class MultiFidelityOracle(Oracle):
         """
         observations = []
         for candidate in candidates:
-            score_fn = self.fidelity_configs[candidate.fidelity]["score_fn"]
+            fidelity_config = self._get_config_for_fidelity(candidate.fidelity)
+            score_fn = fidelity_config["score_fn"]
             observation = Observation(
                 x=candidate.x,
                 y=score_fn(candidate.x),

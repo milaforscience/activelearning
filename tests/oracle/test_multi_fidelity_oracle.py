@@ -301,6 +301,27 @@ def test_query_mixed_fidelities(budget):
     assert observations[2].fidelity == 0
 
 
+def test_query_unsupported_fidelity_raises_value_error():
+    """Test query raises ValueError for unsupported fidelity."""
+
+    def score_fn(x):
+        return float(x)
+
+    oracle = MultiFidelityOracle(
+        fidelity_configs={
+            0: {
+                "cost_per_sample": 1.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            }
+        }
+    )
+    candidates = [Candidate(x=1, fidelity=5)]
+
+    with pytest.raises(ValueError, match="Unsupported fidelity 5"):
+        oracle.query(candidates)
+
+
 def test_query_consumes_budget():
     """Test that explicit budget consumption works correctly."""
 
