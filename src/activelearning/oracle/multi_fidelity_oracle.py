@@ -102,6 +102,10 @@ class MultiFidelityOracle(Oracle):
         """
         costs = []
         for candidate in candidates:
+            if candidate.fidelity is None:
+                raise ValueError(
+                    "Candidate fidelity must be specified for MultiFidelityOracle."
+                )
             fidelity_config = self._get_config_for_fidelity(candidate.fidelity)
             costs.append(fidelity_config["cost_per_sample"])
         return costs
@@ -128,6 +132,10 @@ class MultiFidelityOracle(Oracle):
         """
         observations = []
         for candidate in candidates:
+            if candidate.fidelity is None:
+                raise ValueError(
+                    "Candidate fidelity must be specified for MultiFidelityOracle."
+                )
             fidelity_config = self._get_config_for_fidelity(candidate.fidelity)
             score_fn = fidelity_config["score_fn"]
             observation = Observation(

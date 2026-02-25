@@ -94,7 +94,7 @@ def test_initialization_fails_with_non_int_fidelity():
 
     with pytest.raises(ValueError, match="Fidelity must be int"):
         MultiFidelityOracle(
-            fidelity_configs={
+            fidelity_configs={  # type: ignore[arg-type]
                 "low": {
                     "cost_per_sample": 1.0,
                     "score_fn": score_fn,

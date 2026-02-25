@@ -98,6 +98,11 @@ class CompositeOracle(Oracle):
         """
         fidelity_groups: dict[int, list[tuple[int, Candidate]]] = defaultdict(list)
         for i, candidate in enumerate(candidates):
+            if candidate.fidelity is None:
+                raise ValueError(
+                    f"Candidate at index {i} has no fidelity specified. "
+                    "All candidates must have a fidelity level for CompositeOracle."
+                )
             fidelity_groups[candidate.fidelity].append((i, candidate))
         return fidelity_groups
 

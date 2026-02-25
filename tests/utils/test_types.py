@@ -42,14 +42,14 @@ def test_candidate_immutability(candidate_x, fidelity):
     """Test that Candidate instances are frozen and cannot be modified."""
     candidate = Candidate(x=candidate_x, fidelity=fidelity)
     with pytest.raises(AttributeError):
-        candidate.x = 99
+        candidate.x = 99  # type: ignore[misc]
 
 
 def test_observation_immutability(observation_x, observation_y, fidelity):
     """Test that Observation instances are frozen and cannot be modified."""
     observation = Observation(x=observation_x, y=observation_y, fidelity=fidelity)
     with pytest.raises(AttributeError):
-        observation.y = 100.0
+        observation.y = 100.0  # type: ignore[misc]
 
 
 def test_label_candidates(fidelity):
