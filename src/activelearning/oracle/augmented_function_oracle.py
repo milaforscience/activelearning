@@ -1,9 +1,11 @@
+from typing import Sequence
+
 import torch
 from botorch.test_functions.multi_fidelity import AugmentedBranin, AugmentedHartmann
 from botorch.test_functions.synthetic import SyntheticTestFunction
+
 from activelearning.oracle.oracle import Oracle
 from activelearning.utils.types import Candidate, Observation
-from typing import Sequence
 
 
 class AugmentedFunctionOracle(Oracle):
