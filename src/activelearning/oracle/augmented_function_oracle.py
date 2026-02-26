@@ -74,7 +74,8 @@ class AugmentedFunctionOracle(Oracle):
         """Evaluate candidates using the underlying augmented test function.
 
         The normalized fidelity is appended as the final input dimension before
-        evaluation.
+        evaluation. All candidates are batched into a single tensor for
+        efficient evaluation.
 
         Parameters
         ----------
@@ -87,19 +88,21 @@ class AugmentedFunctionOracle(Oracle):
         observations : list[Observation]
             Observations with the function value as y.
         """
-        observations: list[Observation] = []
-        for candidate in candidates:
-            fidelity = self._validate_fidelity(candidate)
-            normalized_fidelity = self.fidelity_confidences[fidelity]
+        if not candidates:
+            return []
 
-            x_tensor = torch.tensor(
-                [*candidate.x, normalized_fidelity], dtype=torch.float64
-            ).unsqueeze(0)
-            y_value = self._function(x_tensor).item()
-            observations.append(
-                Observation(x=candidate.x, y=y_value, fidelity=fidelity)
-            )
-        return observations
+        fidelities = [self._validate_fidelity(c) for c in candidates]
+
+        rows = [
+            [*c.x, self.fidelity_confidences[f]] for c, f in zip(candidates, fidelities)
+        ]
+        x_batch = torch.tensor(rows, dtype=torch.float64)
+        y_batch = self._function(x_batch)
+
+        return [
+            Observation(x=c.x, y=y_val.item(), fidelity=f)
+            for c, y_val, f in zip(candidates, y_batch, fidelities)
+        ]
 
 
 class BraninOracle(AugmentedFunctionOracle):

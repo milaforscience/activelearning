@@ -29,6 +29,10 @@ class TestBraninOracleQuery:
         obs = oracle.query(candidates)[0]
         assert isinstance(obs.y, float)
 
+    def test_query_empty_candidates_returns_empty_list(self):
+        oracle = BraninOracle()
+        assert oracle.query([]) == []
+
     def test_query_raises_on_none_fidelity(self):
         oracle = BraninOracle()
         with pytest.raises(ValueError, match="fidelity"):
@@ -99,6 +103,10 @@ class TestHartmann6DOracleQuery:
         candidates = [Candidate(x=[0.5] * 6, fidelity=2)]
         obs = oracle.query(candidates)[0]
         assert isinstance(obs.y, float)
+
+    def test_query_empty_candidates_returns_empty_list(self):
+        oracle = Hartmann6DOracle()
+        assert oracle.query([]) == []
 
     def test_query_raises_on_none_fidelity(self):
         oracle = Hartmann6DOracle()
