@@ -1,7 +1,10 @@
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence, TYPE_CHECKING
 
 from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import Candidate, Observation
+
+if TYPE_CHECKING:
+    from activelearning.dataset.dataset import Dataset
 
 
 class DummyMeanSurrogate(Surrogate):
@@ -70,3 +73,18 @@ class DummyMeanSurrogate(Surrogate):
                 means.append(self._mean_score)
                 stds.append(self._UNKNOWN_STD)
         return {"mean": means, "std": stds}
+
+    def update(self, dataset: "Dataset") -> None:
+        """Update the surrogate by refitting with all observations from the dataset.
+
+        Parameters
+        ----------
+        dataset : Dataset
+            Dataset containing all observations.
+
+        Notes
+        -----
+            DummySurrogate always performs full refitting regardless of the update method.
+            It does not support incremental learning.
+        """
+        self.fit(dataset.get_observations_iterable())

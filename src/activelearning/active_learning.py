@@ -65,8 +65,8 @@ def active_learning(
         # iterations with the same sequence (see Dataset.get_observations_iterable).
         observations = dataset.get_observations_iterable()
 
-        # Fit surrogate on current dataset observations and update acquisition function
-        surrogate.fit(observations)
+        # Update surrogate with current dataset (decides internally whether to do full refit or partial update)
+        surrogate.update(dataset)
         acquisition.update(surrogate, observations)
 
         # Sampler can use acquisition for scoring candidates and observations to avoid re-sampling

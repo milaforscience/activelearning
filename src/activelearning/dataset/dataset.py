@@ -56,6 +56,47 @@ class Dataset(ABC):
         pass
 
     @abstractmethod
+    def get_latest_observations_iterable(self) -> Iterable[Observation]:
+        """Retrieve an iterable over the most recently added observations.
+
+        Returns observations from the most recent call to add_observations().
+        This is useful for incremental model updates where only new data needs
+        to be processed.
+
+        Returns
+        -------
+        latest_observations_iterable : Iterable[Observation]
+            Iterable of observations from the most recent add_observations() call.
+            Returns an empty iterable if no observations have been added yet.
+
+        Notes
+        -----
+            - This method should return only the observations from the last
+              add_observations() call, not all historical observations
+            - Like get_observations_iterable(), this may be called multiple times
+              and should return a fresh iterable each time
+            - If add_observations() is called again, subsequent calls to this method
+              should return the new batch, not the previous one
+
+        Examples
+        --------
+            After first batch:
+            ```python
+            dataset.add_observations([obs1, obs2, obs3])
+            latest = list(dataset.get_latest_observations_iterable())
+            # latest == [obs1, obs2, obs3]
+            ```
+
+            After second batch:
+            ```python
+            dataset.add_observations([obs4, obs5])
+            latest = list(dataset.get_latest_observations_iterable())
+            # latest == [obs4, obs5]  (not obs1-obs5)
+            ```
+        """
+        pass
+
+    @abstractmethod
     def get_best_candidates(self, k: int = 1) -> list[Observation]:
         """Return the top-k "best" observations from the dataset.
 

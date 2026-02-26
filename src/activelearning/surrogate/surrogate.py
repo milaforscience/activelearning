@@ -3,6 +3,8 @@ from typing import Iterable, Mapping, Sequence, Any
 
 from activelearning.utils.types import Candidate, Observation
 
+from activelearning.dataset.dataset import Dataset
+
 
 class Surrogate(ABC):
     """Abstract surrogate interface used by acquisitions and the active learning loop.
@@ -95,19 +97,50 @@ class Surrogate(ABC):
             f"{self.__class__.__name__} does not implement predict(). "
             "This surrogate may only work with specific acquisition functions."
         )
-    
-    def update(self, new_observations: Iterable[Observation]) -> None:
-        """Update the surrogate model with new observations (optional method). 
 
-        This method allows for incremental updates to the surrogate model without
-        full retraining. Implementations that do not support incremental learning
-        can simply call fit() with the combined dataset of old and new observations.
+    def update(self, dataset: "Dataset") -> None:
+        """Update the surrogate model with a dataset (optional method).
 
-        Args:
-            new_observations: Iterable of new observations to incorporate into the model.
+        This method is called by the active learning loop to update the surrogate
+        with new observations. Implementations can choose between:
+        1. Full retraining: Use dataset.get_observations_iterable() to refit from scratch
+        2. Partial updates: Use dataset.get_latest_observations_iterable() for incremental learning
+
+        The choice between full and partial updates is implementation-specific and
+        may be configurable via constructor parameters.
+
+        Parameters
+        ----------
+        dataset : Dataset
+            Dataset containing all observations and latest observations.
+
+        Notes
+        -----
+            - Implementations should decide internally whether to do full refit or partial update
+            - For full refit: call fit(dataset.get_observations_iterable())
+            - For partial update: use dataset.get_latest_observations_iterable() with
+              incremental learning algorithms
+            - The default implementation raises NotImplementedError
+
+        Examples
+        --------
+            Full refit implementation:
+            ```python
+            def update(self, dataset):
+                self.fit(dataset.get_observations_iterable())
+            ```
+
+            Partial update implementation:
+            ```python
+            def update(self, dataset):
+                if self.use_partial_updates and self._is_fitted:
+                    new_obs = dataset.get_latest_observations_iterable()
+                    self._incremental_update(new_obs)
+                else:
+                    self.fit(dataset.get_observations_iterable())
+            ```
         """
-        # Default implementation: materialize existing data and call fit()
         raise NotImplementedError(
             f"{self.__class__.__name__} does not implement update(). "
-            "This surrogate may require full retraining with fit()."
+            "This surrogate may require explicit fit() calls."
         )
