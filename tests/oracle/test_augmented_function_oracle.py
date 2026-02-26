@@ -34,6 +34,24 @@ class TestBraninOracleQuery:
         with pytest.raises(ValueError, match="fidelity"):
             oracle.query([Candidate(x=[0.5, 7.5])])
 
+    def test_query_raises_on_unsupported_fidelity(self):
+        oracle = BraninOracle()
+        with pytest.raises(ValueError, match="Unsupported fidelity"):
+            oracle.query([Candidate(x=[0.5, 7.5], fidelity=99)])
+
+    def test_query_batch_returns_matching_length(self):
+        oracle = BraninOracle()
+        candidates = [
+            Candidate(x=[0.0, 0.0], fidelity=1),
+            Candidate(x=[0.5, 7.5], fidelity=2),
+            Candidate(x=[1.0, 3.0], fidelity=3),
+        ]
+        observations = oracle.query(candidates)
+        assert len(observations) == 3
+        for obs, cand in zip(observations, candidates):
+            assert obs.x == cand.x
+            assert obs.fidelity == cand.fidelity
+
     def test_fidelity_confidences_proportional_to_cost(self):
         oracle = BraninOracle()
         confidences = oracle.get_fidelity_confidences()
@@ -41,6 +59,30 @@ class TestBraninOracleQuery:
         assert confidences[3] == pytest.approx(1.0)
         assert confidences[2] < confidences[3]
         assert confidences[1] < confidences[2]
+
+    def test_get_supported_fidelities(self):
+        oracle = BraninOracle()
+        assert oracle.get_supported_fidelities() == [1, 2, 3]
+
+    def test_get_costs_returns_correct_values(self):
+        oracle = BraninOracle()
+        candidates = [
+            Candidate(x=[0.0, 0.0], fidelity=1),
+            Candidate(x=[0.5, 7.5], fidelity=2),
+            Candidate(x=[1.0, 3.0], fidelity=3),
+        ]
+        costs = oracle.get_costs(candidates)
+        assert costs == [0.01, 0.1, 1.0]
+
+    def test_get_costs_raises_on_none_fidelity(self):
+        oracle = BraninOracle()
+        with pytest.raises(ValueError, match="fidelity"):
+            oracle.get_costs([Candidate(x=[0.5, 7.5])])
+
+    def test_get_costs_raises_on_unsupported_fidelity(self):
+        oracle = BraninOracle()
+        with pytest.raises(ValueError, match="Unsupported fidelity"):
+            oracle.get_costs([Candidate(x=[0.5, 7.5], fidelity=99)])
 
 
 class TestHartmann6DOracleQuery:
@@ -62,3 +104,21 @@ class TestHartmann6DOracleQuery:
         oracle = Hartmann6DOracle()
         with pytest.raises(ValueError, match="fidelity"):
             oracle.query([Candidate(x=[0.5] * 6)])
+
+    def test_query_raises_on_unsupported_fidelity(self):
+        oracle = Hartmann6DOracle()
+        with pytest.raises(ValueError, match="Unsupported fidelity"):
+            oracle.query([Candidate(x=[0.5] * 6, fidelity=99)])
+
+    def test_get_supported_fidelities(self):
+        oracle = Hartmann6DOracle()
+        assert oracle.get_supported_fidelities() == [1, 2, 3]
+
+    def test_get_costs_returns_correct_values(self):
+        oracle = Hartmann6DOracle()
+        candidates = [
+            Candidate(x=[0.1] * 6, fidelity=1),
+            Candidate(x=[0.2] * 6, fidelity=3),
+        ]
+        costs = oracle.get_costs(candidates)
+        assert costs == [0.125, 1.0]

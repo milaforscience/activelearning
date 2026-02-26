@@ -1,3 +1,4 @@
+import pytest
 import torch
 
 from activelearning.sampler.hypercube_uniform_sampler import HypercubeUniformSampler
@@ -85,7 +86,9 @@ def test_single_fidelity_list_always_produces_that_fidelity():
 
 def test_reproducibility_with_seed():
     """Fixing torch seed before sample() produces identical results."""
-    sampler = HypercubeUniformSampler(bounds=BRANIN_BOUNDS, num_samples=8)
+    sampler = HypercubeUniformSampler(
+        bounds=BRANIN_BOUNDS, num_samples=8, fidelities=[1, 2, 3]
+    )
 
     torch.manual_seed(42)
     first = sampler.sample()
@@ -94,6 +97,7 @@ def test_reproducibility_with_seed():
     second = sampler.sample()
 
     assert [c.x for c in first] == [c.x for c in second]
+    assert [c.fidelity for c in first] == [c.fidelity for c in second]
 
 
 def test_independent_calls_differ():
@@ -118,3 +122,21 @@ def test_single_dimension_bounds():
     for candidate in sampler.sample():
         assert len(candidate.x) == 1
         assert 2.0 <= candidate.x[0] <= 5.0
+
+
+def test_raises_on_invalid_bounds():
+    """Raises ValueError when lower >= upper."""
+    with pytest.raises(ValueError, match="lower >= upper"):
+        HypercubeUniformSampler(bounds=[(5.0, 2.0)], num_samples=10)
+
+
+def test_raises_on_equal_bounds():
+    """Raises ValueError when lower == upper."""
+    with pytest.raises(ValueError, match="lower >= upper"):
+        HypercubeUniformSampler(bounds=[(3.0, 3.0)], num_samples=10)
+
+
+def test_raises_on_non_positive_num_samples():
+    """Raises ValueError when num_samples <= 0."""
+    with pytest.raises(ValueError, match="num_samples must be > 0"):
+        HypercubeUniformSampler(bounds=BRANIN_BOUNDS, num_samples=0)

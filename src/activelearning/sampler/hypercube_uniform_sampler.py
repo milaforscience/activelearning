@@ -1,4 +1,3 @@
-import random
 import torch
 
 from typing import Any, Iterable, Optional, Sequence
@@ -23,13 +22,19 @@ class HypercubeUniformSampler(Sampler):
     ----------
     bounds : Sequence[tuple[float, float]]
         Per-dimension ``(lower, upper)`` bounds that define the hypercube.
+        Each pair must satisfy ``lower < upper``.
         The length determines the input dimensionality.
     num_samples : int
-        Number of candidates to generate per ``sample()`` call.
+        Number of candidates to generate per ``sample()`` call. Must be > 0.
     fidelities : Optional[Sequence[int]]
         Fidelity levels to sample from uniformly at random. Each generated
         candidate is assigned one level drawn with equal probability. When
         ``None``, candidates are created with ``fidelity=None``.
+
+    Raises
+    ------
+    ValueError
+        If any lower bound >= upper bound or num_samples <= 0.
     """
 
     def __init__(
@@ -38,6 +43,12 @@ class HypercubeUniformSampler(Sampler):
         num_samples: int,
         fidelities: Optional[Sequence[int]] = None,
     ) -> None:
+        if num_samples <= 0:
+            raise ValueError(f"num_samples must be > 0, got {num_samples}")
+        for i, (lower, upper) in enumerate(bounds):
+            if lower >= upper:
+                raise ValueError(f"Bound {i} has lower >= upper: ({lower}, {upper})")
+
         self.bounds = bounds
         self.num_samples = num_samples
         self.fidelities = list(fidelities) if fidelities is not None else None
@@ -79,14 +90,15 @@ class HypercubeUniformSampler(Sampler):
         uniform = torch.rand(self.num_samples, len(self.bounds), dtype=torch.float64)
         points = self._lower + uniform * self._range  # broadcast scaling
 
-        return [
-            Candidate(
-                x=points[i].tolist(),
-                fidelity=(
-                    random.choice(self.fidelities)
-                    if self.fidelities is not None
-                    else None
-                ),
+        if self.fidelities is not None:
+            fidelity_indices = torch.randint(
+                0, len(self.fidelities), (self.num_samples,)
             )
+            fidelities = [self.fidelities[idx] for idx in fidelity_indices.tolist()]
+        else:
+            fidelities = [None] * self.num_samples
+
+        return [
+            Candidate(x=points[i].tolist(), fidelity=fidelities[i])
             for i in range(self.num_samples)
         ]

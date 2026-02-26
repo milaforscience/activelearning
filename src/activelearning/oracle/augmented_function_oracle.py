@@ -39,22 +39,34 @@ class AugmentedFunctionOracle(Oracle):
         }
         self._function = function
 
+    def _validate_fidelity(self, candidate: Candidate) -> int:
+        """Validate and return the candidate's fidelity level.
+
+        Raises
+        ------
+        ValueError
+            If fidelity is None or not in the configured fidelity levels.
+        """
+        if candidate.fidelity is None:
+            raise ValueError(
+                "Candidate fidelity must not be None for AugmentedFunctionOracle."
+            )
+        if candidate.fidelity not in self.fidelity_costs:
+            raise ValueError(
+                f"Unsupported fidelity {candidate.fidelity}. "
+                f"Supported: {sorted(self.fidelity_costs.keys())}"
+            )
+        return candidate.fidelity
+
     def get_fidelity_confidences(self) -> dict[int, float]:
         """Return confidence proportional to cost for each fidelity."""
         return self.fidelity_confidences
 
     def get_costs(self, candidates: Sequence[Candidate]) -> list[float]:
         """Return the cost of querying each candidate based on its fidelity."""
-        costs = []
-        for candidate in candidates:
-            if candidate.fidelity is None:
-                raise ValueError(
-                    "Candidate fidelity must not be None for AugmentedFunctionOracle."
-                )
-            costs.append(self.fidelity_costs[candidate.fidelity])
-        return costs
+        return [self.fidelity_costs[self._validate_fidelity(c)] for c in candidates]
 
-    def query(self, candidates: Sequence[Candidate]) -> Sequence[Observation]:
+    def query(self, candidates: Sequence[Candidate]) -> list[Observation]:
         """Evaluate candidates using the underlying augmented test function.
 
         The normalized fidelity is appended as the final input dimension before
@@ -68,23 +80,20 @@ class AugmentedFunctionOracle(Oracle):
 
         Returns
         -------
-        observations : Sequence[Observation]
+        observations : list[Observation]
             Observations with the function value as y.
         """
         observations: list[Observation] = []
         for candidate in candidates:
-            if candidate.fidelity is None:
-                raise ValueError(
-                    "Candidate fidelity must not be None for AugmentedFunctionOracle."
-                )
-            normalized_fidelity = self.fidelity_confidences[candidate.fidelity]
+            fidelity = self._validate_fidelity(candidate)
+            normalized_fidelity = self.fidelity_confidences[fidelity]
 
             x_tensor = torch.tensor(
                 [*candidate.x, normalized_fidelity], dtype=torch.float64
             ).unsqueeze(0)
             y_value = self._function(x_tensor).item()
             observations.append(
-                Observation(x=candidate.x, y=y_value, fidelity=candidate.fidelity)
+                Observation(x=candidate.x, y=y_value, fidelity=fidelity)
             )
         return observations
 
