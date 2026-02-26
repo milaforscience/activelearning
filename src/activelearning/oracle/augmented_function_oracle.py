@@ -34,6 +34,8 @@ class AugmentedFunctionOracle(Oracle):
         fidelity_costs: dict[int, float],
     ) -> None:
         super().__init__()
+        if not fidelity_costs:
+            raise ValueError("fidelity_costs must not be empty")
         self.fidelity_costs = fidelity_costs
         max_cost = max(fidelity_costs.values())
         self.fidelity_confidences: dict[int, float] = {
