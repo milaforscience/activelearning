@@ -378,6 +378,7 @@ def test_load_state_dict_after_fit(single_fidelity_observations):
     base = BoTorchSurrogate()
     base.fit(single_fidelity_observations)
     saved_state = base.state_dict()
+    assert saved_state is not None  # state_dict() returns None only before fitting
 
     # Fit a second surrogate independently, then overwrite its state
     other = BoTorchSurrogate(optimize_hyperparameters=False)
@@ -421,9 +422,10 @@ def test_standardize_outputs_false(single_fidelity_observations):
 
 def test_set_fidelity_confidences_propagates_to_covar_module():
     """Test that set_fidelity_confidences calls update_confidences on the covar_module if available."""
+    import gpytorch
     received = {}
 
-    class MockKernel:
+    class MockKernel(gpytorch.Module):
         def update_confidences(self, confidences: dict) -> None:
             received.update(confidences)
 

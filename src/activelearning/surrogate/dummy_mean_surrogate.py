@@ -1,10 +1,8 @@
-from typing import Any, Iterable, Mapping, Sequence, TYPE_CHECKING
+from typing import Any, Iterable, Mapping, Sequence
 
 from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import Candidate, Observation
-
-if TYPE_CHECKING:
-    from activelearning.dataset.dataset import Dataset
+from activelearning.dataset.dataset import Dataset
 
 
 class DummyMeanSurrogate(Surrogate):
@@ -74,7 +72,7 @@ class DummyMeanSurrogate(Surrogate):
                 stds.append(self._UNKNOWN_STD)
         return {"mean": means, "std": stds}
 
-    def update(self, dataset: "Dataset") -> None:
+    def update(self, dataset: Dataset) -> None:
         """Update the surrogate by refitting with all observations from the dataset.
 
         Parameters
