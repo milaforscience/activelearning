@@ -422,6 +422,7 @@ def test_standardize_outputs_false(single_fidelity_observations):
 def test_set_fidelity_confidences_propagates_to_covar_module():
     """Test that set_fidelity_confidences calls update_confidences on the covar_module if available."""
     import gpytorch
+
     received = {}
 
     class MockKernel(gpytorch.Module):
@@ -486,3 +487,42 @@ def test_is_multi_fidelity_resets_between_fits(
     candidates = [Candidate(x=[1.5, 2.5])]
     predictions = surrogate.predict(candidates)
     assert len(predictions["mean"]) == 1
+
+
+def test_fit_empty_observations_raises():
+    """Test that fit raises a clear ValueError when given an empty observation list."""
+    surrogate = BoTorchSurrogate()
+    with pytest.raises(ValueError, match="empty observation list"):
+        surrogate.fit([])
+
+
+def test_partial_update_raises_on_fidelity_mismatch(multi_fidelity_observations):
+    """Test that _partial_update raises when new observations are missing fidelities."""
+    surrogate = BoTorchSurrogate(use_partial_updates=True)
+    surrogate.fit(multi_fidelity_observations)
+
+    # New observations without fidelity values — should raise before any tensor ops
+    bad_obs = [Observation(x=[1.5, 2.5], y=5.0)]
+    with pytest.raises(ValueError, match="missing fidelity values"):
+        surrogate._partial_update(bad_obs)
+
+
+def test_normalize_excludes_fidelity_column(multi_fidelity_observations):
+    """Test that Normalize is applied only to feature columns, not the fidelity column."""
+    surrogate = BoTorchSurrogate(normalize_inputs=True)
+    surrogate.set_fidelity_confidences({0: 0.1, 1: 0.95})
+    surrogate.fit(multi_fidelity_observations)
+
+    assert surrogate.model is not None
+    assert surrogate._train_X is not None
+
+    transform = surrogate.model.input_transform
+    n_dims = surrogate._train_X.shape[-1]  # feature dims + fidelity col
+    expected_indices = list(range(n_dims - 1))  # all columns except the last
+
+    # Use getattr to avoid ty confusing Normalize.indices (Tensor) with Tensor.indices()
+    transform_indices = getattr(transform, "indices")
+    assert hasattr(transform, "indices"), "Normalize should have an indices attribute"
+    assert transform_indices.tolist() == expected_indices, (
+        "Normalize should only cover feature columns, not the fidelity column"
+    )

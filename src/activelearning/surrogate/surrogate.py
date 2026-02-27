@@ -12,6 +12,11 @@ class Surrogate(ABC):
     Surrogate models approximate the oracles based on
     observed data, enabling efficient candidate evaluation.
 
+    The single mandatory method is ``update(dataset)``, which is called by the
+    active learning loop after each round of observations. Implementations may
+    also expose ``fit(observations)`` as a convenience for standalone use (e.g.
+    notebooks, tests), but this is not required by the base interface.
+
     Notes
     -----
     The predict() method is optional. Surrogates that only work with
@@ -20,27 +25,63 @@ class Surrogate(ABC):
     """
 
     @abstractmethod
-    def fit(self, observations: Iterable[Observation]) -> None:
-        """Fit the surrogate model to observations.
+    def update(self, dataset: Dataset) -> None:
+        """Update the surrogate model with a dataset.
 
-        This method is called at each iteration of the active learning loop,
-        as new observations are collected. Implementations are not required to
-        support incremental learning (full retraining is acceptable).
+        This is the primary method called by the active learning loop after each
+        round of observations. Implementations choose between full retraining or
+        incremental updates internally.
+
+        Parameters
+        ----------
+        dataset : Dataset
+            Dataset containing all observations and the latest observations.
+
+        Notes
+        -----
+            - For full refit: call fit(dataset.get_observations_iterable())
+            - For partial update: use dataset.get_latest_observations_iterable()
+              with an incremental learning algorithm.
+
+        Examples
+        --------
+            Full refit implementation:
+            ```python
+            def update(self, dataset):
+                self.fit(dataset.get_observations_iterable())
+            ```
+
+            Partial update implementation:
+            ```python
+            def update(self, dataset):
+                if self.use_partial_updates and self._is_fitted:
+                    self._incremental_update(dataset.get_latest_observations_iterable())
+                else:
+                    self.fit(dataset.get_observations_iterable())
+            ```
+        """
+        pass
+
+    def fit(self, observations: Iterable[Observation]) -> None:
+        """Fit the surrogate model to observations from scratch (optional convenience method).
+
+        Not called by the active learning loop — the loop always calls ``update(dataset)``.
+        Useful for standalone use such as notebooks and tests.
 
         Parameters
         ----------
         observations : Iterable[Observation]
-            Iterable of observations to train on. May be a Sequence
-            (list, tuple) for small datasets or a one-pass iterable (DataLoader)
-            for large datasets.
+            Iterable of observations to train on.
 
-        Notes
-        -----
-        Implementations should validate their input requirements:
-        - If you need len() or multiple passes, materialize to list or assert Sequence
-        - If you can handle streaming data, consume the iterable directly
+        Raises
+        ------
+        NotImplementedError
+            If this surrogate does not expose a standalone fit method.
         """
-        pass
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement fit(). "
+            "Use update(dataset) instead."
+        )
 
     def set_fidelity_confidences(self, confidences: dict[int, float]) -> None:
         """Set per-fidelity confidence metadata for multi-fidelity surrogate models.
@@ -96,51 +137,4 @@ class Surrogate(ABC):
         raise NotImplementedError(
             f"{self.__class__.__name__} does not implement predict(). "
             "This surrogate may only work with specific acquisition functions."
-        )
-
-    def update(self, dataset: "Dataset") -> None:
-        """Update the surrogate model with a dataset (optional method).
-
-        This method is called by the active learning loop to update the surrogate
-        with new observations. Implementations can choose between:
-        1. Full retraining: Use dataset.get_observations_iterable() to refit from scratch
-        2. Partial updates: Use dataset.get_latest_observations_iterable() for incremental learning
-
-        The choice between full and partial updates is implementation-specific and
-        may be configurable via constructor parameters.
-
-        Parameters
-        ----------
-        dataset : Dataset
-            Dataset containing all observations and latest observations.
-
-        Notes
-        -----
-            - Implementations should decide internally whether to do full refit or partial update
-            - For full refit: call fit(dataset.get_observations_iterable())
-            - For partial update: use dataset.get_latest_observations_iterable() with
-              incremental learning algorithms
-            - The default implementation raises NotImplementedError
-
-        Examples
-        --------
-            Full refit implementation:
-            ```python
-            def update(self, dataset):
-                self.fit(dataset.get_observations_iterable())
-            ```
-
-            Partial update implementation:
-            ```python
-            def update(self, dataset):
-                if self.use_partial_updates and self._is_fitted:
-                    new_obs = dataset.get_latest_observations_iterable()
-                    self._incremental_update(new_obs)
-                else:
-                    self.fit(dataset.get_observations_iterable())
-            ```
-        """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not implement update(). "
-            "This surrogate may require explicit fit() calls."
         )
