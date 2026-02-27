@@ -1,5 +1,5 @@
 import torch
-from typing import Any, Callable, Dict, Iterable, Mapping, Optional, Sequence, Tuple, cast
+from typing import Any, Callable, Iterable, Mapping, Optional, Sequence, Tuple, cast
 from botorch.models import SingleTaskGP
 from botorch.models.gp_regression_fidelity import SingleTaskMultiFidelityGP
 from botorch.fit import fit_gpytorch_mll
@@ -25,7 +25,7 @@ class BoTorchSurrogate(Surrogate):
         normalize_inputs: bool = True,
         standardize_outputs: bool = True,
         optimize_hyperparameters: bool = True,
-        fit_kwargs: Optional[Dict[str, Any]] = None,
+        fit_kwargs: Optional[dict[str, Any]] = None,
         custom_fit_function: Optional[Callable] = None,
         covar_module: Optional[Module] = None,
         use_partial_updates: bool = False,
@@ -77,8 +77,8 @@ class BoTorchSurrogate(Surrogate):
         self._is_multi_fidelity = False
         self._train_X: Optional[torch.Tensor] = None
         self._train_Y: Optional[torch.Tensor] = None
-        self._fidelity_confidences: Dict[int, float] = {}
-        self._pending_state_dict: Optional[Dict[str, torch.Tensor]] = None
+        self._fidelity_confidences: dict[int, float] = {}
+        self._pending_state_dict: Optional[dict[str, torch.Tensor]] = None
 
     def _parse_observations(self, observations: Iterable[Observation]) -> Tuple[torch.Tensor, torch.Tensor]:
         """Converts generic Observations into BoTorch-ready tensors.
@@ -363,7 +363,7 @@ class BoTorchSurrogate(Surrogate):
         
         self.model = self.model.condition_on_observations(X=new_X, Y=new_Y)
 
-    def state_dict(self) -> Optional[Dict[str, torch.Tensor]]:
+    def state_dict(self) -> Optional[dict[str, torch.Tensor]]:
         """Extracts the model's hyperparameters (lengthscales, noise, etc.).
 
         Returns
@@ -376,7 +376,7 @@ class BoTorchSurrogate(Surrogate):
             return self.model.state_dict()
         return None
 
-    def load_state_dict(self, state_dict: Dict[str, torch.Tensor]) -> None:
+    def load_state_dict(self, state_dict: dict[str, torch.Tensor]) -> None:
         """Injects a pre-trained hyperparameter dictionary into the model.
 
         Parameters

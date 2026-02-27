@@ -3,7 +3,6 @@ import torch
 from botorch.models import SingleTaskGP
 from botorch.models.gp_regression_fidelity import SingleTaskMultiFidelityGP
 
-# Adjust import paths based on your actual src structure
 from activelearning.surrogate.botorch_surrogate import BoTorchSurrogate
 from activelearning.utils.types import Observation, Candidate
 from activelearning.dataset.list_dataset import ListDataset
