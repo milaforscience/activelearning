@@ -79,8 +79,8 @@ class Dataset(ABC):
 
         Notes
         -----
-            Filters out observations with None y values.
-            Assumes y values support comparison operations.
+        Filters out observations with None y values.
+        Assumes y values support comparison operations.
         """
         observations = list(self.get_observations_iterable())
         if not observations:
