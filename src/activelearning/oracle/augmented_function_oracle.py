@@ -43,8 +43,7 @@ class AugmentedFunctionOracle(Oracle):
         if fidelity_confidences is None:
             max_cost = max(fidelity_costs.values())
             fidelity_confidences = {
-                fidelity: cost / max_cost
-                for fidelity, cost in fidelity_costs.items()
+                fidelity: cost / max_cost for fidelity, cost in fidelity_costs.items()
             }
 
         self.fidelity_confidences = fidelity_confidences
@@ -118,11 +117,16 @@ class BraninOracle(AugmentedFunctionOracle):
     Uses the positive (non-negated) AugmentedBranin from BoTorch. Fidelity
     levels {1, 2, 3} are mapped to the [0, 1] fidelity range, with level 3
     corresponding to the full-fidelity Branin (s=1.0).
+
+    The active learning loop is formulated as a maximization problem.
+    ``negate=False`` keeps the Branin function in its natural positive form,
+    so the loop directly maximizes Branin values.
     """
 
     def __init__(self) -> None:
         super().__init__(
-            # negate=False keeps the positive form (min ≈ 0.397)
+            # negate=False keeps the natural positive form; the active learning
+            # loop maximizes Branin values directly.
             function=AugmentedBranin(negate=False),
             fidelity_costs={1: 0.01, 2: 0.1, 3: 1.0},
         )
@@ -134,11 +138,14 @@ class Hartmann6DOracle(AugmentedFunctionOracle):
     Uses the negated AugmentedHartmann from BoTorch, making all values positive.
     Fidelity levels {1, 2, 3} are mapped to the [0, 1] fidelity range, with
     level 3 corresponding to the full-fidelity Hartmann (s=1.0).
+
+    The active learning loop is formulated as a maximization problem, so
+    ``negate=True`` ensures consistency with the acquisition logic by flipping
+    the naturally-negative Hartmann function to positive values.
     """
 
     def __init__(self) -> None:
         super().__init__(
-            # negate=True flips the naturally-negative Hartmann to positive values
             function=AugmentedHartmann(negate=True),
             fidelity_costs={1: 0.125, 2: 0.25, 3: 1.0},
         )
