@@ -41,11 +41,11 @@ class Dataset(ABC):
 
         Notes
         -----
-            Concrete implementations should ensure this method is efficient to call
-            multiple times per active learning iteration. For example:
-            - Returning a list reference is O(1)
-            - Creating a new DataLoader is typically fast (just wraps existing data)
-            - Avoid expensive recomputation on each call
+        Concrete implementations should ensure this method is efficient to call
+        multiple times per active learning iteration. For example:
+        - Returning a list reference is O(1)
+        - Creating a new DataLoader is typically fast (just wraps existing data)
+        - Avoid expensive recomputation on each call
 
         Examples
         --------
