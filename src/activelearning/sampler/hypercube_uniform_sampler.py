@@ -1,6 +1,6 @@
 import torch
 
-from typing import Any, Iterable, Optional, Sequence
+from typing import Iterable, Optional, Sequence
 
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.sampler import Sampler
@@ -66,7 +66,6 @@ class HypercubeUniformSampler(Sampler):
         self,
         acquisition: Optional[Acquisition] = None,
         observations: Optional[Iterable[Observation]] = None,
-        **kwargs: Any,
     ) -> list[Candidate]:
         """Generate candidates by sampling uniformly from the hypercube.
 
@@ -79,8 +78,6 @@ class HypercubeUniformSampler(Sampler):
             Unused. Present for interface compatibility.
         observations : Optional[Iterable[Observation]]
             Unused. Present for interface compatibility.
-        **kwargs
-            Additional arguments (unused).
 
         Returns
         -------

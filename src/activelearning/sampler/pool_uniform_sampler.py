@@ -1,5 +1,5 @@
 import random
-from typing import Any, Iterable, Optional, Sequence
+from typing import Iterable, Optional, Sequence
 
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.sampler import Sampler
@@ -25,7 +25,6 @@ class PoolUniformSampler(Sampler):
         self,
         acquisition: Optional[Acquisition] = None,
         observations: Optional[Iterable[Observation]] = None,
-        **kwargs: Any,
     ) -> list[Candidate]:
         """Samples uniformly from the candidate pool.
 
@@ -35,8 +34,6 @@ class PoolUniformSampler(Sampler):
             Optional acquisition function (not used by this sampler).
         observations : Optional[Iterable[Observation]]
             Optional iterable of observations (not used by this sampler).
-        **kwargs
-            Additional arguments (unused).
 
         Returns
         -------
