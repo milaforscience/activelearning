@@ -49,17 +49,17 @@ class Dataset(ABC):
 
         Examples
         --------
-            Simple list implementation (cheap multiple calls):
-            ```python
-            def get_observations_iterable(self):
-                return self._records  # Returns same list each time
-            ```
+        Simple list implementation (cheap multiple calls):
+        ```python
+        def get_observations_iterable(self):
+            return self._records  # Returns same list each time
+        ```
 
-            DataLoader implementation (fresh iterator each call):
-            ```python
-            def get_observations_iterable(self):
-                return DataLoader(self._dataset)  # New DataLoader each time
-            ```
+        DataLoader implementation (fresh iterator each call):
+        ```python
+        def get_observations_iterable(self):
+            return DataLoader(self._dataset)  # New DataLoader each time
+        ```
         """
         pass
 
