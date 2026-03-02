@@ -60,17 +60,17 @@ def active_learning(
     surrogate.set_fidelity_confidences(oracle.get_fidelity_confidences())
 
     while budget.available_budget > 0:
-        # Note: get_observations_iterable() is called multiple times to avoid
-        # consuming the same iterable across multiple consumers
+        # Call once per round so all consumers share the same consistent epoch view.
+        # Implementations must guarantee the returned iterable supports multiple
+        # iterations with the same sequence (see Dataset.get_observations_iterable).
+        observations = dataset.get_observations_iterable()
 
         # Fit surrogate on current dataset observations and update acquisition function
-        surrogate.fit(dataset.get_observations_iterable())
-        acquisition.update(surrogate, dataset.get_observations_iterable())
+        surrogate.fit(observations)
+        acquisition.update(surrogate, observations)
 
         # Sampler can use acquisition for scoring candidates and observations to avoid re-sampling
-        samples = sampler.sample(
-            acquisition=acquisition, observations=dataset.get_observations_iterable()
-        )
+        samples = sampler.sample(acquisition=acquisition, observations=observations)
 
         # Get round budget and pass to selector along with cost function
         round_budget = budget.get_round_budget(num_rounds)

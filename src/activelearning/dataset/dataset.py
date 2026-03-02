@@ -24,42 +24,34 @@ class Dataset(ABC):
 
     @abstractmethod
     def get_observations_iterable(self) -> Iterable[Observation]:
-        """Retrieve an iterable over all stored observations.
+        """Retrieve an iterable over all stored observations for one AL round.
 
-        This method may be called multiple times during the active learning loop
-        (e.g., once for surrogate fitting, once for acquisition update, etc.).
-        Each call should return a fresh iterable over the current observations.
+        The returned iterable must support **consistent multiple iterations**:
+        calling ``iter()`` on it more than once must yield the same sequence of
+        observations in the same order. This guarantee allows a single call per
+        round to be shared across all consumers (surrogate, acquisition,
+        sampler) without risk of data inconsistency.
+
+        Implementations are responsible for pinning any randomness at call
+        time. For example, a DataLoader-backed dataset should pre-generate the
+        shuffled index permutation here so that every pass over the returned
+        iterable replays the same order without holding all data in memory.
 
         Returns
         -------
         observations_iterable : Iterable[Observation]
-            Iterable of all observations in the dataset. May be:
-            Iterable[Observation]
-            - A list for small in-memory datasets (cheap to return multiple times)
-            - A DataLoader or generator for large datasets (creates fresh iterator each call)
-            - Any iterable that can be traversed to access observations
-
-        Notes
-        -----
-        Concrete implementations should ensure this method is efficient to call
-        multiple times per active learning iteration. For example:
-        - Returning a list reference is O(1)
-        - Creating a new DataLoader is typically fast (just wraps existing data)
-        - Avoid expensive recomputation on each call
+            Consistently re-iterable view of all current observations.
 
         Examples
         --------
-        Simple list implementation (cheap multiple calls):
-        ```python
+        In-memory list (trivially consistent):
         def get_observations_iterable(self):
-            return self._records  # Returns same list each time
-        ```
+            return list(self._records)
 
-        DataLoader implementation (fresh iterator each call):
-        ```python
+        Large-dataset DataLoader (pin permutation at call time):
         def get_observations_iterable(self):
-            return DataLoader(self._dataset)  # New DataLoader each time
-        ```
+            indices = torch.randperm(len(self._dataset)).tolist()
+            return DataLoader(self._dataset, sampler=indices)
         """
         pass
 
