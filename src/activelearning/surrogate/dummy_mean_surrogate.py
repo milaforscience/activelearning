@@ -17,6 +17,9 @@ class DummyMeanSurrogate(Surrogate):
     Automatically materializes iterables to lists as needed.
     """
 
+    _KNOWN_STD: float = 0.1
+    _UNKNOWN_STD: float = 1.0
+
     def __init__(self) -> None:
         self._model: dict[tuple[Any, Any], Any] = {}
         self._mean_score: float = 0.0
@@ -53,8 +56,8 @@ class DummyMeanSurrogate(Surrogate):
         -------
         result : Mapping[str, list[float]]
             Dictionary with "mean" and "std" keys containing predictions.
-            Known candidates return cached values with low std (0.1),
-            unknown candidates return global mean with high std (1.0).
+            Known candidates return cached values with low std (_KNOWN_STD),
+            unknown candidates return global mean with high std (_UNKNOWN_STD).
         """
         means = []
         stds = []
@@ -62,8 +65,8 @@ class DummyMeanSurrogate(Surrogate):
             key = (candidate.x, candidate.fidelity)
             if key in self._model:
                 means.append(self._model[key])
-                stds.append(0.1)
+                stds.append(self._KNOWN_STD)
             else:
                 means.append(self._mean_score)
-                stds.append(1.0)
+                stds.append(self._UNKNOWN_STD)
         return {"mean": means, "std": stds}
