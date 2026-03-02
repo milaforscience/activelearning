@@ -7,10 +7,10 @@ from activelearning.utils.types import Candidate, Observation
 
 
 class PoolScoreSampler(Sampler):
-    """Samples candidates without replacement from a fixed pool using softmax-weighted scores.
+    """Samples candidates without replacement from a fixed pool using softmax-weighted values.
 
-    Acquisition scores are converted to probabilities with a numerically stable
-    softmax transformation, which also supports negative scores.
+    Acquisition values are converted to probabilities with a numerically stable
+    softmax transformation, which also supports negative values.
 
     Parameters
     ----------
@@ -30,12 +30,12 @@ class PoolScoreSampler(Sampler):
         observations: Optional[Iterable[Observation]] = None,
         **kwargs: Any,
     ) -> list[Candidate]:
-        """Samples from the candidate pool weighted by acquisition scores.
+        """Samples from the candidate pool weighted by acquisition values.
 
         Parameters
         ----------
         acquisition : Optional[Acquisition]
-            Acquisition function to score candidates.
+            Acquisition function to compute acquisition values for candidates.
         observations : Optional[Iterable[Observation]]
             Optional iterable of observations (not used by this sampler).
         **kwargs
@@ -53,10 +53,10 @@ class PoolScoreSampler(Sampler):
         if acquisition is None:
             raise ValueError("Acquisition function is required for PoolScoreSampler.")
 
-        scores = acquisition(self.candidate_pool)
+        acq_values = acquisition(self.candidate_pool)
 
-        # Apply softmax to convert scores to valid probabilities
-        weights = torch.softmax(torch.tensor(scores), dim=0)
+        # Apply softmax to convert acquisition values to valid probabilities
+        weights = torch.softmax(torch.tensor(acq_values), dim=0)
         sampled_indices = torch.multinomial(
             weights, num_samples=self.num_samples, replacement=False
         ).tolist()

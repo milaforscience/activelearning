@@ -53,12 +53,12 @@ def test_correct_ordering_highest_first(acquisition_with_surrogate):
     candidates = [Candidate(x=1), Candidate(x=5), Candidate(x=10)]
     selected = selector(candidates, acquisition=acquisition_with_surrogate)
 
-    # Get scores to verify ordering
-    scores = acquisition_with_surrogate(selected)
+    # Get acquisition values to verify ordering
+    acq_values = acquisition_with_surrogate(selected)
 
     assert len(selected) == 3
-    # Scores should be in descending order
-    assert scores[0] >= scores[1] >= scores[2]
+    # Acquisition values should be in descending order
+    assert acq_values[0] >= acq_values[1] >= acq_values[2]
 
 
 def test_num_samples_exceeds_candidates_length(acquisition_with_surrogate):

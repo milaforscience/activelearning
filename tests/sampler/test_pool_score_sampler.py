@@ -35,7 +35,7 @@ def num_samples(request):
 def test_sampling_with_acquisition_scores(
     candidate_pool, acquisition_with_surrogate, num_samples
 ):
-    """Test that sampling uses acquisition scores as weights."""
+    """Test that sampling uses acquisition values as weights."""
     if num_samples > len(candidate_pool):
         pytest.skip("num_samples exceeds pool size for this test")
 
@@ -70,7 +70,7 @@ def test_sampling_with_multi_fidelity_pool(acquisition_with_surrogate, num_sampl
 
 
 def test_samples_are_unique(candidate_pool, acquisition_with_surrogate, num_samples):
-    """Test weighted score sampling without replacement produces unique samples."""
+    """Test weighted acquisition value sampling without replacement produces unique samples."""
     if num_samples > len(candidate_pool):
         pytest.skip("num_samples exceeds pool size for this test")
 

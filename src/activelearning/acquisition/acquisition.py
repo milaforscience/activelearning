@@ -6,7 +6,7 @@ from activelearning.utils.types import Candidate, Observation
 
 
 class Acquisition(ABC):
-    """Abstract acquisition interface used to score candidates.
+    """Abstract acquisition interface used to evaluate candidates.
 
     Acquisition functions evaluate the utility of querying candidates
     based on surrogate model predictions.
@@ -51,7 +51,7 @@ class Acquisition(ABC):
         Parameters
         ----------
         surrogate : Surrogate
-            The surrogate model to use for scoring candidates.
+            The surrogate model to use for computing acquisition values for candidates.
             Must provide capabilities required by this acquisition function.
         observations : Optional[Iterable[Observation]]
             Optional iterable of observations for estimating acquisition
@@ -67,12 +67,12 @@ class Acquisition(ABC):
         Parameters
         ----------
         candidates : Sequence[Candidate]
-            Sequence of candidates to score.
+            Sequence of candidates to evaluate.
 
         Returns
         -------
         result : Sequence[float]
-            Sequence of acquisition scores, same length and order as input.
-            Higher scores typically indicate more valuable candidates to query.
+            Sequence of acquisition values, same length and order as input.
+            Higher acquisition values typically indicate more valuable candidates to query.
         """
         pass

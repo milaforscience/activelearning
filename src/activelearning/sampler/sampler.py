@@ -24,7 +24,7 @@ class Sampler(ABC):
         ----------
         acquisition : Optional[Any]
             Acquisition function to score candidates (optional).
-            Used by samplers that weight candidates by utility scores.
+            Used by samplers that weight candidates by acquisition values.
         observations : Optional[Iterable[Observation]]
             Current observations to avoid resampling (optional).
         **kwargs

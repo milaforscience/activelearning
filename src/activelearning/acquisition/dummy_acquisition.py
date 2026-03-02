@@ -7,7 +7,7 @@ from activelearning.utils.types import Candidate
 class DummyAcquisition(Acquisition):
     """UCB-style acquisition over "mean" and optional "std" predictions.
 
-    Computes acquisition scores as mean + beta * std when std is available,
+    Computes acquisition values as mean + beta * std when std is available,
     otherwise returns mean values only.
 
     Surrogate Requirements:
@@ -25,17 +25,17 @@ class DummyAcquisition(Acquisition):
         self._beta = float(beta)
 
     def __call__(self, candidates: Sequence[Candidate]) -> list[float]:
-        """Compute UCB scores for candidates.
+        """Compute UCB acquisition values for candidates.
 
         Parameters
         ----------
         candidates : Sequence[Candidate]
-            Sequence of candidates to score.
+            Sequence of candidates to evaluate.
 
         Returns
         -------
         result : list[float]
-            List of acquisition scores (mean + beta * std).
+            List of acquisition values (mean + beta * std).
 
         Raises
         ------

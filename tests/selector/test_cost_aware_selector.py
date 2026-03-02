@@ -82,10 +82,10 @@ def test_empty_candidates(selector, mock_acquisition, uniform_cost_fn):
 
 
 def test_selects_by_utility_cost_ratio(selector, candidates):
-    """Test that selector ranks candidates by utility/cost ratio."""
-    # Utilities: [10, 20, 30, 40, 50]
-    # Costs:     [10, 5,  2,  1,  1]
-    # Ratios:    [1,  4,  15, 40, 50] <- descending order: 4, 3, 2, 1, 0
+    """Test that selector ranks candidates by acquisition value/cost ratio."""
+    # Acquisition values: [10, 20, 30, 40, 50]
+    # Costs:              [10, 5,  2,  1,  1]
+    # Ratios:             [1,  4,  15, 40, 50] <- descending order: 4, 3, 2, 1, 0
     acquisition = Mock()
     acquisition.return_value = [10.0, 20.0, 30.0, 40.0, 50.0]
 
@@ -112,9 +112,9 @@ def test_selects_by_utility_cost_ratio(selector, candidates):
 
 def test_stops_when_budget_exhausted(selector, candidates):
     """Test that selector stops selecting when budget is exhausted."""
-    # Utilities: [50, 40, 30, 20, 10]
-    # Costs:     [1,  1,  2,  5,  10]
-    # Ratios:    [50, 40, 15, 4,  1] <- sorted by ratio descending
+    # Acquisition values: [50, 40, 30, 20, 10]
+    # Costs:              [1,  1,  2,  5,  10]
+    # Ratios:             [50, 40, 15, 4,  1] <- sorted by ratio descending
     acquisition = Mock()
     acquisition.return_value = [50.0, 40.0, 30.0, 20.0, 10.0]
 
@@ -133,9 +133,9 @@ def test_stops_when_budget_exhausted(selector, candidates):
 
 
 def test_uniform_costs_varying_utilities(selector, candidates, uniform_cost_fn):
-    """Test selection with uniform costs and varying utilities."""
-    # All costs are 5.0, so ranking is purely by utility
-    # Utilities: [10, 20, 30, 40, 50]
+    """Test selection with uniform costs and varying acquisition values."""
+    # All costs are 5.0, so ranking is purely by acquisition value
+    # Acquisition values: [10, 20, 30, 40, 50]
     acquisition = Mock()
     acquisition.return_value = [10.0, 20.0, 30.0, 40.0, 50.0]
 
@@ -145,13 +145,13 @@ def test_uniform_costs_varying_utilities(selector, candidates, uniform_cost_fn):
     )
 
     assert len(selected) == 2
-    assert selected[0].x == 4  # Highest utility
+    assert selected[0].x == 4  # Highest acquisition value
     assert selected[1].x == 3  # Second highest
 
 
 def test_varying_costs_uniform_utilities(selector, candidates, varying_cost_fn):
-    """Test selection with varying costs and uniform utilities."""
-    # All utilities are 100.0
+    """Test selection with varying costs and uniform acquisition values."""
+    # All acquisition values are 100.0
     # Costs: [1, 2, 3, 4, 5]
     # Ratios: [100, 50, 33.3, 25, 20] <- descending
     acquisition = Mock()

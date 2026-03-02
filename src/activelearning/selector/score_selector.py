@@ -6,7 +6,7 @@ from activelearning.utils.types import Candidate
 
 
 class TopKAcquisitionSelector(Selector):
-    """Selector that ranks candidates by acquisition score and selects the top-k.
+    """Selector that ranks candidates by acquisition value and selects the top-k.
 
     Parameters
     ----------
@@ -24,7 +24,7 @@ class TopKAcquisitionSelector(Selector):
         cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
         round_budget: Optional[float] = None,
     ) -> list[Candidate]:
-        """Select the top num_samples candidates by acquisition score.
+        """Select the top num_samples candidates by acquisition value.
 
         Parameters
         ----------
@@ -39,11 +39,11 @@ class TopKAcquisitionSelector(Selector):
         Returns
         -------
         result : list[Candidate]
-            List of top-scored candidates.
+            List of top candidates by acquisition value.
         """
         if acquisition is None:
             raise ValueError("Acquisition function is required for ScoreSelector.")
 
-        values = acquisition(candidates)
-        ranked = sorted(zip(candidates, values), key=lambda cv: cv[1], reverse=True)
+        acq_values = acquisition(candidates)
+        ranked = sorted(zip(candidates, acq_values), key=lambda cv: cv[1], reverse=True)
         return [candidate for candidate, _ in ranked[: self.num_samples]]
