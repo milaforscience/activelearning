@@ -71,7 +71,7 @@ class CostAwareSelector(Selector):
                 ratio = float("inf")
             else:
                 ratio = utility / cost
-            ratios.append((ratio, i))
+            ratios.append((ratio, idx))
 
         # Sort by ratio descending (highest bang-for-buck first)
         ratios.sort(key=lambda x: x[0], reverse=True)
@@ -85,5 +85,7 @@ class CostAwareSelector(Selector):
             if budget_used + candidate_cost <= round_budget:
                 selected.append(candidates[idx])
                 budget_used += candidate_cost
+                if budget_used >= round_budget:
+                    break
 
         return selected
