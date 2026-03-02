@@ -7,17 +7,17 @@ from activelearning.utils.types import Candidate, Observation
 
 
 class PoolScoreSampler(Sampler):
-    """Samples from a candidate pool weighted by acquisition scores using softmax.
+    """Samples candidates without replacement from a fixed pool using softmax-weighted scores.
 
-    Converts acquisition scores to probabilities via softmax transformation,
-    which handles negative scores and ensures numerical stability.
+    Acquisition scores are converted to probabilities with a numerically stable
+    softmax transformation, which also supports negative scores.
 
     Parameters
     ----------
     candidate_pool : Sequence[Candidate]
         Fixed pool of candidates to sample from.
     num_samples : int
-        Number of candidates to sample per call.
+        Number of candidates to sample per call, without replacement.
     """
 
     def __init__(self, candidate_pool: Sequence[Candidate], num_samples: int) -> None:
