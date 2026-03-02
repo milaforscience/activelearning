@@ -13,8 +13,8 @@ class DummySurrogate(Surrogate):
 
     Notes
     -----
-        This surrogate requires a Sequence (supports len() and multiple iterations).
-        Automatically materializes iterables to lists as needed.
+    This surrogate requires a Sequence (supports len() and multiple iterations).
+    Automatically materializes iterables to lists as needed.
     """
 
     def __init__(self) -> None:
