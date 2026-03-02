@@ -34,9 +34,9 @@ class Surrogate(ABC):
 
         Notes
         -----
-            Implementations should validate their input requirements:
-            - If you need len() or multiple passes, materialize to list or assert Sequence
-            - If you can handle streaming data, consume the iterable directly
+        Implementations should validate their input requirements:
+        - If you need len() or multiple passes, materialize to list or assert Sequence
+        - If you can handle streaming data, consume the iterable directly
         """
         pass
 
