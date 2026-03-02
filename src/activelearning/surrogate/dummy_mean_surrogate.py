@@ -34,7 +34,7 @@ class DummyMeanSurrogate(Surrogate):
         if not isinstance(observations, Sequence):
             observations = list(observations)
 
-        if not observations:
+        if len(observations) == 0:
             self._mean_score = 0.0
             self._model = {}
             return
