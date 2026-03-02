@@ -25,7 +25,23 @@ class CompositeOracle(Oracle):
         self._sub_oracles = sub_oracles
 
     def get_fidelity_confidences(self) -> dict[int, float]:
-        """Return per-fidelity confidences, enforcing cross-oracle consistency."""
+        """Merge fidelity confidences from all sub-oracles, enforcing cross-oracle consistency.
+
+        Iterates over sub-oracles and collects their fidelity confidences. If two
+        sub-oracles both declare a confidence for the same fidelity level, they must
+        agree. A mismatch raises a ``ValueError``.
+
+        Returns
+        -------
+        result : dict[int, float]
+            Dictionary mapping each supported fidelity level to its confidence in [0, 1],
+            sorted by fidelity in ascending order.
+
+        Raises
+        ------
+        ValueError
+            If two sub-oracles report different confidence values for the same fidelity.
+        """
         fidelity_confidences: dict[int, float] = {}
         for oracle in self._sub_oracles:
             for fidelity, confidence in oracle.get_fidelity_confidences().items():
