@@ -63,8 +63,15 @@ class Dataset(ABC):
         """
         pass
 
+    @abstractmethod
     def get_best_candidates(self, k: int = 1) -> list[Observation]:
-        """Return the top-k observations by y value from the dataset.
+        """Return the top-k "best" observations from the dataset.
+
+        The definition of "best" is problem-specific and should be implemented
+        by concrete subclasses. For example:
+        - Maximization problems: higher y values are better
+        - Minimization problems: lower y values are better
+        - Categorical problems: may require different ranking criteria
 
         Parameters
         ----------
@@ -74,17 +81,13 @@ class Dataset(ABC):
         Returns
         -------
         best_candidates : list[Observation]
-            List of top-k observations sorted by y value (descending).
-            Returns empty list if no observations exist.
+            List of top-k observations according to the problem-specific
+            definition of "best". Returns empty list if no observations exist.
 
         Notes
         -----
-        Filters out observations with None y values.
-        Assumes y values support comparison operations.
+        Subclasses should define what "best" means for their specific problem
+        and implement appropriate ranking logic. Observations with None y values
+        should typically be filtered out.
         """
-        observations = list(self.get_observations_iterable())
-        if not observations:
-            return []
-        valid_obs = [o for o in observations if o.y is not None]
-        sorted_records = sorted(valid_obs, key=lambda r: r.y, reverse=True)
-        return sorted_records[:k]
+        pass

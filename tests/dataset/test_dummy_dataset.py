@@ -1,12 +1,12 @@
 import pytest
 
-from activelearning.dataset.dummy_dataset import DummyDataset
+from activelearning.dataset.list_dataset import ListDataset
 from activelearning.utils.types import Observation
 
 
 @pytest.fixture
 def dataset():
-    return DummyDataset()
+    return ListDataset()
 
 
 @pytest.fixture(params=[None, 0, 1])

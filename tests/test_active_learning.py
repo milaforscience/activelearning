@@ -4,7 +4,7 @@ import pytest
 
 from activelearning.acquisition.dummy_acquisition import DummyAcquisition
 from activelearning.budget.budget import Budget
-from activelearning.dataset.dummy_dataset import DummyDataset
+from activelearning.dataset.list_dataset import ListDataset
 from activelearning.oracle.multi_fidelity_oracle import MultiFidelityOracle
 from activelearning.sampler.pool_score_sampler import PoolScoreSampler
 from activelearning.selector.score_selector import ScoreSelector
@@ -27,7 +27,7 @@ class ConfidenceAwareDummySurrogate(DummySurrogate):
 @pytest.fixture
 def dataset():
     """Create a dummy dataset for testing."""
-    return DummyDataset()
+    return ListDataset()
 
 
 @pytest.fixture
