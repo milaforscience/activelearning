@@ -12,9 +12,9 @@ class Surrogate(ABC):
 
     Notes
     -----
-        The predict() method is optional. Surrogates that only work with
-        specific acquisition functions (e.g., those using internal posterior
-        representations) may not implement general prediction.
+    The predict() method is optional. Surrogates that only work with
+    specific acquisition functions (e.g., those using internal posterior
+    representations) may not implement general prediction.
     """
 
     @abstractmethod
