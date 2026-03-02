@@ -21,7 +21,7 @@ class Surrogate(ABC):
     def fit(self, observations: Iterable[Observation]) -> None:
         """Fit the surrogate model to observations.
 
-        This method may be called multiple times during the active learning loop
+        This method is called at each iteration of the active learning loop,
         as new observations are collected. Implementations are not required to
         support incremental learning (full retraining is acceptable).
 
