@@ -8,12 +8,12 @@ from activelearning.dataset.list_dataset import ListDataset
 from activelearning.oracle.multi_fidelity_oracle import MultiFidelityOracle
 from activelearning.sampler.pool_score_sampler import PoolScoreSampler
 from activelearning.selector.score_selector import ScoreSelector
-from activelearning.surrogate.dummy_surrogate import DummySurrogate
+from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
 from activelearning.active_learning import active_learning
 from activelearning.utils.types import Candidate
 
 
-class ConfidenceAwareDummySurrogate(DummySurrogate):
+class ConfidenceAwareDummyMeanSurrogate(DummyMeanSurrogate):
     """Dummy surrogate variant that records fidelity confidences."""
 
     def __init__(self) -> None:
@@ -33,7 +33,7 @@ def dataset():
 @pytest.fixture
 def surrogate():
     """Create a dummy surrogate model for testing."""
-    return DummySurrogate()
+    return DummyMeanSurrogate()
 
 
 @pytest.fixture
@@ -118,7 +118,7 @@ def test_active_learning_passes_fidelity_confidences_to_surrogate(
     dataset, acquisition, sampler, selector, oracle, budget
 ):
     """Test the active learning loop passes oracle confidences to surrogate."""
-    surrogate = ConfidenceAwareDummySurrogate()
+    surrogate = ConfidenceAwareDummyMeanSurrogate()
     active_learning(
         dataset=dataset,
         surrogate=surrogate,

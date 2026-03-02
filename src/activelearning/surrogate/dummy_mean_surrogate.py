@@ -4,7 +4,7 @@ from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import Candidate, Observation
 
 
-class DummySurrogate(Surrogate):
+class DummyMeanSurrogate(Surrogate):
     """Minimal in-memory surrogate using cached observations.
 
     Stores observations keyed by (x, fidelity). When predicting, returns the

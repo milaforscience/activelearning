@@ -1,7 +1,7 @@
 import pytest
 
 from activelearning.acquisition.dummy_acquisition import DummyAcquisition
-from activelearning.surrogate.dummy_surrogate import DummySurrogate
+from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
 from activelearning.utils.types import Candidate, Observation
 
 
@@ -12,7 +12,7 @@ def beta(request):
 
 @pytest.fixture
 def surrogate():
-    return DummySurrogate()
+    return DummyMeanSurrogate()
 
 
 @pytest.fixture

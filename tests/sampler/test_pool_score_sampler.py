@@ -2,7 +2,7 @@ import pytest
 
 from activelearning.acquisition.dummy_acquisition import DummyAcquisition
 from activelearning.sampler.pool_score_sampler import PoolScoreSampler
-from activelearning.surrogate.dummy_surrogate import DummySurrogate
+from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
 from activelearning.utils.types import Candidate, Observation
 
 
@@ -18,7 +18,7 @@ def candidate_pool(pool_size):
 
 @pytest.fixture
 def acquisition_with_surrogate():
-    surrogate = DummySurrogate()
+    surrogate = DummyMeanSurrogate()
     observations = [Observation(x=i, y=float(i * 10)) for i in range(10)]
     surrogate.fit(observations)
 

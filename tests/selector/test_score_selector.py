@@ -2,7 +2,7 @@ import pytest
 
 from activelearning.acquisition.dummy_acquisition import DummyAcquisition
 from activelearning.selector.score_selector import ScoreSelector
-from activelearning.surrogate.dummy_surrogate import DummySurrogate
+from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
 from activelearning.utils.types import Candidate, Observation
 
 
@@ -18,7 +18,7 @@ def selector(num_samples):
 
 @pytest.fixture
 def acquisition_with_surrogate():
-    surrogate = DummySurrogate()
+    surrogate = DummyMeanSurrogate()
     observations = [
         Observation(x=1, y=10.0),
         Observation(x=5, y=50.0),
@@ -72,7 +72,7 @@ def test_num_samples_exceeds_candidates_length(acquisition_with_surrogate):
 
 def test_selection_with_varied_scores():
     """Test selection with clearly differentiated scores."""
-    surrogate = DummySurrogate()
+    surrogate = DummyMeanSurrogate()
     observations = [
         Observation(x=1, y=100.0),
         Observation(x=2, y=50.0),

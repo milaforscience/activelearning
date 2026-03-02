@@ -1,12 +1,12 @@
 import pytest
 
-from activelearning.surrogate.dummy_surrogate import DummySurrogate
+from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
 from activelearning.utils.types import Candidate, Observation
 
 
 @pytest.fixture
 def surrogate():
-    return DummySurrogate()
+    return DummyMeanSurrogate()
 
 
 @pytest.fixture
