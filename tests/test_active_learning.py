@@ -7,7 +7,7 @@ from activelearning.budget.budget import Budget
 from activelearning.dataset.list_dataset import ListDataset
 from activelearning.oracle.multi_fidelity_oracle import MultiFidelityOracle
 from activelearning.sampler.pool_score_sampler import PoolScoreSampler
-from activelearning.selector.score_selector import ScoreSelector
+from activelearning.selector.score_selector import TopKAcquisitionSelector
 from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
 from activelearning.active_learning import active_learning
 from activelearning.utils.types import Candidate
@@ -54,7 +54,7 @@ def sampler():
 @pytest.fixture
 def selector():
     """Create a score-based selector for testing."""
-    return ScoreSelector(num_samples=5)
+    return TopKAcquisitionSelector(num_samples=5)
 
 
 @pytest.fixture

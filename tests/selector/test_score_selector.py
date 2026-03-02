@@ -1,7 +1,7 @@
 import pytest
 
 from activelearning.acquisition.dummy_acquisition import DummyAcquisition
-from activelearning.selector.score_selector import ScoreSelector
+from activelearning.selector.score_selector import TopKAcquisitionSelector
 from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
 from activelearning.utils.types import Candidate, Observation
 
@@ -13,7 +13,7 @@ def num_samples(request):
 
 @pytest.fixture
 def selector(num_samples):
-    return ScoreSelector(num_samples=num_samples)
+    return TopKAcquisitionSelector(num_samples=num_samples)
 
 
 @pytest.fixture
@@ -49,7 +49,7 @@ def test_top_k_selection_by_score(
 
 def test_correct_ordering_highest_first(acquisition_with_surrogate):
     """Test that selected candidates are ordered by score (highest first)."""
-    selector = ScoreSelector(num_samples=3)
+    selector = TopKAcquisitionSelector(num_samples=3)
     candidates = [Candidate(x=1), Candidate(x=5), Candidate(x=10)]
     selected = selector(candidates, acquisition=acquisition_with_surrogate)
 
@@ -63,7 +63,7 @@ def test_correct_ordering_highest_first(acquisition_with_surrogate):
 
 def test_num_samples_exceeds_candidates_length(acquisition_with_surrogate):
     """Test that requesting more samples than candidates returns all."""
-    selector = ScoreSelector(num_samples=10)
+    selector = TopKAcquisitionSelector(num_samples=10)
     candidates = [Candidate(x=i) for i in range(5)]
     selected = selector(candidates, acquisition=acquisition_with_surrogate)
 
@@ -84,7 +84,7 @@ def test_selection_with_varied_scores():
     acquisition = DummyAcquisition(beta=0.0)  # Only use mean
     acquisition.update(surrogate)
 
-    selector = ScoreSelector(num_samples=2)
+    selector = TopKAcquisitionSelector(num_samples=2)
     candidates = [Candidate(x=1), Candidate(x=2), Candidate(x=3), Candidate(x=4)]
     selected = selector(candidates, acquisition=acquisition)
 

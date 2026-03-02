@@ -5,7 +5,7 @@ from activelearning.selector.selector import Selector
 from activelearning.utils.types import Candidate
 
 
-class ScoreSelector(Selector):
+class TopKAcquisitionSelector(Selector):
     """Selector that ranks candidates by acquisition score and selects the top-k.
 
     Parameters
