@@ -63,7 +63,7 @@ class CostAwareSelector(Selector):
 
         # Reject negative costs and calculate bang-for-buck ratios
         ratios = []
-        for i, (utility, cost) in enumerate(zip(utilities, costs)):
+        for idx, (utility, cost) in enumerate(zip(utilities, costs)):
             if cost < 0:
                 raise ValueError("Cost function returned a negative cost.")
             if cost == 0:
