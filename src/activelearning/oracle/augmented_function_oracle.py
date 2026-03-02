@@ -32,15 +32,22 @@ class AugmentedFunctionOracle(Oracle):
         self,
         function: SyntheticTestFunction,
         fidelity_costs: dict[int, float],
+        fidelity_confidences: dict[int, float] | None = None,
     ) -> None:
         super().__init__()
         if not fidelity_costs:
             raise ValueError("fidelity_costs must not be empty")
+
         self.fidelity_costs = fidelity_costs
-        max_cost = max(fidelity_costs.values())
-        self.fidelity_confidences: dict[int, float] = {
-            fidelity: cost / max_cost for fidelity, cost in fidelity_costs.items()
-        }
+
+        if fidelity_confidences is None:
+            max_cost = max(fidelity_costs.values())
+            fidelity_confidences = {
+                fidelity: cost / max_cost
+                for fidelity, cost in fidelity_costs.items()
+            }
+
+        self.fidelity_confidences = fidelity_confidences
         self._function = function
 
     def _validate_fidelity(self, candidate: Candidate) -> int:
