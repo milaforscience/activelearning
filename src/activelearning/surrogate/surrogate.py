@@ -7,7 +7,7 @@ from activelearning.utils.types import Candidate, Observation
 class Surrogate(ABC):
     """Abstract surrogate interface used by acquisitions and the active learning loop.
 
-    Surrogate models approximate the true evaluation function based on
+    Surrogate models approximate the oracles based on
     observed data, enabling efficient candidate evaluation.
 
     Notes
