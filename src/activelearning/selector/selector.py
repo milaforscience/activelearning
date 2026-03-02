@@ -18,7 +18,6 @@ class Selector(ABC):
         acquisition: Optional[Any] = None,
         cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
         round_budget: Optional[float] = None,
-        **kwargs: Any,
     ) -> Sequence[Candidate]:
         """Select candidates from a pool based on a specific strategy.
 
@@ -35,9 +34,6 @@ class Selector(ABC):
         round_budget : Optional[float]
             Budget limit for this round (optional).
             Required by cost-aware selectors.
-        **kwargs
-            Additional strategy-specific arguments.
-
         Returns
         -------
         result : Sequence[Candidate]

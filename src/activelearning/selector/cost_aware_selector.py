@@ -1,4 +1,4 @@
-from typing import Any, Callable, Optional, Sequence
+from typing import Callable, Optional, Sequence
 
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.selector.selector import Selector
@@ -18,7 +18,6 @@ class CostAwareSelector(Selector):
         acquisition: Optional[Acquisition] = None,
         cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
         round_budget: Optional[float] = None,
-        **kwargs: Any,
     ) -> list[Candidate]:
         """Select candidates greedily to maximize utility within budget.
 
@@ -38,9 +37,6 @@ class CostAwareSelector(Selector):
             Function returning per-candidate costs.
         round_budget : Optional[float]
             Maximum budget for this selection round.
-        **kwargs
-            Additional arguments (unused).
-
         Returns
         -------
         result : list[Candidate]

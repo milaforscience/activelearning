@@ -1,4 +1,4 @@
-from typing import Any, Callable, Optional, Sequence
+from typing import Callable, Optional, Sequence
 
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.selector.selector import Selector
@@ -23,7 +23,6 @@ class ScoreSelector(Selector):
         acquisition: Optional[Acquisition] = None,
         cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
         round_budget: Optional[float] = None,
-        **kwargs: Any,
     ) -> list[Candidate]:
         """Select the top num_samples candidates by acquisition score.
 
@@ -37,9 +36,6 @@ class ScoreSelector(Selector):
             Cost function (ignored by this selector).
         round_budget : Optional[float]
             Budget limit (ignored by this selector).
-        **kwargs
-            Additional arguments (unused).
-
         Returns
         -------
         result : list[Candidate]
