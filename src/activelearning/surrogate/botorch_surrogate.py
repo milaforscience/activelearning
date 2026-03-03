@@ -10,7 +10,6 @@ from gpytorch.module import Module
 
 from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import Candidate, Observation
-from activelearning.dataset.dataset import Dataset
 
 
 class BoTorchSurrogate(Surrogate):
@@ -326,35 +325,34 @@ class BoTorchSurrogate(Surrogate):
             "posterior": posterior,
         }
 
-    def update(self, dataset: "Dataset") -> None:
-        """Updates the surrogate with observations from the dataset.
+    def updates_from_latest(self) -> bool:
+        """Return True when the model is fitted and partial updates are enabled.
 
-        This method decides internally whether to do a full refit or partial update
-        based on the `use_partial_updates` configuration.
+        The active learning loop uses this to decide whether to call
+        ``update(latest_observations)`` (incremental Cholesky) or
+        ``fit(all_observations)`` (full retraining).
+
+        Returns
+        -------
+        bool
+            ``True`` if ``use_partial_updates=True`` and the model has already
+            been fitted at least once; ``False`` otherwise.
+        """
+        return self.use_partial_updates and self.model is not None
+
+    def update(self, observations: Iterable[Observation]) -> None:
+        """Incrementally update the GP with the latest (new) observations.
+
+        Called by the active learning loop only when ``updates_from_latest()``
+        returns ``True``. Uses a fast low-rank Cholesky conditioning step without
+        retraining hyperparameters.
 
         Parameters
         ----------
-        dataset : Dataset
-            Dataset containing all observations and latest observations.
-
-        Notes
-        -----
-        - If `use_partial_updates=False` (default): Always performs full retraining
-          from scratch using all observations in the dataset. This is the most
-          reliable option and recommended for beginners and small-to-medium datasets.
-        - If `use_partial_updates=True` and model is already fitted: Uses only the
-          latest observations for a fast Cholesky update without retraining
-          hyperparameters. This is faster but may accumulate numerical errors.
-        - First call always does a full fit (no existing model to update).
+        observations : Iterable[Observation]
+            Iterable of the most recent observations to condition the GP on.
         """
-        if self.use_partial_updates and self.model is not None:
-            # Fast incremental update using only latest observations
-            new_observations = dataset.get_latest_observations_iterable()
-            self._partial_update(new_observations)
-        else:
-            # Full refit from scratch using all observations
-            all_observations = dataset.get_observations_iterable()
-            self.fit(all_observations)
+        self._partial_update(observations)
 
     def _partial_update(self, new_observations: Iterable[Observation]) -> None:
         """Fast, low-rank update of the GP without retraining hyperparameters.

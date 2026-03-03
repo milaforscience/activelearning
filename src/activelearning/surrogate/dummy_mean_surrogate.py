@@ -2,7 +2,6 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import Candidate, Observation
-from activelearning.dataset.dataset import Dataset
 
 
 class DummyMeanSurrogate(Surrogate):
@@ -72,17 +71,29 @@ class DummyMeanSurrogate(Surrogate):
                 stds.append(self._UNKNOWN_STD)
         return {"mean": means, "std": stds}
 
-    def update(self, dataset: Dataset) -> None:
-        """Update the surrogate by refitting with all observations from the dataset.
+    def updates_from_latest(self) -> bool:
+        """Return False — DummyMeanSurrogate always performs full retraining.
+
+        Returns
+        -------
+        bool
+            Always ``False``.
+        """
+        return False
+
+    def update(self, observations: Iterable[Observation]) -> None:
+        """Update the surrogate by refitting on the provided observations.
 
         Parameters
         ----------
-        dataset : Dataset
-            Dataset containing all observations.
+        observations : Iterable[Observation]
+            Observations to fit on.
 
         Notes
         -----
-            DummySurrogate always performs full refitting regardless of the update method.
-            It does not support incremental learning.
+            DummyMeanSurrogate always performs full refitting.
+            This method exists to satisfy the abstract interface but is not
+            called by the active learning loop (``updates_from_latest()``
+            returns ``False``, so the loop calls ``fit()`` directly).
         """
-        self.fit(dataset.get_observations_iterable())
+        self.fit(observations)

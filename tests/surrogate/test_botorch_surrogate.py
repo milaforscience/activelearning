@@ -102,13 +102,15 @@ def test_mixed_fidelity_raises_error():
 
 
 def test_update_unfitted_model(single_fidelity_observations):
-    """Test that update falls back to fit when model is None."""
+    """Test that updates_from_latest() returns False when model is None, causing full fit."""
     surrogate = BoTorchSurrogate()
 
-    # Create a dataset and use the new update interface
     dataset = ListDataset()
     dataset.add_observations(single_fidelity_observations)
-    surrogate.update(dataset)
+
+    # When model is None, updates_from_latest() must return False (no model to update)
+    assert not surrogate.updates_from_latest()
+    surrogate.fit(dataset.get_observations_iterable())
 
     assert surrogate.model is not None, "Model should be initialized"
     assert isinstance(surrogate.model, SingleTaskGP), "Should route to SingleTaskGP"
@@ -127,7 +129,10 @@ def test_update_fitted_model(single_fidelity_observations):
     dataset = ListDataset()
     dataset.add_observations(initial_train)
     dataset.add_observations([single_fidelity_observations[2]])
-    surrogate.update(dataset)
+
+    # use_partial_updates=False (default) → updates_from_latest() is False → full refit
+    assert not surrogate.updates_from_latest()
+    surrogate.fit(dataset.get_observations_iterable())
 
     # With use_partial_updates=False (default), it should refit from scratch
     # Model will be a new instance
@@ -142,11 +147,12 @@ def test_update_fitted_model(single_fidelity_observations):
 
 
 def test_update_with_dataset_full_refit(dataset_with_observations):
-    """Test update() with use_partial_updates=False does full refit."""
+    """Test updates_from_latest()=False with use_partial_updates=False always does full refit."""
     surrogate = BoTorchSurrogate(use_partial_updates=False)
 
-    # Initial fit
-    surrogate.update(dataset_with_observations)
+    # Initial fit — loop always calls fit() when updates_from_latest() is False
+    assert not surrogate.updates_from_latest()
+    surrogate.fit(dataset_with_observations.get_observations_iterable())
     assert surrogate.model is not None
     assert isinstance(surrogate.model, SingleTaskGP)
 
@@ -156,8 +162,9 @@ def test_update_with_dataset_full_refit(dataset_with_observations):
     # Add more observations
     dataset_with_observations.add_observations([Observation(x=[4.0, 5.0], y=8.0)])
 
-    # Update should do full refit
-    surrogate.update(dataset_with_observations)
+    # Full refit again
+    assert not surrogate.updates_from_latest()
+    surrogate.fit(dataset_with_observations.get_observations_iterable())
 
     # Model should be a new instance (full refit creates new model)
     assert surrogate.model is not first_model
@@ -169,11 +176,12 @@ def test_update_with_dataset_full_refit(dataset_with_observations):
 
 
 def test_update_with_dataset_partial_updates(dataset_with_observations):
-    """Test update() with use_partial_updates=True uses only latest observations."""
+    """Test use_partial_updates=True: first call does full fit, subsequent calls use update()."""
     surrogate = BoTorchSurrogate(use_partial_updates=True)
 
-    # Initial update (should do full fit since model doesn't exist)
-    surrogate.update(dataset_with_observations)
+    # First call: model is None → updates_from_latest() returns False → full fit
+    assert not surrogate.updates_from_latest()
+    surrogate.fit(dataset_with_observations.get_observations_iterable())
     assert surrogate.model is not None
 
     # Store reference to model
@@ -183,8 +191,9 @@ def test_update_with_dataset_partial_updates(dataset_with_observations):
     new_obs = [Observation(x=[4.0, 5.0], y=8.0)]
     dataset_with_observations.add_observations(new_obs)
 
-    # Update should use partial update (condition_on_observations)
-    surrogate.update(dataset_with_observations)
+    # Second call: model exists → updates_from_latest() returns True → incremental update
+    assert surrogate.updates_from_latest()
+    surrogate.update(dataset_with_observations.get_latest_observations_iterable())
 
     # With partial updates, condition_on_observations returns a new model
     assert surrogate.model is not first_model
@@ -196,21 +205,23 @@ def test_update_with_dataset_partial_updates(dataset_with_observations):
 
 
 def test_update_first_call_always_fits(single_fidelity_observations):
-    """Test that first update call always does full fit regardless of use_partial_updates flag."""
-    # Test with use_partial_updates=True
+    """Test that updates_from_latest() returns False when model is None, forcing full fit."""
+    # Test with use_partial_updates=True — first call: model is None
     surrogate_partial = BoTorchSurrogate(use_partial_updates=True)
     dataset = ListDataset()
     dataset.add_observations(single_fidelity_observations)
 
-    surrogate_partial.update(dataset)
+    assert not surrogate_partial.updates_from_latest(), "No model yet → must do full fit"
+    surrogate_partial.fit(dataset.get_observations_iterable())
     assert surrogate_partial.model is not None
 
-    # Test with use_partial_updates=False
+    # Test with use_partial_updates=False — always full fit
     surrogate_full = BoTorchSurrogate(use_partial_updates=False)
     dataset2 = ListDataset()
     dataset2.add_observations(single_fidelity_observations)
 
-    surrogate_full.update(dataset2)
+    assert not surrogate_full.updates_from_latest()
+    surrogate_full.fit(dataset2.get_observations_iterable())
     assert surrogate_full.model is not None
 
 
@@ -227,18 +238,22 @@ def test_update_predictions_correct_both_modes(single_fidelity_observations):
     dataset_partial = ListDataset()
     dataset_partial.add_observations(initial_obs)
 
-    # Initial fit for both
-    surrogate_full.update(dataset_full)
-    surrogate_partial.update(dataset_partial)
+    # Initial fit for both (model is None → updates_from_latest() is False)
+    surrogate_full.fit(dataset_full.get_observations_iterable())
+    surrogate_partial.fit(dataset_partial.get_observations_iterable())
 
     # Add new observations
     new_obs = [single_fidelity_observations[2]]
     dataset_full.add_observations(new_obs)
     dataset_partial.add_observations(new_obs)
 
-    # Update both
-    surrogate_full.update(dataset_full)
-    surrogate_partial.update(dataset_partial)
+    # Full surrogate: always fit on all observations
+    assert not surrogate_full.updates_from_latest()
+    surrogate_full.fit(dataset_full.get_observations_iterable())
+
+    # Partial surrogate: model exists → incremental update on latest only
+    assert surrogate_partial.updates_from_latest()
+    surrogate_partial.update(dataset_partial.get_latest_observations_iterable())
 
     # Both should be able to make predictions
     candidates = [Candidate(x=[2.5, 3.5])]

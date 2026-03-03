@@ -3,8 +3,6 @@ from typing import Iterable, Mapping, Sequence, Any
 
 from activelearning.utils.types import Candidate, Observation
 
-from activelearning.dataset.dataset import Dataset
-
 
 class Surrogate(ABC):
     """Abstract surrogate interface used by acquisitions and the active learning loop.
@@ -12,10 +10,13 @@ class Surrogate(ABC):
     Surrogate models approximate the oracles based on
     observed data, enabling efficient candidate evaluation.
 
-    The single mandatory method is ``update(dataset)``, which is called by the
-    active learning loop after each round of observations. Implementations may
-    also expose ``fit(observations)`` as a convenience for standalone use (e.g.
-    notebooks, tests), but this is not required by the base interface.
+    The active learning loop calls ``updates_from_latest()`` each round to decide
+    which iterable to pass:
+      - ``True``  → ``update(latest_observations)`` for incremental/partial updates.
+      - ``False`` → ``fit(all_observations)`` for full retraining.
+
+    This design ensures the loop controls iterable creation, so the surrogate
+    always sees the same consistent epoch view as the acquisition and sampler.
 
     Notes
     -----
@@ -25,62 +26,68 @@ class Surrogate(ABC):
     """
 
     @abstractmethod
-    def update(self, dataset: Dataset) -> None:
-        """Update the surrogate model with a dataset.
+    def updates_from_latest(self) -> bool:
+        """Declare whether this surrogate updates incrementally from latest observations.
 
-        This is the primary method called by the active learning loop after each
-        round of observations. Implementations choose between full retraining or
-        incremental updates internally.
+        Called by the active learning loop each round to determine which iterable
+        to provide:
+          - Return ``True``  → loop calls ``update(dataset.get_latest_observations_iterable())``.
+          - Return ``False`` → loop calls ``fit(observations)`` with the shared
+            round iterable (same one used by acquisition and sampler).
 
-        Parameters
-        ----------
-        dataset : Dataset
-            Dataset containing all observations and the latest observations.
+        Returning ``False`` is the safe default for surrogates that always retrain
+        from scratch. Return ``True`` only when the surrogate supports genuine
+        incremental learning (e.g. fast Cholesky updates).
 
-        Notes
-        -----
-            - For full refit: call fit(dataset.get_observations_iterable())
-            - For partial update: use dataset.get_latest_observations_iterable()
-              with an incremental learning algorithm.
-
-        Examples
-        --------
-            Full refit implementation:
-            ```python
-            def update(self, dataset):
-                self.fit(dataset.get_observations_iterable())
-            ```
-
-            Partial update implementation:
-            ```python
-            def update(self, dataset):
-                if self.use_partial_updates and self._is_fitted:
-                    self._incremental_update(dataset.get_latest_observations_iterable())
-                else:
-                    self.fit(dataset.get_observations_iterable())
-            ```
+        Returns
+        -------
+        bool
+            ``True`` if this surrogate should receive only the latest (new)
+            observations via ``update()``, ``False`` if it should be fully
+            retrained via ``fit()`` on all observations.
         """
         pass
 
-    def fit(self, observations: Iterable[Observation]) -> None:
-        """Fit the surrogate model to observations from scratch (optional convenience method).
+    @abstractmethod
+    def update(self, observations: Iterable[Observation]) -> None:
+        """Incrementally update the surrogate with the latest (new) observations.
 
-        Not called by the active learning loop — the loop always calls ``update(dataset)``.
-        Useful for standalone use such as notebooks and tests.
+        Called by the active learning loop only when ``updates_from_latest()``
+        returns ``True``. Implementations should apply a fast incremental update
+        (e.g. low-rank Cholesky conditioning) without retraining hyperparameters.
 
         Parameters
         ----------
         observations : Iterable[Observation]
-            Iterable of observations to train on.
+            Iterable of the most recent observations (from the latest oracle query).
+
+        Notes
+        -----
+            This method is *not* called when ``updates_from_latest()`` returns
+            ``False``. In that case the loop calls ``fit(observations)`` instead.
+        """
+        pass
+
+    def fit(self, observations: Iterable[Observation]) -> None:
+        """Fit the surrogate model to observations from scratch.
+
+        Called by the active learning loop when ``updates_from_latest()`` returns
+        ``False``, passing the shared round iterable (same one used by acquisition
+        and sampler). Also useful for standalone use such as notebooks and tests.
+
+        Parameters
+        ----------
+        observations : Iterable[Observation]
+            Iterable of all current observations to train on.
 
         Raises
         ------
         NotImplementedError
-            If this surrogate does not expose a standalone fit method.
+            If this surrogate does not implement fit().
         """
         raise NotImplementedError(
             f"{self.__class__.__name__} does not implement fit(). "
-            "Use update(dataset) instead."
+            "Override fit() or ensure updates_from_latest() returns True and override update()."
         )
 
     def set_fidelity_confidences(self, confidences: dict[int, float]) -> None:
