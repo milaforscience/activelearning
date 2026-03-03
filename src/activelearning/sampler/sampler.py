@@ -16,7 +16,6 @@ class Sampler(ABC):
         self,
         acquisition: Optional[Any] = None,
         observations: Optional[Iterable[Observation]] = None,
-        **kwargs: Any,
     ) -> Sequence[Candidate]:
         """Generate a pool of candidate samples.
 
@@ -27,8 +26,6 @@ class Sampler(ABC):
             Used by samplers that weight candidates by acquisition values.
         observations : Optional[Iterable[Observation]]
             Current observations to avoid resampling (optional).
-        **kwargs
-            Additional sampler-specific arguments.
 
         Returns
         -------
