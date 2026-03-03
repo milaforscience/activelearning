@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import Optional, Sequence
 
 import torch
 from botorch.test_functions.multi_fidelity import AugmentedBranin, AugmentedHartmann
@@ -32,7 +32,7 @@ class AugmentedFunctionOracle(Oracle):
         self,
         function: SyntheticTestFunction,
         fidelity_costs: dict[int, float],
-        fidelity_confidences: dict[int, float] | None = None,
+        fidelity_confidences: Optional[dict[int, float]] = None,
     ) -> None:
         super().__init__()
         if not fidelity_costs:
@@ -121,14 +121,27 @@ class BraninOracle(AugmentedFunctionOracle):
     The active learning loop is formulated as a maximization problem.
     ``negate=False`` keeps the Branin function in its natural positive form,
     so the loop directly maximizes Branin values.
+
+    Parameters
+    ----------
+    fidelity_costs : dict[int, float]
+        Mapping from integer fidelity level to query cost.
+    fidelity_confidences : Optional[dict[int, float]], optional
+        Mapping from integer fidelity level to confidence in [0, 1].
+        If None, confidences are derived proportionally from costs.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        fidelity_costs: dict[int, float],
+        fidelity_confidences: Optional[dict[int, float]] = None,
+    ) -> None:
         super().__init__(
             # negate=False keeps the natural positive form; the active learning
             # loop maximizes Branin values directly.
             function=AugmentedBranin(negate=False),
-            fidelity_costs={1: 0.01, 2: 0.1, 3: 1.0},
+            fidelity_costs=fidelity_costs,
+            fidelity_confidences=fidelity_confidences,
         )
 
 
@@ -142,10 +155,23 @@ class Hartmann6DOracle(AugmentedFunctionOracle):
     The active learning loop is formulated as a maximization problem, so
     ``negate=True`` ensures consistency with the acquisition logic by flipping
     the naturally-negative Hartmann function to positive values.
+
+    Parameters
+    ----------
+    fidelity_costs : dict[int, float]
+        Mapping from integer fidelity level to query cost.
+    fidelity_confidences : Optional[dict[int, float]], optional
+        Mapping from integer fidelity level to confidence in [0, 1].
+        If None, confidences are derived proportionally from costs.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        fidelity_costs: dict[int, float],
+        fidelity_confidences: Optional[dict[int, float]] = None,
+    ) -> None:
         super().__init__(
             function=AugmentedHartmann(negate=True),
-            fidelity_costs={1: 0.125, 2: 0.25, 3: 1.0},
+            fidelity_costs=fidelity_costs,
+            fidelity_confidences=fidelity_confidences,
         )
