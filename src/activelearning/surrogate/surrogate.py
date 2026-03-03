@@ -48,13 +48,15 @@ class Surrogate(ABC):
         """
         pass
 
-    @abstractmethod
     def update(self, observations: Iterable[Observation]) -> None:
         """Incrementally update the surrogate with the latest (new) observations.
 
         Called by the active learning loop only when ``updates_from_latest()``
         returns ``True``. Implementations should apply a fast incremental update
         (e.g. low-rank Cholesky conditioning) without retraining hyperparameters.
+
+        Surrogates that always return ``False`` from ``updates_from_latest()``
+        do not need to implement this method.
 
         Parameters
         ----------
@@ -65,8 +67,16 @@ class Surrogate(ABC):
         -----
             This method is *not* called when ``updates_from_latest()`` returns
             ``False``. In that case the loop calls ``fit(observations)`` instead.
+
+        Raises
+        ------
+        NotImplementedError
+            If this surrogate does not implement incremental updates.
         """
-        pass
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement update(). "
+            "Override update() or ensure updates_from_latest() returns False and override fit()."
+        )
 
     def fit(self, observations: Iterable[Observation]) -> None:
         """Fit the surrogate model to observations from scratch.
