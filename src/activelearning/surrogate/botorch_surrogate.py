@@ -49,15 +49,23 @@ class BoTorchSurrogate(Surrogate):
             Adam training loop for Deep Kernel Learning). If provided, this overrides
             BoTorch's default L-BFGS-B optimizer.
         covar_module : Module, optional
-            Optional custom GPyTorch kernel for non-fidelity dimensions. If None,
-            defaults to BoTorch's standard Matérn/RBF kernels.
+            Optional custom GPyTorch kernel passed to ``SingleTaskGP``. In the
+            single-fidelity case it covers only the input dimensions. When
+            ``custom_fidelity_kernel=True`` in the multi-fidelity case, it receives
+            all dimensions including the fidelity column (appended as the last
+            column), so the kernel is responsible for both input and fidelity
+            dimensions. If None, defaults to BoTorch's standard Matérn/RBF kernels.
         use_partial_updates : bool, default=False
             If True, update() uses fast incremental Cholesky updates when the model is
             already fitted. If False, update() always performs full retraining for
             maximum reliability. Beginners should use False.
         custom_fidelity_kernel : bool, default=False
-            If True, bypasses BoTorch's default multi-fidelity model and allows the
-            custom `covar_module` to handle fidelity dimensions internally.
+            Only relevant in the multi-fidelity setting. If False (default), uses
+            BoTorch's ``SingleTaskMultiFidelityGP``. If True, bypasses it in favour
+            of ``SingleTaskGP``, allowing ``covar_module`` to handle fidelity
+            dimensions internally (e.g. when using a composite or product kernel
+            that encodes fidelity correlations directly). Has no effect in the
+            single-fidelity case.
         """
         self.model = None
         self.mll = None
