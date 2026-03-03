@@ -81,19 +81,3 @@ class DummyMeanSurrogate(Surrogate):
         """
         return False
 
-    def update(self, observations: Iterable[Observation]) -> None:
-        """Update the surrogate by refitting on the provided observations.
-
-        Parameters
-        ----------
-        observations : Iterable[Observation]
-            Observations to fit on.
-
-        Notes
-        -----
-            DummyMeanSurrogate always performs full refitting.
-            This method exists to satisfy the abstract interface but is not
-            called by the active learning loop (``updates_from_latest()``
-            returns ``False``, so the loop calls ``fit()`` directly).
-        """
-        self.fit(observations)
