@@ -58,6 +58,7 @@ def test_single_fidelity_fit_and_predict(single_fidelity_observations):
 
 def test_multi_fidelity_fit_and_predict(multi_fidelity_observations):
     surrogate = BoTorchSurrogate()
+    surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
 
     # Test Fitting
     surrogate.fit(multi_fidelity_observations)
@@ -77,6 +78,7 @@ def test_multi_fidelity_fit_and_predict(multi_fidelity_observations):
 
 def test_tensor_parsing_shapes(multi_fidelity_observations):
     surrogate = BoTorchSurrogate()
+    surrogate.set_fidelity_confidences({0: 0.0, 1: 1.0})
 
     # Manually trigger parsing to check internal tensor shapes
     train_X, train_Y = surrogate._parse_observations(multi_fidelity_observations)
@@ -85,13 +87,14 @@ def test_tensor_parsing_shapes(multi_fidelity_observations):
     assert train_X.shape == (4, 3)
     assert train_Y.shape == (4, 1)
 
-    # Check that the last column of train_X matches the fidelities (0, 1, 0, 1)
+    # Check that the last column of train_X matches the mapped confidences (0.0, 1.0, 0.0, 1.0)
     expected_fidelities = torch.tensor([0.0, 1.0, 0.0, 1.0])
     assert torch.all(train_X[:, -1] == expected_fidelities)
 
 
 def test_mixed_fidelity_raises_error():
     surrogate = BoTorchSurrogate()
+    surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     bad_observations = [
         Observation(x=[1.0], y=2.0, fidelity=0),
         Observation(x=[2.0], y=3.0),  # Missing fidelity!
@@ -286,6 +289,7 @@ def test_fidelity_confidence_mapping(multi_fidelity_observations):
 def test_custom_fidelity_kernel_routing(multi_fidelity_observations):
     """Test that custom_fidelity_kernel=True forces routing to SingleTaskGP."""
     surrogate = BoTorchSurrogate(custom_fidelity_kernel=True)
+    surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
 
     # Even though data is multi-fidelity, the custom kernel flag should force the fallback
@@ -357,6 +361,7 @@ def test_predict_before_fit_raises():
 def test_parse_candidates_missing_fidelity_raises(multi_fidelity_observations):
     """Test that predict raises ValueError when multi-fidelity model gets candidates without fidelity."""
     surrogate = BoTorchSurrogate()
+    surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
 
     # Candidates missing fidelity values
@@ -490,6 +495,7 @@ def test_is_multi_fidelity_resets_between_fits(
     surrogate = BoTorchSurrogate()
 
     # First fit: multi-fidelity
+    surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
     assert surrogate._is_multi_fidelity is True
 
@@ -514,6 +520,7 @@ def test_fit_empty_observations_raises():
 def test_partial_update_raises_on_fidelity_mismatch(multi_fidelity_observations):
     """Test that _partial_update raises when new observations are missing fidelities."""
     surrogate = BoTorchSurrogate(use_partial_updates=True)
+    surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
 
     # New observations without fidelity values — should raise before any tensor ops

@@ -175,9 +175,9 @@ class BoTorchSurrogate(Surrogate):
 
     def _build_and_fit_model(self) -> None:
         """Constructs and optionally optimizes the Gaussian Process model."""
-        # _build_and_fit_model is only called after _parse_observations has populated
-        # these tensors; assert here so the type checker sees them as non-None.
-        assert self._train_X is not None and self._train_Y is not None
+        assert self._train_X is not None and self._train_Y is not None, (
+            "_parse_observations() must be called before _build_and_fit_model()."
+        )
 
         # 1. Setup Transforms
         # When multi-fidelity, normalize only the feature columns (all except the last),

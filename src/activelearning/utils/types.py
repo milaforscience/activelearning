@@ -111,11 +111,12 @@ def observations_to_tensors(
     Parameters
     ----------
     observations : Iterable[Observation]
-        Observations to convert. Materialized to a list if not already
-        a Sequence.
+        Observations to convert. Materialized to a list if not already a list.
     fidelity_confidences : dict[int, float], optional
         Mapping from integer fidelity IDs to continuous confidence values.
-        If None or a fidelity ID is missing, the raw integer is used as-is.
+        If None or empty, single-fidelity mode is assumed and fidelities
+        returns as an empty list. Raises ``KeyError`` if a fidelity ID in
+        the observations is missing from the mapping.
 
     Returns
     -------
@@ -124,24 +125,19 @@ def observations_to_tensors(
     train_Y : torch.Tensor
         Output labels tensor of shape (n, 1).
     fidelities : list[float]
-        Mapped fidelity confidence values; empty if no fidelity is present.
+        Mapped fidelity confidence values; empty if single-fidelity.
     """
-    if fidelity_confidences is None:
-        fidelity_confidences = {}
-
-    obs_list: Sequence[Observation] = (
-        observations if isinstance(observations, Sequence) else list(observations)
-    )
+    obs_list = observations if isinstance(observations, list) else list(observations)
 
     train_X = _to_2d_tensor([obs.x for obs in obs_list], torch.float64)
     train_Y = torch.as_tensor(
         [obs.y for obs in obs_list], dtype=torch.float64
     ).view(-1, 1)
-    fidelities = [
-        fidelity_confidences.get(obs.fidelity, obs.fidelity)  # type: ignore[arg-type]
-        for obs in obs_list
-        if obs.fidelity is not None
-    ]
+    fidelities = (
+        [fidelity_confidences[obs.fidelity] for obs in obs_list if obs.fidelity is not None]
+        if fidelity_confidences
+        else []
+    )
 
     return train_X, train_Y, fidelities
 
@@ -161,23 +157,22 @@ def candidates_to_tensor(
         Candidates to convert.
     fidelity_confidences : dict[int, float], optional
         Mapping from integer fidelity IDs to continuous confidence values.
-        If None or a fidelity ID is missing, the raw integer is used as-is.
+        If None or empty, single-fidelity mode is assumed and fidelities
+        returns as an empty list. Raises ``KeyError`` if a fidelity ID in
+        the candidates is missing from the mapping.
 
     Returns
     -------
     test_X : torch.Tensor
         Input features tensor of shape (n, d).
     fidelities : list[float]
-        Mapped fidelity confidence values; empty if no fidelity is present.
+        Mapped fidelity confidence values; empty if single-fidelity.
     """
-    if fidelity_confidences is None:
-        fidelity_confidences = {}
-
     test_X = _to_2d_tensor([cand.x for cand in candidates], torch.float64)
-    fidelities = [
-        fidelity_confidences.get(cand.fidelity, cand.fidelity)  # type: ignore[arg-type]
-        for cand in candidates
-        if cand.fidelity is not None
-    ]
+    fidelities = (
+        [fidelity_confidences[cand.fidelity] for cand in candidates if cand.fidelity is not None]
+        if fidelity_confidences
+        else []
+    )
 
     return test_X, fidelities
