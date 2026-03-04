@@ -1,5 +1,5 @@
 import torch
-from typing import Any, Callable, Iterable, Mapping, Optional, Sequence, Tuple, cast
+from typing import Any, Callable, Iterable, Mapping, Optional, Tuple, cast
 from botorch.models import SingleTaskGP
 from botorch.models.gp_regression_fidelity import SingleTaskMultiFidelityGP
 from botorch.fit import fit_gpytorch_mll
@@ -144,13 +144,13 @@ class BoTorchSurrogate(Surrogate):
 
         return train_X, train_Y
 
-    def _parse_candidates(self, candidates: Sequence[Candidate]) -> torch.Tensor:
+    def _parse_candidates(self, candidates: Iterable[Candidate]) -> torch.Tensor:
         """Converts Candidates into BoTorch-ready tensors.
 
         Parameters
         ----------
-        candidates : Sequence[Candidate]
-            A sequence of Candidate objects to be evaluated.
+        candidates : Iterable[Candidate]
+            Candidates to evaluate. Materialized to a list internally.
 
         Returns
         -------
@@ -164,12 +164,13 @@ class BoTorchSurrogate(Surrogate):
             If the model was trained on multi-fidelity data, but candidates are
             missing fidelity values.
         """
-        test_X, fidelities = candidates_to_tensor(candidates, self._fidelity_confidences)
+        cand_list = candidates if isinstance(candidates, list) else list(candidates)
+        test_X, fidelities = candidates_to_tensor(cand_list, self._fidelity_confidences)
         # BoTorch requires 2D inputs: ensure (n, d)
         test_X = torch.atleast_2d(test_X)
 
         if self._is_multi_fidelity:
-            if len(fidelities) != len(candidates):
+            if len(fidelities) != len(cand_list):
                 raise ValueError(
                     "Surrogate was fitted on multi-fidelity data. Candidates require fidelities."
                 )
@@ -265,7 +266,7 @@ class BoTorchSurrogate(Surrogate):
         Parameters
         ----------
         observations : Iterable[Observation]
-            Iterable of observations to train on.
+            Iterable of observations to train on. Materialized to a list internally.
 
         Raises
         ------
@@ -278,13 +279,13 @@ class BoTorchSurrogate(Surrogate):
         self._train_X, self._train_Y = self._parse_observations(obs_list)
         self._build_and_fit_model()
 
-    def predict(self, candidates: Sequence[Candidate]) -> Mapping[str, Any]:
+    def predict(self, candidates: Iterable[Candidate]) -> Mapping[str, Any]:
         """Returns predictions including the mean, std, and the full BoTorch posterior.
 
         Parameters
         ----------
-        candidates : Sequence[Candidate]
-            Sequence of candidates to predict.
+        candidates : Iterable[Candidate]
+            Candidates to predict. Materialized to a list internally.
 
         Returns
         -------

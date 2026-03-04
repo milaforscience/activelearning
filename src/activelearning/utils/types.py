@@ -142,10 +142,10 @@ def observations_to_tensors(
 
 
 def candidates_to_tensor(
-    candidates: Sequence[Candidate],
+    candidates: Iterable[Candidate],
     fidelity_confidences: Optional[dict[int, float]] = None,
 ) -> tuple[torch.Tensor, list[float]]:
-    """Convert a sequence of Candidates to a tensor.
+    """Convert an iterable of Candidates to a tensor.
 
     Tries fast batch conversion for inputs; falls back to element-wise
     stacking for heterogeneous types. The natural shape of the data is
@@ -153,8 +153,8 @@ def candidates_to_tensor(
 
     Parameters
     ----------
-    candidates : Sequence[Candidate]
-        Candidates to convert.
+    candidates : Iterable[Candidate]
+        Candidates to convert. Materialized to a list internally.
     fidelity_confidences : dict[int, float], optional
         Mapping from integer fidelity IDs to continuous confidence values.
         If None or empty, single-fidelity mode is assumed and fidelities
@@ -168,9 +168,10 @@ def candidates_to_tensor(
     fidelities : list[float]
         Mapped fidelity confidence values; empty if single-fidelity.
     """
-    X = _to_tensor([cand.x for cand in candidates], torch.float64)
+    cand_list = candidates if isinstance(candidates, list) else list(candidates)
+    X = _to_tensor([cand.x for cand in cand_list], torch.float64)
     fidelities = (
-        [fidelity_confidences[cand.fidelity] for cand in candidates if cand.fidelity is not None]
+        [fidelity_confidences[cand.fidelity] for cand in cand_list if cand.fidelity is not None]
         if fidelity_confidences
         else []
     )
