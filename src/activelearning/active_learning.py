@@ -56,7 +56,8 @@ def active_learning(
     initial_budget = budget.available_budget
     num_rounds = 0
 
-    # Set fidelity confidences in surrogate before starting the loop
+    # Propagate oracle fidelity confidences to the surrogate before the loop.
+    # Surrogates that don't use fidelity metadata safely ignore this (no-op default).
     surrogate.set_fidelity_confidences(oracle.get_fidelity_confidences())
 
     while budget.available_budget > 0:
