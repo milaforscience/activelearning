@@ -122,9 +122,12 @@ class BoTorchSurrogate(Surrogate):
         # never leaves stale state from a previous invocation.
         self._is_multi_fidelity = False
 
-        train_X, train_Y, fidelities = observations_to_tensors(
+        X, y, fidelities = observations_to_tensors(
             observations, self._fidelity_confidences
         )
+        # BoTorch requires 2D inputs: ensure (n, d) for X and (n, 1) for Y
+        train_X = torch.atleast_2d(X)
+        train_Y = y.view(-1, 1)
         obs_count = train_X.shape[0]
 
         # Handle multi-fidelity concatenation
@@ -162,6 +165,8 @@ class BoTorchSurrogate(Surrogate):
             missing fidelity values.
         """
         test_X, fidelities = candidates_to_tensor(candidates, self._fidelity_confidences)
+        # BoTorch requires 2D inputs: ensure (n, d)
+        test_X = torch.atleast_2d(test_X)
 
         if self._is_multi_fidelity:
             if len(fidelities) != len(candidates):
