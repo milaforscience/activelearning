@@ -56,7 +56,8 @@ def active_learning(
     initial_budget = budget.available_budget
     num_rounds = 0
 
-    # Set fidelity confidences in surrogate before starting the loop
+    # Propagate oracle fidelity confidences to the surrogate before the loop.
+    # Surrogates that don't use fidelity metadata safely ignore this (no-op default).
     surrogate.set_fidelity_confidences(oracle.get_fidelity_confidences())
 
     while budget.available_budget > 0:
@@ -65,8 +66,14 @@ def active_learning(
         # iterations with the same sequence (see Dataset.get_observations_iterable).
         observations = dataset.get_observations_iterable()
 
-        # Fit surrogate on current dataset observations and update acquisition function
-        surrogate.fit(observations)
+        # Dispatch surrogate update based on its declared strategy:
+        # - updates_from_latest() True  → incremental update on new observations only
+        # - updates_from_latest() False → full refit using the shared round iterable,
+        #   guaranteeing the surrogate sees the same consistent data as acquisition/sampler.
+        if surrogate.updates_from_latest():
+            surrogate.update(dataset.get_latest_observations_iterable())
+        else:
+            surrogate.fit(observations)
         acquisition.update(surrogate, observations)
 
         # Sampler can use acquisition for scoring candidates and observations to avoid re-sampling

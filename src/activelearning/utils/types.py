@@ -1,5 +1,7 @@
 from dataclasses import dataclass
-from typing import Any, Sequence, Optional
+from typing import Any, Iterable, Optional
+
+import torch
 
 
 @dataclass(frozen=True)
@@ -45,26 +47,141 @@ class Observation:
 
 
 def label_candidates(
-    candidates: Sequence[Candidate], labels: Sequence[Any]
-) -> Sequence[Observation]:
-    """Convert a sequence of candidates and their corresponding labels into observations.
+    candidates: Iterable[Candidate], labels: Iterable[Any]
+) -> list[Observation]:
+    """Convert candidates and their corresponding labels into observations.
 
     Parameters
     ----------
-    candidates : Sequence[Candidate]
-        Sequence of Candidate objects.
-    labels : Sequence[Any]
-        Sequence of label values corresponding to each candidate.
+    candidates : Iterable[Candidate]
+        Iterable of Candidate objects. Will be materialized.
+    labels : Iterable[Any]
+        Iterable of label values corresponding to each candidate. Will be materialized.
 
     Returns
     -------
-    result : Sequence[Observation]
-        Sequence of Observation objects, where each observation combines the
+    result : list[Observation]
+        List of Observation objects, where each observation combines the
         candidate's x and fidelity with its label as y.
     """
-    if len(candidates) != len(labels):
+    candidates_list = candidates if isinstance(candidates, list) else list(candidates)
+    labels_list = labels if isinstance(labels, list) else list(labels)
+    if len(candidates_list) != len(labels_list):
         raise ValueError("Length of candidates and labels must match.")
     return [
         Observation(x=candidate.x, y=label, fidelity=candidate.fidelity)
-        for candidate, label in zip(candidates, labels)
+        for candidate, label in zip(candidates_list, labels_list)
     ]
+
+
+def _to_tensor(values: list[Any], dtype: torch.dtype) -> torch.Tensor:
+    """Convert a list of values to a tensor, preserving the natural shape.
+
+    Tries fast batch conversion first; falls back to element-wise stacking
+    for heterogeneous or non-array types.
+
+    Parameters
+    ----------
+    values : list[Any]
+        List of scalar, array-like, or tensor values.
+    dtype : torch.dtype
+        Target dtype for the output tensor.
+
+    Returns
+    -------
+    result : torch.Tensor
+        Tensor with shape determined by the input data. Scalar inputs produce
+        shape (n,); array inputs produce shape (n, d).
+    """
+    try:
+        return torch.as_tensor(values, dtype=dtype)
+    except (TypeError, ValueError, RuntimeError):
+        return torch.stack([torch.as_tensor(v, dtype=dtype) for v in values])
+
+
+def observations_to_tensors(
+    observations: Iterable[Observation],
+    fidelity_confidences: Optional[dict[int, float]] = None,
+) -> tuple[torch.Tensor, torch.Tensor, list[float]]:
+    """Convert an iterable of Observations to tensors.
+
+    Tries fast batch conversion for inputs and labels; falls back to
+    element-wise stacking for heterogeneous types. The natural shape of
+    the data is preserved — no reshaping is applied.
+
+    Parameters
+    ----------
+    observations : Iterable[Observation]
+        Observations to convert. Materialized to a list if not already a list.
+    fidelity_confidences : dict[int, float], optional
+        Mapping from integer fidelity IDs to continuous confidence values.
+        If None or empty, single-fidelity mode is assumed and fidelities
+        returns as an empty list. Raises ``KeyError`` if a fidelity ID in
+        the observations is missing from the mapping.
+
+    Returns
+    -------
+    X : torch.Tensor
+        Input features tensor. Shape is determined by the input data.
+    y : torch.Tensor
+        Output labels tensor. Shape is determined by the input data.
+    fidelities : list[float]
+        Mapped fidelity confidence values; empty if single-fidelity.
+    """
+    obs_list = observations if isinstance(observations, list) else list(observations)
+
+    X = _to_tensor([obs.x for obs in obs_list], torch.float64)
+    y = _to_tensor([obs.y for obs in obs_list], torch.float64)
+    fidelities = (
+        [
+            fidelity_confidences[obs.fidelity]
+            for obs in obs_list
+            if obs.fidelity is not None
+        ]
+        if fidelity_confidences
+        else []
+    )
+
+    return X, y, fidelities
+
+
+def candidates_to_tensor(
+    candidates: Iterable[Candidate],
+    fidelity_confidences: Optional[dict[int, float]] = None,
+) -> tuple[torch.Tensor, list[float]]:
+    """Convert an iterable of Candidates to a tensor.
+
+    Tries fast batch conversion for inputs; falls back to element-wise
+    stacking for heterogeneous types. The natural shape of the data is
+    preserved — no reshaping is applied.
+
+    Parameters
+    ----------
+    candidates : Iterable[Candidate]
+        Candidates to convert. Materialized to a list internally.
+    fidelity_confidences : dict[int, float], optional
+        Mapping from integer fidelity IDs to continuous confidence values.
+        If None or empty, single-fidelity mode is assumed and fidelities
+        returns as an empty list. Raises ``KeyError`` if a fidelity ID in
+        the candidates is missing from the mapping.
+
+    Returns
+    -------
+    X : torch.Tensor
+        Input features tensor. Shape is determined by the input data.
+    fidelities : list[float]
+        Mapped fidelity confidence values; empty if single-fidelity.
+    """
+    cand_list = candidates if isinstance(candidates, list) else list(candidates)
+    X = _to_tensor([cand.x for cand in cand_list], torch.float64)
+    fidelities = (
+        [
+            fidelity_confidences[cand.fidelity]
+            for cand in cand_list
+            if cand.fidelity is not None
+        ]
+        if fidelity_confidences
+        else []
+    )
+
+    return X, fidelities

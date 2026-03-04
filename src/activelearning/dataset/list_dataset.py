@@ -10,6 +10,7 @@ class ListDataset(Dataset):
 
     def __init__(self) -> None:
         self._records: list[Observation] = []
+        self._latest_records: list[Observation] = []
 
     def add_observations(self, observations: Sequence[Observation]) -> None:
         """Add new observations to the dataset by appending to the list of records.
@@ -20,6 +21,7 @@ class ListDataset(Dataset):
             Sequence of observations to add.
         """
         self._records.extend(observations)
+        self._latest_records = list(observations)
 
     def get_observations_iterable(self) -> list[Observation]:
         """Retrieve all stored observations.
@@ -30,6 +32,17 @@ class ListDataset(Dataset):
             List of all observations stored in the dataset.
         """
         return list(self._records)
+
+    def get_latest_observations_iterable(self) -> list[Observation]:
+        """Retrieve the most recently added observations.
+
+        Returns
+        -------
+        latest_observations_iterable : list[Observation]
+            List of observations from the most recent add_observations() call.
+            Returns an empty list if no observations have been added yet.
+        """
+        return list(self._latest_records)
 
     def get_best_candidates(self, k: int = 1) -> list[Observation]:
         """Return the top-k observations with highest y values.
