@@ -214,7 +214,9 @@ def test_update_first_call_always_fits(single_fidelity_observations):
     dataset = ListDataset()
     dataset.add_observations(single_fidelity_observations)
 
-    assert not surrogate_partial.updates_from_latest(), "No model yet → must do full fit"
+    assert not surrogate_partial.updates_from_latest(), (
+        "No model yet → must do full fit"
+    )
     surrogate_partial.fit(dataset.get_observations_iterable())
     assert surrogate_partial.model is not None
 
@@ -289,6 +291,7 @@ def test_fidelity_confidence_mapping(multi_fidelity_observations):
 def test_custom_covar_module_routing(multi_fidelity_observations):
     """Test that providing a covar_module forces routing to SingleTaskGP in MF setting."""
     from gpytorch.kernels import RBFKernel
+
     surrogate = BoTorchSurrogate(covar_module=RBFKernel())
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
@@ -352,7 +355,10 @@ def test_custom_fit_function(single_fidelity_observations):
 
 def test_custom_fit_function_with_optimize_disabled_raises():
     """Test that providing custom_fit_function with optimize_hyperparameters=False raises."""
-    with pytest.raises(ValueError, match="custom_fit_function is provided but optimize_hyperparameters=False"):
+    with pytest.raises(
+        ValueError,
+        match="custom_fit_function is provided but optimize_hyperparameters=False",
+    ):
         BoTorchSurrogate(
             custom_fit_function=lambda mll: None,
             optimize_hyperparameters=False,

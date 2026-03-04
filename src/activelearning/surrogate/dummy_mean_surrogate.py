@@ -80,4 +80,3 @@ class DummyMeanSurrogate(Surrogate):
             Always ``False``.
         """
         return False
-

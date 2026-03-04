@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Iterable, Sequence, Optional
+from typing import Any, Iterable, Optional
 
 import torch
 
@@ -47,28 +47,30 @@ class Observation:
 
 
 def label_candidates(
-    candidates: Sequence[Candidate], labels: Sequence[Any]
-) -> Sequence[Observation]:
-    """Convert a sequence of candidates and their corresponding labels into observations.
+    candidates: Iterable[Candidate], labels: Iterable[Any]
+) -> list[Observation]:
+    """Convert candidates and their corresponding labels into observations.
 
     Parameters
     ----------
-    candidates : Sequence[Candidate]
-        Sequence of Candidate objects.
-    labels : Sequence[Any]
-        Sequence of label values corresponding to each candidate.
+    candidates : Iterable[Candidate]
+        Iterable of Candidate objects. Will be materialized.
+    labels : Iterable[Any]
+        Iterable of label values corresponding to each candidate. Will be materialized.
 
     Returns
     -------
-    result : Sequence[Observation]
-        Sequence of Observation objects, where each observation combines the
+    result : list[Observation]
+        List of Observation objects, where each observation combines the
         candidate's x and fidelity with its label as y.
     """
-    if len(candidates) != len(labels):
+    candidates_list = candidates if isinstance(candidates, list) else list(candidates)
+    labels_list = labels if isinstance(labels, list) else list(labels)
+    if len(candidates_list) != len(labels_list):
         raise ValueError("Length of candidates and labels must match.")
     return [
         Observation(x=candidate.x, y=label, fidelity=candidate.fidelity)
-        for candidate, label in zip(candidates, labels)
+        for candidate, label in zip(candidates_list, labels_list)
     ]
 
 
@@ -94,9 +96,7 @@ def _to_tensor(values: list[Any], dtype: torch.dtype) -> torch.Tensor:
     try:
         return torch.as_tensor(values, dtype=dtype)
     except (TypeError, ValueError, RuntimeError):
-        return torch.stack(
-            [torch.as_tensor(v, dtype=dtype) for v in values]
-        )
+        return torch.stack([torch.as_tensor(v, dtype=dtype) for v in values])
 
 
 def observations_to_tensors(
@@ -133,7 +133,11 @@ def observations_to_tensors(
     X = _to_tensor([obs.x for obs in obs_list], torch.float64)
     y = _to_tensor([obs.y for obs in obs_list], torch.float64)
     fidelities = (
-        [fidelity_confidences[obs.fidelity] for obs in obs_list if obs.fidelity is not None]
+        [
+            fidelity_confidences[obs.fidelity]
+            for obs in obs_list
+            if obs.fidelity is not None
+        ]
         if fidelity_confidences
         else []
     )
@@ -171,7 +175,11 @@ def candidates_to_tensor(
     cand_list = candidates if isinstance(candidates, list) else list(candidates)
     X = _to_tensor([cand.x for cand in cand_list], torch.float64)
     fidelities = (
-        [fidelity_confidences[cand.fidelity] for cand in cand_list if cand.fidelity is not None]
+        [
+            fidelity_confidences[cand.fidelity]
+            for cand in cand_list
+            if cand.fidelity is not None
+        ]
         if fidelity_confidences
         else []
     )

@@ -9,7 +9,12 @@ from gpytorch.mlls import ExactMarginalLogLikelihood
 from gpytorch.module import Module
 
 from activelearning.surrogate.surrogate import Surrogate
-from activelearning.utils.types import Candidate, Observation, observations_to_tensors, candidates_to_tensor
+from activelearning.utils.types import (
+    Candidate,
+    Observation,
+    observations_to_tensors,
+    candidates_to_tensor,
+)
 
 
 class BoTorchSurrogate(Surrogate):
