@@ -7,16 +7,12 @@ from activelearning.utils.types import Candidate, Observation
 class Surrogate(ABC):
     """Abstract surrogate interface used by acquisitions and the active learning loop.
 
-    Surrogate models approximate the oracles based on
-    observed data, enabling efficient candidate evaluation.
+    Surrogate models approximate the oracles based on observed data, enabling
+    efficient candidate evaluation.
 
-    The active learning loop calls ``updates_from_latest()`` each round to decide
-    which iterable to pass:
-      - ``True``  → ``update(latest_observations)`` for incremental/partial updates.
-      - ``False`` → ``fit(all_observations)`` for full retraining.
-
-    This design ensures the loop controls iterable creation, so the surrogate
-    always sees the same consistent epoch view as the acquisition and sampler.
+    Surrogates must implement ``updates_from_latest()`` to declare whether they
+    support incremental updates from the latest observations or require full
+    retraining on all observations.
 
     Notes
     -----
@@ -29,31 +25,31 @@ class Surrogate(ABC):
     def updates_from_latest(self) -> bool:
         """Declare whether this surrogate updates incrementally from latest observations.
 
-        Called by the active learning loop each round to determine which iterable
-        to provide:
-          - Return ``True``  → loop calls ``update(dataset.get_latest_observations_iterable())``.
-          - Return ``False`` → loop calls ``fit(observations)`` with the shared
-            round iterable (same one used by acquisition and sampler).
+        Surrogates that support incremental updates (i.e., updating the model
+        without full retraining) should return ``True``. Surrogates that require
+        full retraining on all observations should return ``False``.
 
-        Returning ``False`` is the safe default for surrogates that always retrain
-        from scratch. Return ``True`` only when the surrogate supports genuine
-        incremental learning (e.g. fast Cholesky updates).
+          - Return ``True``  → ``update()`` will be called with only the latest observations.
+          - Return ``False`` → ``fit()`` will be called with all observations.
+
+        Returning ``False`` is the safe default. Return ``True`` only when the
+        surrogate genuinely supports incremental learning.
 
         Returns
         -------
         bool
-            ``True`` if this surrogate should receive only the latest (new)
-            observations via ``update()``, ``False`` if it should be fully
-            retrained via ``fit()`` on all observations.
+            ``True`` if this surrogate supports incremental updates via ``update()``,
+            ``False`` if it requires full retraining via ``fit()``.
         """
         pass
 
     def update(self, observations: Iterable[Observation]) -> None:
         """Incrementally update the surrogate with the latest (new) observations.
 
-        Called by the active learning loop only when ``updates_from_latest()``
-        returns ``True``. Implementations should apply a fast incremental update
-        (e.g. low-rank Cholesky conditioning) without retraining hyperparameters.
+        Called when ``updates_from_latest()`` returns ``True``. Implementations
+        should update the model using only the provided observations, without
+        full retraining. This is suited for online or continuous learning
+        scenarios where efficiency matters.
 
         Surrogates that always return ``False`` from ``updates_from_latest()``
         do not need to implement this method.
