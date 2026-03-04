@@ -63,6 +63,10 @@ class Dataset(ABC):
         This is useful for incremental model updates where only new data needs
         to be processed.
 
+        The same consistency guarantee as ``get_observations_iterable()`` applies:
+        the returned iterable must support consistent multiple iterations. Implementations
+        are responsible for pinning any randomness at call time.
+
         Returns
         -------
         latest_observations_iterable : Iterable[Observation]
