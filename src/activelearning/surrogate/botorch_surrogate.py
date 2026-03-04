@@ -345,7 +345,8 @@ class BoTorchSurrogate(Surrogate):
         Parameters
         ----------
         new_observations : Iterable[Observation]
-            Iterable of strictly new observations to condition the GP on.
+            The latest batch of new observations to condition the GP on. Must be
+            a finite iterable; it will be fully materialized into a list internally.
         """
         if self.model is None or self._train_X is None:
             # Fallback to a full fit if the model hasn't been initialized
