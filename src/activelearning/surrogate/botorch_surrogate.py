@@ -28,7 +28,6 @@ class BoTorchSurrogate(Surrogate):
         custom_fit_function: Optional[Callable] = None,
         covar_module: Optional[Module] = None,
         use_partial_updates: bool = False,
-        custom_fidelity_kernel: bool = False,
     ):
         """
         Parameters
@@ -50,22 +49,19 @@ class BoTorchSurrogate(Surrogate):
             BoTorch's default L-BFGS-B optimizer.
         covar_module : Module, optional
             Optional custom GPyTorch kernel passed to ``SingleTaskGP``. In the
-            single-fidelity case it covers only the input dimensions. When
-            ``custom_fidelity_kernel=True`` in the multi-fidelity case, it receives
-            all dimensions including the fidelity column (appended as the last
-            column), so the kernel is responsible for both input and fidelity
-            dimensions. If None, defaults to BoTorch's standard Matérn/RBF kernels.
+            single-fidelity case it covers only the input dimensions. In the
+            multi-fidelity case, providing a ``covar_module`` bypasses
+            ``SingleTaskMultiFidelityGP`` in favour of ``SingleTaskGP``, and
+            the kernel receives all dimensions including the fidelity column
+            (appended as the last column), so it is responsible for both input
+            and fidelity dimensions (e.g. when using a composite or product
+            kernel that encodes fidelity correlations directly). If None,
+            defaults to BoTorch's standard Matérn/RBF kernels; for
+            multi-fidelity data this means ``SingleTaskMultiFidelityGP`` is used.
         use_partial_updates : bool, default=False
             If True, update() uses fast incremental Cholesky updates when the model is
             already fitted. If False, update() always performs full retraining for
             maximum reliability. Beginners should use False.
-        custom_fidelity_kernel : bool, default=False
-            Only relevant in the multi-fidelity setting. If False (default), uses
-            BoTorch's ``SingleTaskMultiFidelityGP``. If True, bypasses it in favour
-            of ``SingleTaskGP``, allowing ``covar_module`` to handle fidelity
-            dimensions internally (e.g. when using a composite or product kernel
-            that encodes fidelity correlations directly). Has no effect in the
-            single-fidelity case.
         """
         # Toggles and configurations
         self.normalize_inputs = normalize_inputs
@@ -75,7 +71,13 @@ class BoTorchSurrogate(Surrogate):
         self.custom_fit_function = custom_fit_function
         self.covar_module = covar_module
         self.use_partial_updates = use_partial_updates
-        self.custom_fidelity_kernel = custom_fidelity_kernel
+
+        if custom_fit_function is not None and not optimize_hyperparameters:
+            raise ValueError(
+                "custom_fit_function is provided but optimize_hyperparameters=False. "
+                "The custom function will never be called. Either set "
+                "optimize_hyperparameters=True or remove custom_fit_function."
+            )
 
         # Internal state tracking
         self.model = None
@@ -195,8 +197,10 @@ class BoTorchSurrogate(Surrogate):
         )
 
         # 2. Build Model Configuration
-        # If MF is true AND they aren't using a custom fidelity kernel, use BoTorch's default MF model
-        if self._is_multi_fidelity and not self.custom_fidelity_kernel:
+        # Use BoTorch's default MF model only when MF data is present and no custom
+        # kernel is provided. A custom covar_module implies the user wants SingleTaskGP
+        # with full control over the kernel (including fidelity dimensions).
+        if self._is_multi_fidelity and self.covar_module is None:
             self.model = SingleTaskMultiFidelityGP(
                 self._train_X,
                 self._train_Y,
@@ -205,7 +209,7 @@ class BoTorchSurrogate(Surrogate):
                 input_transform=input_transform,
             )
         else:
-            # Fallback for Single Fidelity OR Custom Multi-Fidelity Kernels 
+            # Single-fidelity OR multi-fidelity with a custom kernel
             self.model = SingleTaskGP(
                 self._train_X,
                 self._train_Y,

@@ -286,15 +286,16 @@ def test_fidelity_confidence_mapping(multi_fidelity_observations):
     assert torch.allclose(train_X[:, -1], expected_confidences)
 
 
-def test_custom_fidelity_kernel_routing(multi_fidelity_observations):
-    """Test that custom_fidelity_kernel=True forces routing to SingleTaskGP."""
-    surrogate = BoTorchSurrogate(custom_fidelity_kernel=True)
+def test_custom_covar_module_routing(multi_fidelity_observations):
+    """Test that providing a covar_module forces routing to SingleTaskGP in MF setting."""
+    from gpytorch.kernels import RBFKernel
+    surrogate = BoTorchSurrogate(covar_module=RBFKernel())
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
 
-    # Even though data is multi-fidelity, the custom kernel flag should force the fallback
+    # covar_module provided → should use SingleTaskGP, not SingleTaskMultiFidelityGP
     assert isinstance(surrogate.model, SingleTaskGP), (
-        "Should fallback to SingleTaskGP for custom kernels"
+        "Should use SingleTaskGP when covar_module is provided"
     )
     assert surrogate._is_multi_fidelity is True, (
         "Should still track that the data has fidelity columns"
@@ -347,6 +348,15 @@ def test_custom_fit_function(single_fidelity_observations):
     assert call_tracker["kwargs"] == {"learning_rate": 0.01, "epochs": 50}, (
         "fit_kwargs were not passed correctly"
     )
+
+
+def test_custom_fit_function_with_optimize_disabled_raises():
+    """Test that providing custom_fit_function with optimize_hyperparameters=False raises."""
+    with pytest.raises(ValueError, match="custom_fit_function is provided but optimize_hyperparameters=False"):
+        BoTorchSurrogate(
+            custom_fit_function=lambda mll: None,
+            optimize_hyperparameters=False,
+        )
 
 
 def test_predict_before_fit_raises():
