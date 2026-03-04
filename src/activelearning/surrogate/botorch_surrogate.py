@@ -67,9 +67,6 @@ class BoTorchSurrogate(Surrogate):
             that encodes fidelity correlations directly). Has no effect in the
             single-fidelity case.
         """
-        self.model = None
-        self.mll = None
-
         # Toggles and configurations
         self.normalize_inputs = normalize_inputs
         self.standardize_outputs = standardize_outputs
@@ -81,6 +78,8 @@ class BoTorchSurrogate(Surrogate):
         self.custom_fidelity_kernel = custom_fidelity_kernel
 
         # Internal state tracking
+        self.model = None
+        self.mll = None
         self._is_multi_fidelity = False
         self._train_X: Optional[torch.Tensor] = None
         self._train_Y: Optional[torch.Tensor] = None
