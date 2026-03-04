@@ -9,7 +9,7 @@ from gpytorch.mlls import ExactMarginalLogLikelihood
 from gpytorch.module import Module
 
 from activelearning.surrogate.surrogate import Surrogate
-from activelearning.utils.types import Candidate, Observation
+from activelearning.utils.types import Candidate, Observation, observations_to_tensors, candidates_to_tensor
 
 
 class BoTorchSurrogate(Surrogate):
@@ -121,26 +121,14 @@ class BoTorchSurrogate(Surrogate):
         # never leaves stale state from a previous invocation.
         self._is_multi_fidelity = False
 
-        x_data, y_data, fidelities = [], [], []
-        obs_list = list(observations)
-
-        for obs in obs_list:
-            # Safely convert x to a 1D tensor
-            x_tensor = torch.atleast_1d(torch.as_tensor(obs.x, dtype=torch.float64))
-            x_data.append(x_tensor)
-            y_data.append(torch.as_tensor(obs.y, dtype=torch.float64))
-
-            if obs.fidelity is not None:
-                # Map the integer ID to the continuous confidence value.
-                mapped_fid = self._fidelity_confidences.get(obs.fidelity, obs.fidelity)
-                fidelities.append(mapped_fid)
-
-        train_X = torch.stack(x_data)
-        train_Y = torch.stack(y_data).view(-1, 1)  # BoTorch expects shape (n, 1)
+        train_X, train_Y, fidelities = observations_to_tensors(
+            observations, self._fidelity_confidences
+        )
+        obs_count = train_X.shape[0]
 
         # Handle multi-fidelity concatenation
         if fidelities:
-            if len(fidelities) != len(obs_list):
+            if len(fidelities) != obs_count:
                 raise ValueError(
                     "If using multi-fidelity, all observations must have a fidelity."
                 )
@@ -172,20 +160,7 @@ class BoTorchSurrogate(Surrogate):
             If the model was trained on multi-fidelity data, but candidates are
             missing fidelity values.
         """
-        x_data, fidelities = [], []
-
-        for cand in candidates:
-            x_tensor = torch.atleast_1d(torch.as_tensor(cand.x, dtype=torch.float64))
-            x_data.append(x_tensor)
-
-            if cand.fidelity is not None:
-                # Map the integer ID to the continuous confidence value.
-                mapped_fid = self._fidelity_confidences.get(
-                    cand.fidelity, cand.fidelity
-                )
-                fidelities.append(mapped_fid)
-
-        test_X = torch.stack(x_data)
+        test_X, fidelities = candidates_to_tensor(candidates, self._fidelity_confidences)
 
         if self._is_multi_fidelity:
             if len(fidelities) != len(candidates):
@@ -231,11 +206,11 @@ class BoTorchSurrogate(Surrogate):
                 input_transform=input_transform,
             )
         else:
-            # Fallback for Single Fidelity OR Custom Multi-Fidelity Kernels (like DKL)
+            # Fallback for Single Fidelity OR Custom Multi-Fidelity Kernels 
             self.model = SingleTaskGP(
                 self._train_X,
                 self._train_Y,
-                covar_module=self.covar_module,  # The user's DKL kernel is passed here
+                covar_module=self.covar_module,  # The user's kernel is passed here
                 outcome_transform=outcome_transform,
                 input_transform=input_transform,
             )

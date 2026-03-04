@@ -1,5 +1,7 @@
 from dataclasses import dataclass
-from typing import Any, Sequence, Optional
+from typing import Any, Iterable, Sequence, Optional
+
+import torch
 
 
 @dataclass(frozen=True)
@@ -68,3 +70,114 @@ def label_candidates(
         Observation(x=candidate.x, y=label, fidelity=candidate.fidelity)
         for candidate, label in zip(candidates, labels)
     ]
+
+
+def _to_2d_tensor(values: list[Any], dtype: torch.dtype) -> torch.Tensor:
+    """Convert a list of values to a 2D float tensor.
+
+    Tries fast batch conversion first; falls back to element-wise stacking
+    for heterogeneous or non-array types.
+
+    Parameters
+    ----------
+    values : list[Any]
+        List of scalar, array-like, or tensor values of uniform shape.
+    dtype : torch.dtype
+        Target dtype for the output tensor.
+
+    Returns
+    -------
+    result : torch.Tensor
+        2D tensor of shape (n, d). Scalar inputs produce shape (n, 1).
+    """
+    try:
+        t = torch.as_tensor(values, dtype=dtype)
+        return t.unsqueeze(-1) if t.dim() == 1 else t
+    except (TypeError, ValueError, RuntimeError):
+        return torch.stack(
+            [torch.atleast_1d(torch.as_tensor(v, dtype=dtype)) for v in values]
+        )
+
+
+def observations_to_tensors(
+    observations: Iterable[Observation],
+    fidelity_confidences: Optional[dict[int, float]] = None,
+) -> tuple[torch.Tensor, torch.Tensor, list[float]]:
+    """Convert an iterable of Observations to tensors.
+
+    Tries fast batch conversion for inputs and labels; falls back to
+    element-wise stacking for heterogeneous types.
+
+    Parameters
+    ----------
+    observations : Iterable[Observation]
+        Observations to convert. Materialized to a list if not already
+        a Sequence.
+    fidelity_confidences : dict[int, float], optional
+        Mapping from integer fidelity IDs to continuous confidence values.
+        If None or a fidelity ID is missing, the raw integer is used as-is.
+
+    Returns
+    -------
+    train_X : torch.Tensor
+        Input features tensor of shape (n, d).
+    train_Y : torch.Tensor
+        Output labels tensor of shape (n, 1).
+    fidelities : list[float]
+        Mapped fidelity confidence values; empty if no fidelity is present.
+    """
+    if fidelity_confidences is None:
+        fidelity_confidences = {}
+
+    obs_list: Sequence[Observation] = (
+        observations if isinstance(observations, Sequence) else list(observations)
+    )
+
+    train_X = _to_2d_tensor([obs.x for obs in obs_list], torch.float64)
+    train_Y = torch.as_tensor(
+        [obs.y for obs in obs_list], dtype=torch.float64
+    ).view(-1, 1)
+    fidelities = [
+        fidelity_confidences.get(obs.fidelity, obs.fidelity)  # type: ignore[arg-type]
+        for obs in obs_list
+        if obs.fidelity is not None
+    ]
+
+    return train_X, train_Y, fidelities
+
+
+def candidates_to_tensor(
+    candidates: Sequence[Candidate],
+    fidelity_confidences: Optional[dict[int, float]] = None,
+) -> tuple[torch.Tensor, list[float]]:
+    """Convert a sequence of Candidates to a tensor.
+
+    Tries fast batch conversion for inputs; falls back to element-wise
+    stacking for heterogeneous types.
+
+    Parameters
+    ----------
+    candidates : Sequence[Candidate]
+        Candidates to convert.
+    fidelity_confidences : dict[int, float], optional
+        Mapping from integer fidelity IDs to continuous confidence values.
+        If None or a fidelity ID is missing, the raw integer is used as-is.
+
+    Returns
+    -------
+    test_X : torch.Tensor
+        Input features tensor of shape (n, d).
+    fidelities : list[float]
+        Mapped fidelity confidence values; empty if no fidelity is present.
+    """
+    if fidelity_confidences is None:
+        fidelity_confidences = {}
+
+    test_X = _to_2d_tensor([cand.x for cand in candidates], torch.float64)
+    fidelities = [
+        fidelity_confidences.get(cand.fidelity, cand.fidelity)  # type: ignore[arg-type]
+        for cand in candidates
+        if cand.fidelity is not None
+    ]
+
+    return test_X, fidelities
