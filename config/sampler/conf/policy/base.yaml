@@ -1,0 +1,16 @@
+
+forward:
+  _target_: gflownet.policy.base.Policy
+  config:
+    type: mlp
+    n_hid: 2048 #128
+    n_layers: 2
+    checkpoint: null
+    reload_ckpt: False
+    is_model: False
+
+backward:
+  _target_: gflownet.policy.base.Policy
+  config: null
+
+shared: null

@@ -1,0 +1,44 @@
+# @package _global_
+# Branin test experiment
+
+defaults:
+  - override /env: grid
+  - override /sampler: gflownet #random_gflownet #greedy #gflownet #random
+
+env:
+  # Number of cells per dimension
+  length: 100
+  # Mapping coordinates (normalized unit cube; oracle rescales to natural bounds)
+  cell_min: 0
+  cell_max: 1
+
+sampler:
+  conf:
+    agent:
+      random_action_prob: 0.0 # 0.01
+      optimizer:
+        lr: 5e-4
+        n_train_steps: 500 #5000 # 10000
+    logger:
+      do:
+        online: False #True
+      project_name: "test_gflownet"
+      run_name: "identity_lr5e-4"
+    proxy:
+      # Reward function: power or boltzmann
+      # boltzmann: exp(1.0 * reward_beta * proxy)
+      # power: (1.0 * proxy / reward_norm) ** self.reward_beta
+      # identity: proxy
+      reward_function: power
+      # Minimum reward
+      reward_min: 1e-8
+      reward_function_kwargs:
+        # Beta parameter of the reward function
+        beta: 1.0
+        # Reward normalization for "power" reward function
+        # norm: 1.0
+
+device: cpu
+float_precision: 32
+seed: 42
+maximize: False

@@ -1,0 +1,8 @@
+defaults:
+  - policy: base
+  - agent: base
+  - logger: base
+  - proxy: acquisition
+
+# State flow modelling
+state_flow: null

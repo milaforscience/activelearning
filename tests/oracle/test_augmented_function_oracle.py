@@ -18,7 +18,11 @@ def hartmann_fidelity_costs() -> dict[int, float]:
 
 
 class TestBraninOracleQuery:
-    """Test BraninOracle.query() returns valid observations."""
+    """Test BraninOracle.query() returns valid observations.
+
+    Coordinates are in the natural Branin domain
+    (x1 ∈ [-5, 10], x2 ∈ [0, 15]).
+    """
 
     def test_query_returns_observation_for_each_candidate(self, branin_fidelity_costs):
         oracle = BraninOracle(fidelity_costs=branin_fidelity_costs)

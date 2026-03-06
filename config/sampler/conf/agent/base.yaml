@@ -1,0 +1,99 @@
+
+_target_: gflownet.gflownet.GFlowNetAgent
+# Random seeds
+seed: 0
+# Optimizer
+optimizer:
+  # Loss function
+  loss: trajectorybalance
+  # Learning rates
+  lr: 0.001 # 0.0001 # <---
+  lr_decay_period: 1000000
+  lr_decay_gamma: 0.5
+  z_dim: 16
+  lr_z_mult: 100
+  method: adam
+  # Threshold loss for early stopping
+  early_stopping: 0.0
+  # Coefficient for exponential moving average
+  ema_alpha: 0.5
+  # Optimizer: adam, sgd
+  adam_beta1: 0.9
+  adam_beta2: 0.999
+  # Momentum for SGD
+  sgd_momentum: 0.9
+  # Number of trajectories of each kind
+  batch_size:
+    # Forward on-policy (possibly tempered and/or with random actions)
+    forward: 10
+    # Backward from training set
+    backward_dataset: 0
+    # Backward from replay buffer
+    backward_replay: 0
+  # Train to sample ratio
+  train_to_sample_ratio: 1
+  # Number of training iterations
+  n_train_steps: 500 # 5000 # <---
+  # From original implementation
+  bootstrap_tau: 0.0
+  clip_grad_norm: 0.0
+# State flow modelling
+state_flow: null
+
+# Loss function (resolved via Hydra; override _target_ for other losses)
+loss:
+  _target_: gflownet.losses.trajectorybalance.TrajectoryBalance
+
+# If True, compute rewards in batches
+batch_reward: True
+# Force zero probability of sampling invalid actions
+mask_invalid_actions: True
+# Temperature for the logits /= temperature_logits
+temperature_logits: 1.0
+# Percentage of random actions
+random_action_prob: 0.0 # <---
+# Percentage of trajectories in a batch from an empirical distribution
+pct_offline: 0.0
+# Replay buffer
+replay_capacity: 0
+replay_sampling: permutation
+# Train data set backward sampling
+train_sampling: permutation
+num_empirical_loss: 200000
+use_context: False
+
+evaluator:
+  _target_: gflownet.evaluator.base.BaseEvaluator
+
+  # config formerly from logger.test
+  first_it: True
+  period: 100
+  n: 100
+  kde:
+    bandwidth: 0.1
+    kernel: gaussian
+  n_top_k: 5000
+  top_k: 100
+  top_k_period: -1
+  # Number of backward trajectories to estimate the log likelihood of each test data point
+  n_trajs_logprobs: 10
+  logprobs_batch_size: 100
+  logprobs_bootstrap_size: 10000
+  # Maximum number of test data points to compute log likelihood probs.
+  max_data_logprobs: 1e5
+  # Number of points to obtain a grid to estimate the reward density
+  n_grid: 40000
+  train_log_period: 1
+  checkpoints_period: 1000
+  # List of metrics as per gflownet/eval/evaluator.py:METRICS_NAMES
+  # Set to null for all of them
+  # Values must be comma separated like `metrics: "l1, kl, js"` (spaces are optional)
+  metrics: all
+
+
+# Buffer: no train and test buffers by default
+buffer:
+  _target_: gflownet.buffer.base.BaseBuffer
+  replay_capacity: 0
+  train: null
+  test: null
