@@ -280,6 +280,8 @@ class GPBotorchSurrogate(Surrogate):
                 self.custom_fit_function(self.mll, **self.fit_kwargs)
             else:
                 fit_gpytorch_mll(self.mll, **self.fit_kwargs)
+        # Switch the model to evaluation mode so it behaves in inference mode
+        # (disables training-specific behavior in PyTorch modules).
         self.model.eval()
 
     def predict(self, candidates: Iterable[Candidate]) -> Mapping[str, Any]:
@@ -310,6 +312,8 @@ class GPBotorchSurrogate(Surrogate):
 
         test_X = self._parse_candidates(candidates)
 
+        # Re-assert evaluation mode in case external code switched the model
+        # back to training mode between fit() and predict().
         self.model.eval()
         with torch.no_grad():
             posterior = self.model.posterior(test_X)
