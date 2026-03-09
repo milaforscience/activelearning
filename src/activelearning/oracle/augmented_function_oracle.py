@@ -49,28 +49,11 @@ class AugmentedFunctionOracle(Oracle):
             fidelity_confidences = {
                 fidelity: cost / max_cost for fidelity, cost in fidelity_costs.items()
             }
+        else:
+            self._validate_fidelity_confidences(fidelity_confidences)
 
         self.fidelity_confidences = fidelity_confidences
         self._function = function
-
-    def _validate_fidelity(self, candidate: Candidate) -> int:
-        """Validate and return the candidate's fidelity level.
-
-        Raises
-        ------
-        ValueError
-            If fidelity is None or not in the configured fidelity levels.
-        """
-        if candidate.fidelity is None:
-            raise ValueError(
-                "Candidate fidelity must not be None for AugmentedFunctionOracle."
-            )
-        if candidate.fidelity not in self.fidelity_costs:
-            raise ValueError(
-                f"Unsupported fidelity {candidate.fidelity}. "
-                f"Supported: {sorted(self.fidelity_costs.keys())}"
-            )
-        return candidate.fidelity
 
     def get_fidelity_confidences(self) -> dict[int, float]:
         """Return confidence proportional to cost for each fidelity."""
@@ -78,7 +61,12 @@ class AugmentedFunctionOracle(Oracle):
 
     def get_costs(self, candidates: Sequence[Candidate]) -> list[float]:
         """Return the cost of querying each candidate based on its fidelity."""
-        return [self.fidelity_costs[self._validate_fidelity(c)] for c in candidates]
+        return [
+            self.fidelity_costs[
+                self._validate_candidate_fidelity(c, self.fidelity_costs)
+            ]
+            for c in candidates
+        ]
 
     def query(self, candidates: Sequence[Candidate]) -> list[Observation]:
         """Evaluate candidates using the underlying augmented test function.
@@ -101,7 +89,10 @@ class AugmentedFunctionOracle(Oracle):
         if not candidates:
             return []
 
-        fidelities = [self._validate_fidelity(c) for c in candidates]
+        fidelities = [
+            self._validate_candidate_fidelity(c, self.fidelity_costs)
+            for c in candidates
+        ]
 
         rows = [
             [*c.x, self.fidelity_confidences[f]] for c, f in zip(candidates, fidelities)
