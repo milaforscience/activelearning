@@ -45,9 +45,9 @@ class HypercubeUniformSampler(Sampler):
     ) -> None:
         if num_samples <= 0:
             raise ValueError(f"num_samples must be > 0, got {num_samples}")
-        for i, (lower, upper) in enumerate(bounds):
+        for idx, (lower, upper) in enumerate(bounds):
             if lower >= upper:
-                raise ValueError(f"Bound {i} has lower >= upper: ({lower}, {upper})")
+                raise ValueError(f"Bound {idx} has lower >= upper: ({lower}, {upper})")
 
         if fidelities is not None and len(fidelities) == 0:
             raise ValueError("fidelities must not be empty when specified")
