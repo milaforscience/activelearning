@@ -41,8 +41,11 @@ class AugmentedFunctionOracle(Oracle):
         super().__init__()
         if not fidelity_costs:
             raise ValueError("fidelity_costs must not be empty")
-
-        self.fidelity_costs = fidelity_costs
+        for fidelity in fidelity_costs:
+            if not isinstance(fidelity, int):
+                raise ValueError(
+                    f"Fidelity keys must be int, got {type(fidelity)} for key {fidelity!r}"
+                )
 
         if fidelity_confidences is None:
             max_cost = max(fidelity_costs.values())
@@ -50,8 +53,15 @@ class AugmentedFunctionOracle(Oracle):
                 fidelity: cost / max_cost for fidelity, cost in fidelity_costs.items()
             }
         else:
+            if fidelity_confidences.keys() != fidelity_costs.keys():
+                raise ValueError(
+                    "fidelity_confidences keys must match fidelity_costs keys. "
+                    f"Got {sorted(fidelity_confidences.keys())}, "
+                    f"expected {sorted(fidelity_costs.keys())}"
+                )
             self._validate_fidelity_confidences(fidelity_confidences)
 
+        self.fidelity_costs = fidelity_costs
         self.fidelity_confidences = fidelity_confidences
         self._function = function
 

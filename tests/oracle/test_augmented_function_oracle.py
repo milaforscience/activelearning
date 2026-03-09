@@ -20,6 +20,17 @@ def hartmann_fidelity_costs() -> dict[int, float]:
 class TestBraninOracleQuery:
     """Test BraninOracle.query() returns valid observations."""
 
+    def test_init_raises_on_non_int_fidelity_key(self):
+        with pytest.raises(ValueError, match="Fidelity keys must be int"):
+            BraninOracle(fidelity_costs={"high": 1.0})
+
+    def test_init_raises_on_mismatched_confidence_keys(self, branin_fidelity_costs):
+        with pytest.raises(ValueError, match="fidelity_confidences keys must match"):
+            BraninOracle(
+                fidelity_costs=branin_fidelity_costs,
+                fidelity_confidences={1: 0.1, 2: 0.5, 99: 1.0},
+            )
+
     def test_query_returns_observation_for_each_candidate(self, branin_fidelity_costs):
         oracle = BraninOracle(fidelity_costs=branin_fidelity_costs)
         candidates = [Candidate(x=[0.5, 7.5], fidelity=3)]
