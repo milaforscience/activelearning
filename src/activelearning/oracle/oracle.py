@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Collection
-from typing import Optional, Sequence
+from typing import Optional, Sequence, overload
 
 from activelearning.utils.types import Candidate, Observation
 
@@ -12,6 +12,20 @@ class Oracle(ABC):
     be expensive or time-consuming to query. Oracles can handle multiple
     fidelity levels and route candidates internally.
     """
+
+    @overload
+    @staticmethod
+    def _validate_candidate_fidelity(
+        candidate: Candidate,
+        supported_fidelities: Collection[int],
+    ) -> int: ...
+
+    @overload
+    @staticmethod
+    def _validate_candidate_fidelity(
+        candidate: Candidate,
+        supported_fidelities: None = ...,
+    ) -> None: ...
 
     @staticmethod
     def _validate_candidate_fidelity(

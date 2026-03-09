@@ -22,7 +22,7 @@ class TestBraninOracleQuery:
 
     def test_init_raises_on_non_int_fidelity_key(self):
         with pytest.raises(ValueError, match="Fidelity keys must be int"):
-            BraninOracle(fidelity_costs={"high": 1.0})
+            BraninOracle(fidelity_costs={"high": 1.0})  # type: ignore[arg-type]
 
     def test_init_raises_on_mismatched_confidence_keys(self, branin_fidelity_costs):
         with pytest.raises(ValueError, match="fidelity_confidences keys must match"):
