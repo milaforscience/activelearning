@@ -475,12 +475,12 @@ def test_set_fidelity_confidences_propagates_to_covar_module():
     )
 
 
-def test_partial_update_fallback_when_model_none(single_fidelity_observations):
-    """Test that _partial_update falls back to a full fit when model is None."""
+def test_update_fallback_when_model_none(single_fidelity_observations):
+    """Test that update falls back to a full fit when model is None."""
     surrogate = GPBotorchSurrogate(use_partial_updates=True)
 
-    # Call _partial_update directly before any fit
-    surrogate._partial_update(single_fidelity_observations)
+    # Call update directly before any fit
+    surrogate.update(single_fidelity_observations)
 
     assert surrogate.model is not None, "Fallback full fit should initialise the model"
     candidates = [Candidate(x=[1.5, 2.5])]
@@ -488,13 +488,13 @@ def test_partial_update_fallback_when_model_none(single_fidelity_observations):
     assert len(predictions["mean"]) == 1
 
 
-def test_partial_update_ignores_empty_observations(single_fidelity_observations):
-    """Test that _partial_update is a no-op when the observation list is empty."""
+def test_update_ignores_empty_observations(single_fidelity_observations):
+    """Test that update is a no-op when the observation list is empty."""
     surrogate = GPBotorchSurrogate(use_partial_updates=True)
     surrogate.fit(single_fidelity_observations)
     model_before = surrogate.model
 
-    surrogate._partial_update([])  # should not raise or change the model
+    surrogate.update([])  # should not raise or change the model
 
     assert surrogate.model is model_before, (
         "Empty update should leave the model unchanged"
@@ -535,8 +535,8 @@ def test_fit_empty_observations_raises():
         surrogate.fit([])
 
 
-def test_partial_update_raises_on_fidelity_mismatch(multi_fidelity_observations):
-    """Test that _partial_update raises when new observations are missing fidelities."""
+def test_update_raises_on_fidelity_mismatch(multi_fidelity_observations):
+    """Test that update raises when new observations are missing fidelities."""
     surrogate = GPBotorchSurrogate(use_partial_updates=True)
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
@@ -544,7 +544,7 @@ def test_partial_update_raises_on_fidelity_mismatch(multi_fidelity_observations)
     # New observations without fidelity values — should raise before any tensor ops
     bad_obs = [Observation(x=[1.5, 2.5], y=5.0)]
     with pytest.raises(ValueError, match="missing fidelity values"):
-        surrogate._partial_update(bad_obs)
+        surrogate.update(bad_obs)
 
 
 def test_scale_inputs_excludes_fidelity_column(multi_fidelity_observations):

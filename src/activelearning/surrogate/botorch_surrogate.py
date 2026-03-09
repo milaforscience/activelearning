@@ -351,25 +351,12 @@ class GPBotorchSurrogate(Surrogate):
         observations : Iterable[Observation]
             Iterable of the most recent observations to condition the GP on.
         """
-        self._partial_update(observations)
-
-    def _partial_update(self, new_observations: Iterable[Observation]) -> None:
-        """Fast, low-rank update of the GP without retraining hyperparameters.
-
-        This is an internal method called by `update()` when `use_partial_updates=True`.
-
-        Parameters
-        ----------
-        new_observations : Iterable[Observation]
-            The latest batch of new observations to condition the GP on. Must be
-            a finite iterable; it will be fully materialized into a list internally.
-        """
         if self.model is None or self._train_X is None:
             # Fallback to a full fit if the model hasn't been initialized
-            self.fit(new_observations)
+            self.fit(observations)
             return
 
-        obs_list = list(new_observations)
+        obs_list = list(observations)
         if not obs_list:
             return
 
