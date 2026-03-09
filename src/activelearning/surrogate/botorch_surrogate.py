@@ -187,10 +187,10 @@ class GPBotorchSurrogate(Surrogate):
 
         return test_X
 
-    def _build_and_fit_model(self) -> None:
-        """Constructs and optionally optimizes the Gaussian Process model."""
+    def _build_model(self) -> None:
+        """Construct the Gaussian Process model and marginal likelihood."""
         assert self._train_X is not None and self._train_Y is not None, (
-            "_parse_observations() must be called before _build_and_fit_model()."
+            "_parse_observations() must be called before _build_model()."
         )
 
         # 1. Setup Transforms
@@ -238,17 +238,6 @@ class GPBotorchSurrogate(Surrogate):
             self.model.load_state_dict(self._pending_state_dict)
             self._pending_state_dict = None
 
-        # 4. Optimize Hyperparameters (if toggled on)
-        if self.optimize_hyperparameters:
-            if self.custom_fit_function is not None:
-                # Use the user's custom fit function if provided
-                self.custom_fit_function(self.mll, **self.fit_kwargs)
-            else:
-                # Default BoTorch fitting procedure
-                fit_gpytorch_mll(self.mll, **self.fit_kwargs)
-
-        self.model.eval()
-
     def set_fidelity_confidences(self, confidences: dict[int, float]) -> None:
         """Stores fidelity confidences and passes them to the custom kernel if supported.
 
@@ -284,7 +273,14 @@ class GPBotorchSurrogate(Surrogate):
         if not obs_list:
             raise ValueError("Cannot fit on an empty observation list.")
         self._train_X, self._train_Y = self._parse_observations(obs_list)
-        self._build_and_fit_model()
+        self._build_model()
+        assert self.mll is not None and self.model is not None
+        if self.optimize_hyperparameters:
+            if self.custom_fit_function is not None:
+                self.custom_fit_function(self.mll, **self.fit_kwargs)
+            else:
+                fit_gpytorch_mll(self.mll, **self.fit_kwargs)
+        self.model.eval()
 
     def predict(self, candidates: Iterable[Candidate]) -> Mapping[str, Any]:
         """Returns predictions including the mean, std, and the full BoTorch posterior.
@@ -428,5 +424,5 @@ class GPBotorchSurrogate(Surrogate):
         if self.model is not None:
             self.model.load_state_dict(state_dict)
         else:
-            # Store it for when _build_and_fit_model is called
+            # Store it for when _build_model is called
             self._pending_state_dict = state_dict
