@@ -55,12 +55,15 @@ class HypercubeUniformSampler(Sampler):
         self.num_samples = num_samples
         self.fidelities = list(fidelities) if fidelities is not None else None
 
-        lowers = [b[0] for b in bounds]
-        uppers = [b[1] for b in bounds]
-        self._lower = torch.tensor(lowers, dtype=torch.float64)
-        self._range = torch.tensor(
-            [upper - lower for lower, upper in zip(lowers, uppers)], dtype=torch.float64
+        if len(bounds) == 0:
+            raise ValueError("bounds must not be empty")
+
+        # Extract lowers and ranges in a single pass to avoid iterating bounds twice
+        lowers, _, diffs = zip(
+            *[(lower, upper, upper - lower) for lower, upper in bounds]
         )
+        self._lower = torch.tensor(lowers, dtype=torch.float64)
+        self._range = torch.tensor(diffs, dtype=torch.float64)
 
     def sample(
         self,
