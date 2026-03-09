@@ -142,10 +142,7 @@ def test_raises_on_non_positive_num_samples():
         HypercubeUniformSampler(bounds=BRANIN_BOUNDS, num_samples=0)
 
 
-def test_empty_bounds_produces_zero_dimensional_candidates():
-    """Empty bounds are allowed and produce 0-dimensional candidate vectors."""
-    sampler = HypercubeUniformSampler(bounds=[], num_samples=5)
-    result = sampler.sample()
-    assert len(result) == 5
-    # Each candidate's x should be 0-dimensional when bounds is empty.
-    assert all(len(candidate.x) == 0 for candidate in result)
+def test_empty_bounds_not_allowed():
+    """Passing empty bounds should raise a ValueError."""
+    with pytest.raises(ValueError, match="bounds must not be empty"):
+        HypercubeUniformSampler(bounds=[], num_samples=5)
