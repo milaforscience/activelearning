@@ -169,7 +169,9 @@ class GPBotorchSurrogate(Surrogate):
             If the model was trained on multi-fidelity data, but candidates are
             missing fidelity values.
         """
-        test_X, fidelities = candidates_to_tensor(candidates, self._fidelity_confidences)
+        test_X, fidelities = candidates_to_tensor(
+            candidates, self._fidelity_confidences
+        )
         candidate_count = test_X.shape[0]
         # BoTorch requires 2D inputs: ensure (n, d)
         test_X = torch.atleast_2d(test_X)
