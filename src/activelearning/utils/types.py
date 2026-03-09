@@ -174,14 +174,13 @@ def candidates_to_tensor(
     """
     cand_list = candidates if isinstance(candidates, list) else list(candidates)
     X = _to_tensor([cand.x for cand in cand_list], torch.float64)
-    fidelities = (
-        [
+    if fidelity_confidences:
+        fidelities = [
             fidelity_confidences[cand.fidelity]
             for cand in cand_list
             if cand.fidelity is not None
         ]
-        if fidelity_confidences
-        else []
-    )
+    else:
+        fidelities = []
 
     return X, fidelities
