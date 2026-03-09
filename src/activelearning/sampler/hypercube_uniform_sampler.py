@@ -43,20 +43,19 @@ class HypercubeUniformSampler(Sampler):
         num_samples: int,
         fidelities: Optional[Sequence[int]] = None,
     ) -> None:
+        if len(bounds) == 0:
+            raise ValueError("bounds must not be empty")
         if num_samples <= 0:
             raise ValueError(f"num_samples must be > 0, got {num_samples}")
         for idx, (lower, upper) in enumerate(bounds):
             if lower >= upper:
                 raise ValueError(f"Bound {idx} has lower >= upper: ({lower}, {upper})")
-
         if fidelities is not None and len(fidelities) == 0:
             raise ValueError("fidelities must not be empty when specified")
+
         self.bounds = bounds
         self.num_samples = num_samples
         self.fidelities = list(fidelities) if fidelities is not None else None
-
-        if len(bounds) == 0:
-            raise ValueError("bounds must not be empty")
 
         # Extract lowers and ranges in a single pass to avoid iterating bounds twice
         lowers, _, diffs = zip(
