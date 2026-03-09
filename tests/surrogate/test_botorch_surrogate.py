@@ -433,9 +433,9 @@ def test_load_state_dict_after_fit(single_fidelity_observations):
     ), "Loaded state dict should make predictions identical to the source model"
 
 
-def test_normalize_inputs_false(single_fidelity_observations):
-    """Test that normalize_inputs=False skips input normalization without errors."""
-    surrogate = GPBotorchSurrogate(normalize_inputs=False)
+def test_scale_inputs_false(single_fidelity_observations):
+    """Test that scale_inputs=False skips input scaling without errors."""
+    surrogate = GPBotorchSurrogate(scale_inputs=False)
     surrogate.fit(single_fidelity_observations)
 
     assert surrogate.model is not None
@@ -547,9 +547,9 @@ def test_partial_update_raises_on_fidelity_mismatch(multi_fidelity_observations)
         surrogate._partial_update(bad_obs)
 
 
-def test_normalize_excludes_fidelity_column(multi_fidelity_observations):
+def test_scale_inputs_excludes_fidelity_column(multi_fidelity_observations):
     """Test that Normalize is applied only to feature columns, not the fidelity column."""
-    surrogate = GPBotorchSurrogate(normalize_inputs=True)
+    surrogate = GPBotorchSurrogate(scale_inputs=True)
     surrogate.set_fidelity_confidences({0: 0.1, 1: 0.95})
     surrogate.fit(multi_fidelity_observations)
 

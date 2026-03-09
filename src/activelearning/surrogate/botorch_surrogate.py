@@ -26,7 +26,7 @@ class GPBotorchSurrogate(Surrogate):
 
     def __init__(
         self,
-        normalize_inputs: bool = True,
+        scale_inputs: bool = True,
         standardize_outputs: bool = True,
         optimize_hyperparameters: bool = True,
         fit_kwargs: Optional[dict[str, Any]] = None,
@@ -37,10 +37,10 @@ class GPBotorchSurrogate(Surrogate):
         """
         Parameters
         ----------
-        normalize_inputs : bool, default=True
+        scale_inputs : bool, default=True
             If True, scales X values to [0, 1] internally.
         standardize_outputs : bool, default=True
-            If True, scales Y values to mean=0, var=1 internally.
+            If True, normalizes Y values to mean=0, var=1 internally.
         optimize_hyperparameters : bool, default=True
             If True, fits kernel hyperparameters during fit(). Set to False if you want
             to use a custom kernel's default initialization or if you are injecting a
@@ -69,7 +69,7 @@ class GPBotorchSurrogate(Surrogate):
             maximum reliability. Beginners should use False.
         """
         # Toggles and configurations
-        self.normalize_inputs = normalize_inputs
+        self.scale_inputs = scale_inputs
         self.standardize_outputs = standardize_outputs
         self.optimize_hyperparameters = optimize_hyperparameters
         self.fit_kwargs = fit_kwargs or {}
@@ -192,10 +192,10 @@ class GPBotorchSurrogate(Surrogate):
         )
 
         # 1. Setup Transforms
-        # When multi-fidelity, normalize only the feature columns (all except the last),
+        # When multi-fidelity, scale only the feature columns (all except the last),
         # leaving the fidelity confidence column in its original [0, 1] range.
         n_dims = self._train_X.shape[-1]
-        if self.normalize_inputs:
+        if self.scale_inputs:
             if self._is_multi_fidelity:
                 feature_indices = list(range(n_dims - 1))
                 input_transform = Normalize(d=n_dims, indices=feature_indices)
