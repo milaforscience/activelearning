@@ -187,16 +187,13 @@ class GPBotorchSurrogate(Surrogate):
 
         return test_X
 
-    def _build_model(self) -> None:
+    def _build_model(self, train_X: torch.Tensor, train_Y: torch.Tensor) -> None:
         """Construct the Gaussian Process model and marginal likelihood."""
-        assert self._train_X is not None and self._train_Y is not None, (
-            "_parse_observations() must be called before _build_model()."
-        )
 
         # 1. Setup Transforms
         # When multi-fidelity, scale only the feature columns (all except the last),
         # leaving the fidelity confidence column in its original [0, 1] range.
-        n_dims = self._train_X.shape[-1]
+        n_dims = train_X.shape[-1]
         if self.scale_inputs:
             if self._is_multi_fidelity:
                 feature_indices = list(range(n_dims - 1))
@@ -206,7 +203,7 @@ class GPBotorchSurrogate(Surrogate):
         else:
             input_transform = None
         outcome_transform = (
-            Standardize(m=self._train_Y.shape[-1]) if self.standardize_outputs else None
+            Standardize(m=train_Y.shape[-1]) if self.standardize_outputs else None
         )
 
         # 2. Build Model Configuration
@@ -215,8 +212,8 @@ class GPBotorchSurrogate(Surrogate):
         # with full control over the kernel (including fidelity dimensions).
         if self._is_multi_fidelity and self.covar_module is None:
             self.model = SingleTaskMultiFidelityGP(
-                self._train_X,
-                self._train_Y,
+                train_X,
+                train_Y,
                 data_fidelities=[-1],
                 outcome_transform=outcome_transform,
                 input_transform=input_transform,
@@ -224,8 +221,8 @@ class GPBotorchSurrogate(Surrogate):
         else:
             # Single-fidelity OR multi-fidelity with a custom kernel
             self.model = SingleTaskGP(
-                self._train_X,
-                self._train_Y,
+                train_X,
+                train_Y,
                 covar_module=self.covar_module,  # The user's kernel is passed here
                 outcome_transform=outcome_transform,
                 input_transform=input_transform,
@@ -272,8 +269,9 @@ class GPBotorchSurrogate(Surrogate):
         obs_list = list(observations)
         if not obs_list:
             raise ValueError("Cannot fit on an empty observation list.")
-        self._train_X, self._train_Y = self._parse_observations(obs_list)
-        self._build_model()
+        train_X, train_Y = self._parse_observations(obs_list)
+        self._train_X, self._train_Y = train_X, train_Y
+        self._build_model(train_X, train_Y)
         assert self.mll is not None and self.model is not None
         if self.optimize_hyperparameters:
             if self.custom_fit_function is not None:
