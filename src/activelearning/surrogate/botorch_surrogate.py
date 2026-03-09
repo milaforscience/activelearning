@@ -220,6 +220,8 @@ class GPBotorchSurrogate(Surrogate):
             )
         else:
             # Single-fidelity OR multi-fidelity with a custom kernel
+            # When covar_module is None, BoTorch currently defaults to an RBFKernel
+            # inside SingleTaskGP (this default may change across BoTorch versions).
             self.model = SingleTaskGP(
                 train_X,
                 train_Y,
