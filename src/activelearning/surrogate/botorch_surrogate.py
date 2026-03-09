@@ -68,6 +68,13 @@ class GPBotorchSurrogate(Surrogate):
             already fitted. If False, update() always performs full retraining for
             maximum reliability. Beginners should use False.
         """
+        if custom_fit_function is not None and not optimize_hyperparameters:
+            raise ValueError(
+                "custom_fit_function is provided but optimize_hyperparameters=False. "
+                "The custom function will never be called. Either set "
+                "optimize_hyperparameters=True or remove custom_fit_function."
+            )
+
         # Toggles and configurations
         self.scale_inputs = scale_inputs
         self.standardize_outputs = standardize_outputs
@@ -76,13 +83,6 @@ class GPBotorchSurrogate(Surrogate):
         self.custom_fit_function = custom_fit_function
         self.covar_module = covar_module
         self.use_partial_updates = use_partial_updates
-
-        if custom_fit_function is not None and not optimize_hyperparameters:
-            raise ValueError(
-                "custom_fit_function is provided but optimize_hyperparameters=False. "
-                "The custom function will never be called. Either set "
-                "optimize_hyperparameters=True or remove custom_fit_function."
-            )
 
         # Internal state tracking
         self.model = None
