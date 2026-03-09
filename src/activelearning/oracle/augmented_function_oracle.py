@@ -176,6 +176,9 @@ class Hartmann6DOracle(AugmentedFunctionOracle):
         fidelity_confidences: Optional[dict[int, float]] = None,
     ) -> None:
         super().__init__(
+            # The Hartmann function is naturally negative; negate=True flips
+            # its sign so values are positive. The active learning loop is
+            # formulated as a maximization, so this keeps behavior consistent.
             function=AugmentedHartmann(negate=True),
             fidelity_costs=fidelity_costs,
             fidelity_confidences=fidelity_confidences,
