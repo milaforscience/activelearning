@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 import torch
 from botorch.models import SingleTaskGP
@@ -333,7 +335,7 @@ def test_state_dict_extraction_and_injection(single_fidelity_observations):
 
 def test_custom_fit_function(single_fidelity_observations):
     """Test that a custom optimization loop is called instead of BoTorch defaults."""
-    call_tracker = {"called": False, "kwargs": None}
+    call_tracker: dict[str, Any] = {"called": False, "kwargs": None}
 
     # Create a dummy fit function
     def my_mock_optimizer(mll, **kwargs):
