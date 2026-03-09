@@ -26,6 +26,10 @@ class AugmentedFunctionOracle(Oracle):
     fidelity_costs : dict[int, float]
         Mapping from integer fidelity level to query cost. The level with the
         highest cost is treated as full fidelity (confidence = 1.0).
+    fidelity_confidences : dict[int, float], optional
+        Mapping from integer fidelity level to confidence in [0, 1], where
+        1.0 represents full fidelity. If None, confidences are derived
+        proportionally from costs: ``confidence = cost / max_cost``.
     """
 
     def __init__(
