@@ -5,7 +5,7 @@ import torch
 from botorch.models import SingleTaskGP
 from botorch.models.gp_regression_fidelity import SingleTaskMultiFidelityGP
 
-from activelearning.surrogate.botorch_surrogate import BoTorchSurrogate
+from activelearning.surrogate.botorch_surrogate import GPBotorchSurrogate
 from activelearning.utils.types import Observation, Candidate
 from activelearning.dataset.list_dataset import ListDataset
 
@@ -38,7 +38,7 @@ def dataset_with_observations(single_fidelity_observations):
 
 
 def test_single_fidelity_fit_and_predict(single_fidelity_observations):
-    surrogate = BoTorchSurrogate()
+    surrogate = GPBotorchSurrogate()
 
     # Test Fitting
     surrogate.fit(single_fidelity_observations)
@@ -59,7 +59,7 @@ def test_single_fidelity_fit_and_predict(single_fidelity_observations):
 
 
 def test_multi_fidelity_fit_and_predict(multi_fidelity_observations):
-    surrogate = BoTorchSurrogate()
+    surrogate = GPBotorchSurrogate()
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
 
     # Test Fitting
@@ -79,7 +79,7 @@ def test_multi_fidelity_fit_and_predict(multi_fidelity_observations):
 
 
 def test_tensor_parsing_shapes(multi_fidelity_observations):
-    surrogate = BoTorchSurrogate()
+    surrogate = GPBotorchSurrogate()
     surrogate.set_fidelity_confidences({0: 0.0, 1: 1.0})
 
     # Manually trigger parsing to check internal tensor shapes
@@ -95,7 +95,7 @@ def test_tensor_parsing_shapes(multi_fidelity_observations):
 
 
 def test_mixed_fidelity_raises_error():
-    surrogate = BoTorchSurrogate()
+    surrogate = GPBotorchSurrogate()
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     bad_observations = [
         Observation(x=[1.0], y=2.0, fidelity=0),
@@ -108,7 +108,7 @@ def test_mixed_fidelity_raises_error():
 
 def test_update_unfitted_model(single_fidelity_observations):
     """Test that updates_from_latest() returns False when model is None, causing full fit."""
-    surrogate = BoTorchSurrogate()
+    surrogate = GPBotorchSurrogate()
 
     dataset = ListDataset()
     dataset.add_observations(single_fidelity_observations)
@@ -123,7 +123,7 @@ def test_update_unfitted_model(single_fidelity_observations):
 
 def test_update_fitted_model(single_fidelity_observations):
     """Test that update works on already fitted model."""
-    surrogate = BoTorchSurrogate()
+    surrogate = GPBotorchSurrogate()
 
     # 1. Fit on the first two observations
     initial_train = single_fidelity_observations[:2]
@@ -153,7 +153,7 @@ def test_update_fitted_model(single_fidelity_observations):
 
 def test_update_with_dataset_full_refit(dataset_with_observations):
     """Test updates_from_latest()=False with use_partial_updates=False always does full refit."""
-    surrogate = BoTorchSurrogate(use_partial_updates=False)
+    surrogate = GPBotorchSurrogate(use_partial_updates=False)
 
     # Initial fit — loop always calls fit() when updates_from_latest() is False
     assert not surrogate.updates_from_latest()
@@ -182,7 +182,7 @@ def test_update_with_dataset_full_refit(dataset_with_observations):
 
 def test_update_with_dataset_partial_updates(dataset_with_observations):
     """Test use_partial_updates=True: first call does full fit, subsequent calls use update()."""
-    surrogate = BoTorchSurrogate(use_partial_updates=True)
+    surrogate = GPBotorchSurrogate(use_partial_updates=True)
 
     # First call: model is None → updates_from_latest() returns False → full fit
     assert not surrogate.updates_from_latest()
@@ -212,7 +212,7 @@ def test_update_with_dataset_partial_updates(dataset_with_observations):
 def test_update_first_call_always_fits(single_fidelity_observations):
     """Test that updates_from_latest() returns False when model is None, forcing full fit."""
     # Test with use_partial_updates=True — first call: model is None
-    surrogate_partial = BoTorchSurrogate(use_partial_updates=True)
+    surrogate_partial = GPBotorchSurrogate(use_partial_updates=True)
     dataset = ListDataset()
     dataset.add_observations(single_fidelity_observations)
 
@@ -223,7 +223,7 @@ def test_update_first_call_always_fits(single_fidelity_observations):
     assert surrogate_partial.model is not None
 
     # Test with use_partial_updates=False — always full fit
-    surrogate_full = BoTorchSurrogate(use_partial_updates=False)
+    surrogate_full = GPBotorchSurrogate(use_partial_updates=False)
     dataset2 = ListDataset()
     dataset2.add_observations(single_fidelity_observations)
 
@@ -235,8 +235,8 @@ def test_update_first_call_always_fits(single_fidelity_observations):
 def test_update_predictions_correct_both_modes(single_fidelity_observations):
     """Test that predictions are reasonable with both partial and full update modes."""
     # Create two surrogates with different update strategies
-    surrogate_full = BoTorchSurrogate(use_partial_updates=False)
-    surrogate_partial = BoTorchSurrogate(use_partial_updates=True)
+    surrogate_full = GPBotorchSurrogate(use_partial_updates=False)
+    surrogate_partial = GPBotorchSurrogate(use_partial_updates=True)
 
     # Initial data
     initial_obs = single_fidelity_observations[:2]
@@ -278,7 +278,7 @@ def test_update_predictions_correct_both_modes(single_fidelity_observations):
 
 def test_fidelity_confidence_mapping(multi_fidelity_observations):
     """Test that integer fidelity IDs are correctly mapped to continuous confidences."""
-    surrogate = BoTorchSurrogate()
+    surrogate = GPBotorchSurrogate()
 
     # Map fidelity 0 -> 0.5, fidelity 1 -> 0.95
     surrogate.set_fidelity_confidences({0: 0.5, 1: 0.95})
@@ -294,7 +294,7 @@ def test_custom_covar_module_routing(multi_fidelity_observations):
     """Test that providing a covar_module forces routing to SingleTaskGP in MF setting."""
     from gpytorch.kernels import RBFKernel
 
-    surrogate = BoTorchSurrogate(covar_module=RBFKernel())
+    surrogate = GPBotorchSurrogate(covar_module=RBFKernel())
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
 
@@ -310,14 +310,14 @@ def test_custom_covar_module_routing(multi_fidelity_observations):
 def test_state_dict_extraction_and_injection(single_fidelity_observations):
     """Test that hyperparameters can be extracted and perfectly reloaded."""
     # 1. Train a base model
-    base_surrogate = BoTorchSurrogate()
+    base_surrogate = GPBotorchSurrogate()
     base_surrogate.fit(single_fidelity_observations)
     saved_state = base_surrogate.state_dict()
 
     assert saved_state is not None
 
     # 2. Initialize a new model, explicitly freezing hyperparameters
-    new_surrogate = BoTorchSurrogate(optimize_hyperparameters=False)
+    new_surrogate = GPBotorchSurrogate(optimize_hyperparameters=False)
 
     # Inject the state dict BEFORE fitting (tests the _pending_state_dict logic)
     new_surrogate.load_state_dict(saved_state)
@@ -342,7 +342,7 @@ def test_custom_fit_function(single_fidelity_observations):
         call_tracker["called"] = True
         call_tracker["kwargs"] = kwargs
 
-    surrogate = BoTorchSurrogate(
+    surrogate = GPBotorchSurrogate(
         custom_fit_function=my_mock_optimizer,
         fit_kwargs={"learning_rate": 0.01, "epochs": 50},
     )
@@ -361,7 +361,7 @@ def test_custom_fit_function_with_optimize_disabled_raises():
         ValueError,
         match="custom_fit_function is provided but optimize_hyperparameters=False",
     ):
-        BoTorchSurrogate(
+        GPBotorchSurrogate(
             custom_fit_function=lambda mll: None,
             optimize_hyperparameters=False,
         )
@@ -369,7 +369,7 @@ def test_custom_fit_function_with_optimize_disabled_raises():
 
 def test_predict_before_fit_raises():
     """Test that predict raises RuntimeError when called before the model is fitted."""
-    surrogate = BoTorchSurrogate()
+    surrogate = GPBotorchSurrogate()
     candidates = [Candidate(x=[1.0, 2.0])]
 
     with pytest.raises(RuntimeError, match="fitted before calling predict"):
@@ -378,7 +378,7 @@ def test_predict_before_fit_raises():
 
 def test_parse_candidates_missing_fidelity_raises(multi_fidelity_observations):
     """Test that predict raises ValueError when multi-fidelity model gets candidates without fidelity."""
-    surrogate = BoTorchSurrogate()
+    surrogate = GPBotorchSurrogate()
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
 
@@ -390,7 +390,7 @@ def test_parse_candidates_missing_fidelity_raises(multi_fidelity_observations):
 
 def test_parse_candidates_fidelity_confidence_mapping(multi_fidelity_observations):
     """Test that fidelity confidence mapping is applied to candidates, not just observations."""
-    surrogate = BoTorchSurrogate()
+    surrogate = GPBotorchSurrogate()
     surrogate.set_fidelity_confidences({0: 0.5, 1: 0.95})
     surrogate.fit(multi_fidelity_observations)
 
@@ -406,19 +406,19 @@ def test_parse_candidates_fidelity_confidence_mapping(multi_fidelity_observation
 
 def test_state_dict_before_fit_returns_none():
     """Test that state_dict returns None when the model has not been fitted."""
-    surrogate = BoTorchSurrogate()
+    surrogate = GPBotorchSurrogate()
     assert surrogate.state_dict() is None
 
 
 def test_load_state_dict_after_fit(single_fidelity_observations):
     """Test that load_state_dict updates an already-fitted model in-place."""
-    base = BoTorchSurrogate()
+    base = GPBotorchSurrogate()
     base.fit(single_fidelity_observations)
     saved_state = base.state_dict()
     assert saved_state is not None  # state_dict() returns None only before fitting
 
     # Fit a second surrogate independently, then overwrite its state
-    other = BoTorchSurrogate(optimize_hyperparameters=False)
+    other = GPBotorchSurrogate(optimize_hyperparameters=False)
     other.fit(single_fidelity_observations)
     other.load_state_dict(saved_state)
 
@@ -435,7 +435,7 @@ def test_load_state_dict_after_fit(single_fidelity_observations):
 
 def test_normalize_inputs_false(single_fidelity_observations):
     """Test that normalize_inputs=False skips input normalization without errors."""
-    surrogate = BoTorchSurrogate(normalize_inputs=False)
+    surrogate = GPBotorchSurrogate(normalize_inputs=False)
     surrogate.fit(single_fidelity_observations)
 
     assert surrogate.model is not None
@@ -447,7 +447,7 @@ def test_normalize_inputs_false(single_fidelity_observations):
 
 def test_standardize_outputs_false(single_fidelity_observations):
     """Test that standardize_outputs=False skips output standardization without errors."""
-    surrogate = BoTorchSurrogate(standardize_outputs=False)
+    surrogate = GPBotorchSurrogate(standardize_outputs=False)
     surrogate.fit(single_fidelity_observations)
 
     assert surrogate.model is not None
@@ -467,7 +467,7 @@ def test_set_fidelity_confidences_propagates_to_covar_module():
         def update_confidences(self, confidences: dict) -> None:
             received.update(confidences)
 
-    surrogate = BoTorchSurrogate(covar_module=MockKernel())
+    surrogate = GPBotorchSurrogate(covar_module=MockKernel())
     surrogate.set_fidelity_confidences({0: 0.3, 1: 0.9})
 
     assert received == {0: 0.3, 1: 0.9}, (
@@ -477,7 +477,7 @@ def test_set_fidelity_confidences_propagates_to_covar_module():
 
 def test_partial_update_fallback_when_model_none(single_fidelity_observations):
     """Test that _partial_update falls back to a full fit when model is None."""
-    surrogate = BoTorchSurrogate(use_partial_updates=True)
+    surrogate = GPBotorchSurrogate(use_partial_updates=True)
 
     # Call _partial_update directly before any fit
     surrogate._partial_update(single_fidelity_observations)
@@ -490,7 +490,7 @@ def test_partial_update_fallback_when_model_none(single_fidelity_observations):
 
 def test_partial_update_ignores_empty_observations(single_fidelity_observations):
     """Test that _partial_update is a no-op when the observation list is empty."""
-    surrogate = BoTorchSurrogate(use_partial_updates=True)
+    surrogate = GPBotorchSurrogate(use_partial_updates=True)
     surrogate.fit(single_fidelity_observations)
     model_before = surrogate.model
 
@@ -510,7 +510,7 @@ def test_is_multi_fidelity_resets_between_fits(
     followed by SF data would attempt to build a SingleTaskMultiFidelityGP without
     a fidelity column and crash.
     """
-    surrogate = BoTorchSurrogate()
+    surrogate = GPBotorchSurrogate()
 
     # First fit: multi-fidelity
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
@@ -530,14 +530,14 @@ def test_is_multi_fidelity_resets_between_fits(
 
 def test_fit_empty_observations_raises():
     """Test that fit raises a clear ValueError when given an empty observation list."""
-    surrogate = BoTorchSurrogate()
+    surrogate = GPBotorchSurrogate()
     with pytest.raises(ValueError, match="empty observation list"):
         surrogate.fit([])
 
 
 def test_partial_update_raises_on_fidelity_mismatch(multi_fidelity_observations):
     """Test that _partial_update raises when new observations are missing fidelities."""
-    surrogate = BoTorchSurrogate(use_partial_updates=True)
+    surrogate = GPBotorchSurrogate(use_partial_updates=True)
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
 
@@ -549,7 +549,7 @@ def test_partial_update_raises_on_fidelity_mismatch(multi_fidelity_observations)
 
 def test_normalize_excludes_fidelity_column(multi_fidelity_observations):
     """Test that Normalize is applied only to feature columns, not the fidelity column."""
-    surrogate = BoTorchSurrogate(normalize_inputs=True)
+    surrogate = GPBotorchSurrogate(normalize_inputs=True)
     surrogate.set_fidelity_confidences({0: 0.1, 1: 0.95})
     surrogate.fit(multi_fidelity_observations)
 

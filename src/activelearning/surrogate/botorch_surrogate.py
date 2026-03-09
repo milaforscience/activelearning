@@ -17,7 +17,7 @@ from activelearning.utils.types import (
 )
 
 
-class BoTorchSurrogate(Surrogate):
+class GPBotorchSurrogate(Surrogate):
     """A highly flexible Gaussian Process surrogate using BoTorch.
 
     Automatically handles single-fidelity and multi-fidelity configurations,
