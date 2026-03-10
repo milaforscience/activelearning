@@ -75,28 +75,28 @@ class Dataset(ABC):
 
         Notes
         -----
-            - This method should return only the observations from the last
-              add_observations() call, not all historical observations
-            - Like get_observations_iterable(), this may be called multiple times
-              and should return a fresh iterable each time
-            - If add_observations() is called again, subsequent calls to this method
-              should return the new batch, not the previous one
+        - This method should return only the observations from the last
+            add_observations() call, not all historical observations
+        - Like get_observations_iterable(), this may be called multiple times
+            and should return a fresh iterable each time
+        - If add_observations() is called again, subsequent calls to this method
+            should return the new batch, not the previous one
 
         Examples
         --------
-            After first batch:
-            ```python
-            dataset.add_observations([obs1, obs2, obs3])
-            latest = list(dataset.get_latest_observations_iterable())
-            # latest == [obs1, obs2, obs3]
-            ```
+        After first batch:
+        ```python
+        dataset.add_observations([obs1, obs2, obs3])
+        latest = list(dataset.get_latest_observations_iterable())
+        # latest == [obs1, obs2, obs3]
+        ```
 
-            After second batch:
-            ```python
-            dataset.add_observations([obs4, obs5])
-            latest = list(dataset.get_latest_observations_iterable())
-            # latest == [obs4, obs5]  (not obs1-obs5)
-            ```
+        After second batch:
+        ```python
+        dataset.add_observations([obs4, obs5])
+        latest = list(dataset.get_latest_observations_iterable())
+        # latest == [obs4, obs5]  (not obs1-obs5)
+        ```
         """
         pass
 
