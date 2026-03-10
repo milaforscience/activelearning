@@ -85,9 +85,7 @@ class HypercubeSampler(Sampler):
             self._fidelity_levels = fidelities
 
         # Precompute lower bounds and ranges to avoid re-iterating on each call
-        lowers, _, diffs = zip(
-            *[(lower, upper, upper - lower) for lower, upper in bounds]
-        )
+        lowers, diffs = zip(*[(lower, upper - lower) for lower, upper in bounds])
         self._lower = torch.tensor(lowers, dtype=torch.float64)
         self._range = torch.tensor(diffs, dtype=torch.float64)
 
