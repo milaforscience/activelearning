@@ -1,6 +1,6 @@
 import torch
 
-from typing import Any, Iterable, Optional, Sequence
+from typing import Iterable, Optional, Sequence
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.sampler import Sampler
 from activelearning.utils.types import Candidate, Observation
@@ -28,7 +28,6 @@ class PoolScoreSampler(Sampler):
         self,
         acquisition: Optional[Acquisition] = None,
         observations: Optional[Iterable[Observation]] = None,
-        **kwargs: Any,
     ) -> list[Candidate]:
         """Samples from the candidate pool weighted by acquisition values.
 
@@ -38,8 +37,6 @@ class PoolScoreSampler(Sampler):
             Acquisition function to compute acquisition values for candidates.
         observations : Optional[Iterable[Observation]]
             Optional iterable of observations (not used by this sampler).
-        **kwargs
-            Additional arguments (unused).
 
         Returns
         -------
