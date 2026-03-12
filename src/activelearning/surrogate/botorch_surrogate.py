@@ -1,10 +1,11 @@
 import torch
-from typing import Any, Callable, Iterable, Mapping, Optional, Tuple, cast
+from typing import Any, Callable, Iterable, Mapping, Optional, cast
+
+from botorch.fit import fit_gpytorch_mll
 from botorch.models import SingleTaskGP
 from botorch.models.gp_regression_fidelity import SingleTaskMultiFidelityGP
-from botorch.fit import fit_gpytorch_mll
-from botorch.models.transforms.outcome import Standardize
 from botorch.models.transforms.input import Normalize
+from botorch.models.transforms.outcome import Standardize
 from gpytorch.mlls import ExactMarginalLogLikelihood
 from gpytorch.module import Module
 
@@ -12,12 +13,12 @@ from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import (
     Candidate,
     Observation,
-    observations_to_tensors,
     candidates_to_tensor,
+    observations_to_tensors,
 )
 
 
-class GPBotorchSurrogate(Surrogate):
+class BoTorchGPSurrogate(Surrogate):
     """A highly flexible Gaussian Process surrogate using BoTorch.
 
     Automatically handles single-fidelity and multi-fidelity configurations,
@@ -30,17 +31,18 @@ class GPBotorchSurrogate(Surrogate):
         standardize_outputs: bool = True,
         optimize_hyperparameters: bool = True,
         fit_kwargs: Optional[dict[str, Any]] = None,
-        custom_fit_function: Optional[Callable] = None,
+        custom_fit_function: Optional[Callable[..., Any]] = None,
         covar_module: Optional[Module] = None,
         use_partial_updates: bool = False,
-    ):
-        """
+    ) -> None:
+        """Initialize the BoTorch GP surrogate.
+
         Parameters
         ----------
         scale_inputs : bool, default=True
-            If True, scales X values to [0, 1] internally.
+            If True, scales input values to [0, 1] internally.
         standardize_outputs : bool, default=True
-            If True, normalizes Y values to mean=0, var=1 internally.
+            If True, normalizes output values to mean=0, var=1 internally.
         optimize_hyperparameters : bool, default=True
             If True, fits kernel hyperparameters during fit(). Set to False if you want
             to use a custom kernel's default initialization or if you are injecting a
@@ -74,7 +76,6 @@ class GPBotorchSurrogate(Surrogate):
                 "The custom function will never be called. Either set "
                 "optimize_hyperparameters=True or remove custom_fit_function."
             )
-
         # Toggles and configurations
         self.scale_inputs = scale_inputs
         self.standardize_outputs = standardize_outputs
@@ -85,23 +86,405 @@ class GPBotorchSurrogate(Surrogate):
         self.use_partial_updates = use_partial_updates
 
         # Internal state tracking
-        self.model = None
-        self.mll = None
-        self._is_multi_fidelity = False
+        self.model: Optional[SingleTaskGP | SingleTaskMultiFidelityGP] = None
+        self.mll: Optional[ExactMarginalLogLikelihood] = None
+        self._is_multi_fidelity: bool = False
         self._train_X: Optional[torch.Tensor] = None
         self._train_Y: Optional[torch.Tensor] = None
         self._fidelity_confidences: dict[int, float] = {}
         self._pending_state_dict: Optional[dict[str, torch.Tensor]] = None
 
-    def _parse_observations(
-        self, observations: Iterable[Observation]
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Converts generic Observations into BoTorch-ready tensors.
+    def set_fidelity_confidences(self, confidences: dict[int, float]) -> None:
+        """Stores fidelity confidences and passes them to the custom kernel if supported.
 
-        Also updates ``_is_multi_fidelity`` based on whether the supplied
-        observations contain fidelity values. This flag is reset on every
-        call, so repeated calls with different observation types always
-        leave the surrogate in a consistent state.
+        Parameters
+        ----------
+        confidences : dict[int, float]
+            Mapping of fidelity levels (integer indices) to confidence
+            values in the range [0, 1].
+        """
+        copied_confidences = dict(confidences)
+        self._fidelity_confidences = copied_confidences
+
+        # Optional protocol for custom kernels that need access to the mapping.
+        if self.covar_module is not None and hasattr(
+            self.covar_module, "update_confidences"
+        ):
+            cast(Any, self.covar_module).update_confidences(copied_confidences)
+
+    def fit(self, observations: Iterable[Observation]) -> None:
+        """Fit the surrogate from scratch on all provided observations.
+
+        Parameters
+        ----------
+        observations : Iterable[Observation]
+            Iterable of observations to train on. Materialized to a list internally.
+
+        Raises
+        ------
+        ValueError
+            If observations is empty or structurally incompatible.
+        """
+        obs_list = list(observations)
+        if not obs_list:
+            raise ValueError(
+                "Cannot fit BoTorchGPSurrogate on an empty observation list."
+            )
+
+        train_X, train_Y, is_multi_fidelity = self._parse_observations(obs_list)
+        self._is_multi_fidelity = is_multi_fidelity
+        self._train_X = train_X
+        self._train_Y = train_Y
+
+        self._build_model(train_X, train_Y)
+
+        assert self.model is not None
+        assert self.mll is not None
+
+        if self.optimize_hyperparameters:
+            if self.custom_fit_function is not None:
+                self.custom_fit_function(self.mll, **self.fit_kwargs)
+            else:
+                fit_gpytorch_mll(self.mll, **self.fit_kwargs)
+
+        # Switch the model to evaluation mode so it behaves in inference mode
+        # (disables training-specific behavior in PyTorch modules).
+        self.model.eval()
+
+    def update(self, observations: Iterable[Observation]) -> None:
+        """Incrementally update the fitted surrogate using new observations.
+
+        Called only when ``updates_from_latest()`` returns ``True``.
+
+        Parameters
+        ----------
+        observations : Iterable[Observation]
+            Iterable of newly acquired observations.
+
+        Raises
+        ------
+        ValueError
+            If the incoming observations are incompatible with the fitted model
+            mode (single-fidelity vs multi-fidelity).  Uses a fast low-rank Cholesky conditioning step without
+            retraining hyperparameters.
+        """
+        if self.model is None or self._train_X is None or self._train_Y is None:
+            # Fallback to a full fit if the model hasn't been initialized
+            self.fit(observations)
+            return
+
+        obs_list = list(observations)
+        if not obs_list:
+            return
+
+        incoming_is_multi_fidelity = self._infer_is_multi_fidelity(obs_list)
+
+        if self._is_multi_fidelity and not incoming_is_multi_fidelity:
+            missing = [i for i, obs in enumerate(obs_list) if obs.fidelity is None]
+            raise ValueError(
+                "Surrogate was fitted in multi-fidelity mode, but new observations "
+                f"at indices {missing} are missing fidelity values."
+            )
+        if not self._is_multi_fidelity and incoming_is_multi_fidelity:
+            raise ValueError(
+                "Surrogate was fitted in single-fidelity mode, but new observations "
+                "include fidelity values."
+            )
+
+        new_X, new_Y, parsed_is_multi_fidelity = self._parse_observations(obs_list)
+        if parsed_is_multi_fidelity != self._is_multi_fidelity:
+            raise ValueError(
+                "Incoming observation structure is incompatible with the fitted surrogate."
+            )
+
+        self._train_X = torch.cat([self._train_X, new_X], dim=0)
+        self._train_Y = torch.cat([self._train_Y, new_Y], dim=0)
+
+        # Fast Cholesky update (internal data scaling transforms apply automatically)
+        # Note: condition_on_observations requires the model to have made at least one prediction
+        # to populate internal caches. We need to trigger a prediction first.
+        self.model.eval()
+        with torch.no_grad():
+            # Make a dummy prediction to initialize caches
+            _ = self.model.posterior(new_X[:1])
+
+        self.model = cast(
+            SingleTaskGP | SingleTaskMultiFidelityGP,
+            self.model.condition_on_observations(X=new_X, Y=new_Y),
+        )
+
+    def updates_from_latest(self) -> bool:
+        """Return True when the model is fitted and partial updates are enabled.
+
+        The active learning loop uses this to decide whether to call
+        ``update(latest_observations)`` (incremental Cholesky) or
+        ``fit(all_observations)`` (full retraining).
+
+        Returns
+        -------
+        bool
+            ``True`` if ``use_partial_updates=True`` and the model has already
+            been fitted at least once; ``False`` otherwise.
+        """
+        return self.use_partial_updates and self.model is not None
+
+    def predict(self, candidates: Iterable[Candidate]) -> Mapping[str, Any]:
+        """Predict posterior quantities for candidates.
+
+        Parameters
+        ----------
+        candidates : Iterable[Candidate]
+            Iterable of candidates to evaluate.
+
+        Returns
+        -------
+        result : Mapping[str, Any]
+            Dictionary containing:
+            - ``"mean"``: list of posterior means
+            - ``"std"``: list of posterior standard deviations
+            - ``"posterior"``: raw BoTorch posterior object
+
+        Raises
+        ------
+        RuntimeError
+            If called before the surrogate has been fitted.
+        """
+        model = self.get_model()
+        test_X = self.encode_candidates(candidates)
+
+        # Re-assert evaluation mode in case external code switched the model
+        # back to training mode between fit() and predict().
+        model.eval()
+        with torch.no_grad():
+            posterior = model.posterior(test_X)
+
+        return {
+            "mean": posterior.mean.squeeze(-1).tolist(),
+            "std": posterior.variance.sqrt().squeeze(-1).tolist(),
+            "posterior": posterior,
+        }
+
+    def state_dict(self) -> Optional[dict[str, torch.Tensor]]:
+        """Return the fitted model state dictionary, if available.
+
+        Returns
+        -------
+        result : Optional[dict[str, torch.Tensor]]
+            Fitted model state dictionary, or ``None`` if the model has not yet
+            been built.
+        """
+        if self.model is None:
+            return None
+        return self.model.state_dict()
+
+    def load_state_dict(self, state_dict: dict[str, torch.Tensor]) -> None:
+        """Load a model state dictionary immediately or defer until model build.
+
+        Parameters
+        ----------
+        state_dict : dict[str, torch.Tensor]
+            Model parameters to load.
+        """
+        if self.model is not None:
+            self.model.load_state_dict(state_dict)
+        else:
+            # Store it for when _build_model is called
+            self._pending_state_dict = state_dict
+
+    # ------------------------------------------------------------------
+    # BoTorch-specific public interface for acquisition modules
+    # ------------------------------------------------------------------
+    def get_model(self) -> SingleTaskGP | SingleTaskMultiFidelityGP:
+        """Return the fitted BoTorch model.
+
+        Returns
+        -------
+        result : SingleTaskGP | SingleTaskMultiFidelityGP
+            The fitted BoTorch model.
+
+        Raises
+        ------
+        RuntimeError
+            If called before the surrogate has been fitted.
+        """
+        if self.model is None:
+            raise RuntimeError("BoTorch surrogate model has not been fitted yet.")
+        return self.model
+
+    def get_train_data(self) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return training tensors used by the fitted model.
+
+        Returns
+        -------
+        train_X : torch.Tensor
+            Encoded training inputs
+        train_Y : torch.Tensor
+            Encoded training targets
+
+        Raises
+        ------
+        RuntimeError
+            If called before the surrogate has been fitted.
+        """
+        if self._train_X is None or self._train_Y is None:
+            raise RuntimeError("BoTorch surrogate training data is not available yet.")
+        return self._train_X, self._train_Y
+
+    def encode_candidates(self, candidates: Iterable[Candidate]) -> torch.Tensor:
+        """Encode singleton candidates into model-space input tensors.
+
+        Parameters
+        ----------
+        candidates : Iterable[Candidate]
+            Iterable of candidates to encode. Materialized to a list internally.
+
+        Returns
+        -------
+        test_X : torch.Tensor
+            Encoded candidate tensor of shape ``(N, d)``.
+
+        Raises
+        ------
+        ValueError
+            If candidates are incompatible with the fitted model mode.
+        """
+        cand_list = list(candidates)
+        if not cand_list:
+            raise ValueError("Cannot encode an empty candidate iterable.")
+
+        test_X, fidelities = candidates_to_tensor(cand_list, self._fidelity_confidences)
+        test_X = torch.atleast_2d(test_X)
+        candidate_count = test_X.shape[0]
+
+        incoming_is_multi_fidelity = any(
+            cand.fidelity is not None for cand in cand_list
+        )
+
+        if self._is_multi_fidelity:
+            if not incoming_is_multi_fidelity or len(fidelities) != candidate_count:
+                raise ValueError(
+                    "Surrogate was fitted in multi-fidelity mode. "
+                    "All candidates must provide a fidelity."
+                )
+            fid_tensor = torch.tensor(fidelities, dtype=torch.float64).view(-1, 1)
+            test_X = torch.cat([test_X, fid_tensor], dim=-1)
+        else:
+            if incoming_is_multi_fidelity:
+                raise ValueError(
+                    "Surrogate was fitted in single-fidelity mode. "
+                    "Candidates must not provide fidelity values."
+                )
+
+        return test_X
+
+    def encode_candidate_batches(
+        self,
+        candidate_batches: Iterable[Iterable[Candidate]],
+    ) -> torch.Tensor:
+        """Encode candidate batches into q-batch model-space tensors.
+
+        Parameters
+        ----------
+        candidate_batches : Iterable[Iterable[Candidate]]
+            Iterable of candidate batches. Each inner iterable represents one
+            batch to be jointly scored.
+
+        Returns
+        -------
+        batch_X : torch.Tensor
+            Encoded tensor of shape ``(B, q, d)``, where:
+            - ``B`` is the number of batches,
+            - ``q`` is the common batch size.
+
+        Raises
+        ------
+        ValueError
+            If no batches are provided, if batch sizes are ragged, or if any
+            batch is incompatible with the fitted model.
+        """
+        batch_list = [list(batch) for batch in candidate_batches]
+        if not batch_list:
+            raise ValueError("Cannot encode an empty batch iterable.")
+        if any(len(batch) == 0 for batch in batch_list):
+            raise ValueError("Candidate batches must not be empty.")
+
+        q = len(batch_list[0])
+        ragged_indices = [i for i, batch in enumerate(batch_list) if len(batch) != q]
+        if ragged_indices:
+            raise ValueError(
+                "All candidate batches must have the same size. "
+                f"Ragged batch indices: {ragged_indices}."
+            )
+
+        encoded_batches = [self.encode_candidates(batch) for batch in batch_list]
+        return torch.stack(encoded_batches, dim=0)
+
+    def is_multi_fidelity(self) -> bool:
+        """Return whether the fitted surrogate is operating in multi-fidelity mode.
+
+        Returns
+        -------
+        result : bool
+            ``True`` if the model input includes an appended fidelity dimension,
+            ``False`` otherwise.
+        """
+        return self._is_multi_fidelity
+
+    def get_fidelity_confidences(self) -> dict[int, float]:
+        """Return the configured fidelity-confidence mapping.
+
+        Returns
+        -------
+        result : dict[int, float]
+            Mapping from integer fidelity ids to encoded confidence values.
+        """
+        return dict(self._fidelity_confidences)
+
+    def get_fidelity_dimension(self) -> Optional[int]:
+        """Return the model-space fidelity dimension index, if any.
+
+        Returns
+        -------
+        result : Optional[int]
+            Index of the appended fidelity column in encoded model-space inputs,
+            or ``None`` in single-fidelity mode.
+
+        Raises
+        ------
+        RuntimeError
+            If called before the surrogate has been fitted.
+        """
+        train_X, _ = self.get_train_data()
+        if not self._is_multi_fidelity:
+            return None
+        return train_X.shape[-1] - 1
+
+    def get_target_fidelity_value(self) -> Optional[float]:
+        """Return the encoded target fidelity value used in model space.
+
+        Returns
+        -------
+        result : Optional[float]
+            Encoded target fidelity value, typically the maximum confidence,
+            or ``None`` in single-fidelity mode.
+        """
+        if not self._is_multi_fidelity:
+            return None
+        if not self._fidelity_confidences:
+            raise RuntimeError(
+                "Multi-fidelity mode is active but no fidelity confidences are set."
+            )
+        return max(self._fidelity_confidences.values())
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _parse_observations(
+        self,
+        observations: Iterable[Observation],
+    ) -> tuple[torch.Tensor, torch.Tensor, bool]:
+        """Converts generic Observations into BoTorch-ready tensors.
 
         Parameters
         ----------
@@ -116,84 +499,52 @@ class GPBotorchSurrogate(Surrogate):
             as the final column if multi-fidelity.
         train_Y : torch.Tensor
             A tensor of observed labels reshaped for BoTorch.
+        is_multi_fidelity : bool
+            Whether the observations are structurally multi-fidelity.
 
         Raises
         ------
         ValueError
-            If multi-fidelity observations are provided but not all observations
-            contain a fidelity value.
+            If some but not all observations provide fidelity values.
         """
-        # Reset on every call so that switching from MF → SF (or vice versa)
-        # never leaves stale state from a previous invocation.
-        self._is_multi_fidelity = False
+        obs_list = list(observations)
+        if not obs_list:
+            raise ValueError("Cannot parse an empty observation iterable.")
 
-        X, y, fidelities = observations_to_tensors(
-            observations, self._fidelity_confidences
-        )
-        # BoTorch requires 2D inputs: ensure (n, d) for X and (n, 1) for Y
+        is_multi_fidelity = self._infer_is_multi_fidelity(obs_list)
+
+        X, y, fidelities = observations_to_tensors(obs_list, self._fidelity_confidences)
         train_X = torch.atleast_2d(X)
         train_Y = y.view(-1, 1)
         obs_count = train_X.shape[0]
 
-        # Handle multi-fidelity concatenation
-        if fidelities:
+        if is_multi_fidelity:
             if len(fidelities) != obs_count:
                 raise ValueError(
-                    "If using multi-fidelity, all observations must have a fidelity."
+                    "If using multi-fidelity observations, all observations must "
+                    "provide a fidelity value present in the fidelity-confidence map."
                 )
-
-            self._is_multi_fidelity = True
             fid_tensor = torch.tensor(fidelities, dtype=torch.float64).view(-1, 1)
-            # Append fidelity as the final column of the training data
             train_X = torch.cat([train_X, fid_tensor], dim=-1)
 
-        return train_X, train_Y
+        return train_X, train_Y, is_multi_fidelity
 
-    def _parse_candidates(self, candidates: Iterable[Candidate]) -> torch.Tensor:
-        """Converts Candidates into BoTorch-ready tensors.
+    def _build_model(self, train_X: torch.Tensor, train_Y: torch.Tensor) -> None:
+        """Construct the BoTorch Gaussian Process model and marginal log likelihood.
 
         Parameters
         ----------
-        candidates : Iterable[Candidate]
-            Candidates to evaluate. Materialized to a list internally.
-
-        Returns
-        -------
-        test_X : torch.Tensor
-            A tensor of candidate features, with mapped fidelity confidences appended
-            as the final column if multi-fidelity.
-
-        Raises
-        ------
-        ValueError
-            If the model was trained on multi-fidelity data, but candidates are
-            missing fidelity values.
+        train_X : torch.Tensor
+            Training input tensor.
+        train_Y : torch.Tensor
+            Training target tensor.
         """
-        test_X, fidelities = candidates_to_tensor(
-            candidates, self._fidelity_confidences
-        )
-        candidate_count = test_X.shape[0]
-        # BoTorch requires 2D inputs: ensure (n, d)
-        test_X = torch.atleast_2d(test_X)
-
-        if self._is_multi_fidelity:
-            if len(fidelities) != candidate_count:
-                raise ValueError(
-                    "Surrogate was fitted on multi-fidelity data. Candidates require fidelities."
-                )
-
-            fid_tensor = torch.tensor(fidelities, dtype=torch.float64).view(-1, 1)
-            test_X = torch.cat([test_X, fid_tensor], dim=-1)
-
-        return test_X
-
-    def _build_model(self, train_X: torch.Tensor, train_Y: torch.Tensor) -> None:
-        """Construct the Gaussian Process model and marginal likelihood."""
 
         # 1. Setup Transforms
         # When multi-fidelity, scale only the feature columns (all except the last),
         # leaving the fidelity confidence column in its original [0, 1] range.
         n_dims = train_X.shape[-1]
+
         if self.scale_inputs:
             if self._is_multi_fidelity:
                 feature_indices = list(range(n_dims - 1))
@@ -202,6 +553,7 @@ class GPBotorchSurrogate(Surrogate):
                 input_transform = Normalize(d=n_dims)
         else:
             input_transform = None
+
         outcome_transform = (
             Standardize(m=train_Y.shape[-1]) if self.standardize_outputs else None
         )
@@ -237,183 +589,35 @@ class GPBotorchSurrogate(Surrogate):
             self.model.load_state_dict(self._pending_state_dict)
             self._pending_state_dict = None
 
-    def set_fidelity_confidences(self, confidences: dict[int, float]) -> None:
-        """Stores fidelity confidences and passes them to the custom kernel if supported.
-
-        Parameters
-        ----------
-        confidences : dict[int, float]
-            Mapping of fidelity levels (integer indices) to confidence
-            values in the range [0, 1].
-        """
-        self._fidelity_confidences = confidences
-
-        # Pass to custom kernel if it exists.  cast to Any because update_confidences
-        # is an optional protocol not declared on gpytorch.Module.
-        if self.covar_module is not None and hasattr(
-            self.covar_module, "update_confidences"
-        ):
-            cast(Any, self.covar_module).update_confidences(confidences)
-
-    def fit(self, observations: Iterable[Observation]) -> None:
-        """Fits the GP model from scratch, overwriting any previous data.
+    def _infer_is_multi_fidelity(
+        self,
+        observations: Iterable[Observation],
+    ) -> bool:
+        """Infer whether a batch of observations is structurally multi-fidelity.
 
         Parameters
         ----------
         observations : Iterable[Observation]
-            Iterable of observations to train on. Materialized to a list internally.
+            Iterable of observations to inspect.
+
+        Returns
+        -------
+        result : bool
+            ``True`` if all observations provide a fidelity, ``False`` if none do.
 
         Raises
         ------
         ValueError
-            If observations is empty.
+            If only some observations provide fidelity values.
         """
         obs_list = list(observations)
-        if not obs_list:
-            raise ValueError("Cannot fit on an empty observation list.")
-        train_X, train_Y = self._parse_observations(obs_list)
-        self._train_X, self._train_Y = train_X, train_Y
-        self._build_model(train_X, train_Y)
-        assert self.mll is not None and self.model is not None
-        if self.optimize_hyperparameters:
-            if self.custom_fit_function is not None:
-                self.custom_fit_function(self.mll, **self.fit_kwargs)
-            else:
-                fit_gpytorch_mll(self.mll, **self.fit_kwargs)
-        # Switch the model to evaluation mode so it behaves in inference mode
-        # (disables training-specific behavior in PyTorch modules).
-        self.model.eval()
+        has_fidelity = [obs.fidelity is not None for obs in obs_list]
 
-    def predict(self, candidates: Iterable[Candidate]) -> Mapping[str, Any]:
-        """Returns predictions including the mean, std, and the full BoTorch posterior.
-
-        Parameters
-        ----------
-        candidates : Iterable[Candidate]
-            Candidates to predict. Materialized to a list internally.
-
-        Returns
-        -------
-        result : Mapping[str, Any]
-            Dictionary containing prediction keys:
-            - "mean": List[float] representing the predicted means.
-            - "std": List[float] representing the predicted standard deviations.
-            - "posterior": The raw BoTorch posterior object.
-
-        Raises
-        ------
-        RuntimeError
-            If called before the surrogate model has been fitted.
-        """
-        if self.model is None:
-            raise RuntimeError(
-                "Surrogate model must be fitted before calling predict()."
+        if any(has_fidelity) and not all(has_fidelity):
+            missing = [i for i, present in enumerate(has_fidelity) if not present]
+            raise ValueError(
+                "Mixed fidelity specification detected: either all observations must "
+                f"provide a fidelity or none should. Missing indices: {missing}."
             )
 
-        test_X = self._parse_candidates(candidates)
-
-        # Re-assert evaluation mode in case external code switched the model
-        # back to training mode between fit() and predict().
-        self.model.eval()
-        with torch.no_grad():
-            posterior = self.model.posterior(test_X)
-
-        return {
-            "mean": posterior.mean.squeeze(-1).tolist(),
-            "std": posterior.variance.sqrt().squeeze(-1).tolist(),
-            "posterior": posterior,
-        }
-
-    def updates_from_latest(self) -> bool:
-        """Return True when the model is fitted and partial updates are enabled.
-
-        The active learning loop uses this to decide whether to call
-        ``update(latest_observations)`` (incremental Cholesky) or
-        ``fit(all_observations)`` (full retraining).
-
-        Returns
-        -------
-        bool
-            ``True`` if ``use_partial_updates=True`` and the model has already
-            been fitted at least once; ``False`` otherwise.
-        """
-        return self.use_partial_updates and self.model is not None
-
-    def update(self, observations: Iterable[Observation]) -> None:
-        """Incrementally update the GP with the latest (new) observations.
-
-        Called by the active learning loop only when ``updates_from_latest()``
-        returns ``True``. Uses a fast low-rank Cholesky conditioning step without
-        retraining hyperparameters.
-
-        Parameters
-        ----------
-        observations : Iterable[Observation]
-            Iterable of the most recent observations to condition the GP on.
-        """
-        if self.model is None or self._train_X is None:
-            # Fallback to a full fit if the model hasn't been initialized
-            self.fit(observations)
-            return
-
-        obs_list = list(observations)
-        if not obs_list:
-            return
-
-        # Validate fidelity consistency before parsing: _parse_observations resets
-        # _is_multi_fidelity based only on the new batch, so a batch missing fidelities
-        # would silently produce wrong-shaped tensors and fail during torch.cat.
-        if self._is_multi_fidelity:
-            missing = [i for i, obs in enumerate(obs_list) if obs.fidelity is None]
-            if missing:
-                raise ValueError(
-                    f"Surrogate was fitted on multi-fidelity data but new observations "
-                    f"at indices {missing} are missing fidelity values."
-                )
-
-        new_X, new_Y = self._parse_observations(obs_list)
-
-        # _train_X/_train_Y are non-None here: the guard at the top of this
-        # method returns early when self._train_X is None.
-        assert self._train_X is not None and self._train_Y is not None
-
-        # Update historical state for future full refits
-        self._train_X = torch.cat([self._train_X, new_X], dim=0)
-        self._train_Y = torch.cat([self._train_Y, new_Y], dim=0)
-
-        # Fast Cholesky update (internal data scaling transforms apply automatically)
-        # Note: condition_on_observations requires the model to have made at least one prediction
-        # to populate internal caches. We need to trigger a prediction first.
-        self.model.eval()
-        with torch.no_grad():
-            # Make a dummy prediction to initialize caches
-            _ = self.model.posterior(new_X[:1])
-
-        self.model = self.model.condition_on_observations(X=new_X, Y=new_Y)
-
-    def state_dict(self) -> Optional[dict[str, torch.Tensor]]:
-        """Extracts the model's hyperparameters (lengthscales, noise, etc.).
-
-        Returns
-        -------
-        state_dict : dict or None
-            A dictionary containing the PyTorch model state, or None if the model
-            has not been fitted yet.
-        """
-        if self.model is not None:
-            return self.model.state_dict()
-        return None
-
-    def load_state_dict(self, state_dict: dict[str, torch.Tensor]) -> None:
-        """Injects a pre-trained hyperparameter dictionary into the model.
-
-        Parameters
-        ----------
-        state_dict : dict
-            A dictionary containing the previously saved PyTorch model state.
-        """
-        if self.model is not None:
-            self.model.load_state_dict(state_dict)
-        else:
-            # Store it for when _build_model is called
-            self._pending_state_dict = state_dict
+        return all(has_fidelity)
