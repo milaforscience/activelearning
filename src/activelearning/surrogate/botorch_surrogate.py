@@ -425,7 +425,8 @@ class BoTorchGPSurrogate(Surrogate):
                     f"map. Invalid candidate indices: {unknown}."
                 )
 
-        test_X, fidelities = candidates_to_tensor(cand_list, self._fidelity_confidences)
+        fidelity_confidences = self._fidelity_confidences or None
+        test_X, fidelities = candidates_to_tensor(cand_list, fidelity_confidences)
         test_X = self._ensure_feature_matrix(test_X)
 
         if self._is_multi_fidelity:
@@ -590,7 +591,8 @@ class BoTorchGPSurrogate(Surrogate):
 
         is_multi_fidelity = self._infer_is_multi_fidelity(obs_list)
 
-        X, y, fidelities = observations_to_tensors(obs_list, self._fidelity_confidences)
+        fidelity_confidences = self._fidelity_confidences or None
+        X, y, fidelities = observations_to_tensors(obs_list, fidelity_confidences)
         train_X = self._ensure_feature_matrix(X)
         if y.ndim == 0:
             train_Y = y.view(1, 1)

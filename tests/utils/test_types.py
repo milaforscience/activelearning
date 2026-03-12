@@ -83,9 +83,25 @@ def test_observations_to_tensors_empty_mapping_raises_key_error():
         observations_to_tensors(observations, fidelity_confidences={})
 
 
+def test_observations_to_tensors_missing_mapping_raises_value_error():
+    """Test that fidelity-bearing observations require an explicit mapping."""
+    observations = [Observation(x=1, y=10.0, fidelity=0)]
+
+    with pytest.raises(ValueError, match="no fidelity_confidences mapping"):
+        observations_to_tensors(observations)
+
+
 def test_candidates_to_tensor_empty_mapping_raises_key_error():
     """Test that candidate tensor conversion honors explicit empty fidelity maps."""
     candidates = [Candidate(x=1, fidelity=0)]
 
     with pytest.raises(KeyError, match="0"):
         candidates_to_tensor(candidates, fidelity_confidences={})
+
+
+def test_candidates_to_tensor_missing_mapping_raises_value_error():
+    """Test that fidelity-bearing candidates require an explicit mapping."""
+    candidates = [Candidate(x=1, fidelity=0)]
+
+    with pytest.raises(ValueError, match="no fidelity_confidences mapping"):
+        candidates_to_tensor(candidates)

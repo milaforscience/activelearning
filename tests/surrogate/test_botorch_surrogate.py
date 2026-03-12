@@ -467,13 +467,13 @@ def test_fidelity_confidence_mapping(multi_fidelity_observations):
     assert torch.allclose(train_X[:, -1], expected_confidences)
 
 
-def test_multi_fidelity_fit_without_confidences_raises_key_error(
+def test_multi_fidelity_fit_without_confidences_raises_value_error(
     multi_fidelity_observations,
 ):
-    """Test that missing explicit fidelity mappings fail fast with KeyError."""
+    """Test that missing explicit fidelity mappings fail fast with ValueError."""
     surrogate = BoTorchGPSurrogate()
 
-    with pytest.raises(KeyError, match="0"):
+    with pytest.raises(ValueError, match="no fidelity_confidences mapping"):
         surrogate.fit(multi_fidelity_observations)
 
 
