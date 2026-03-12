@@ -26,10 +26,6 @@ class GFlowNetSampler(Sampler):
         Torch device string (e.g. ``"cpu"`` or ``"cuda"``).
     float_precision : int
         Floating-point precision (32 or 64).
-    output_bounds : Sequence[tuple[float, float]] | None
-        Per-dimension ``(lo, hi)`` bounds for the output domain.  If
-        provided, grid coordinates in ``[cell_min, cell_max]`` are linearly
-        rescaled to these bounds.  Length must equal ``n_dim``.
     """
 
     def __init__(

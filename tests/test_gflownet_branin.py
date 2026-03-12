@@ -151,9 +151,11 @@ class FidelityAssigningSelector:
 
 
 class GFlowNetGridSampler(GFlowNetSampler):
-    """The GFlowNet grid environment operates in ``[cell_min, cell_max]^d``.
+    """GFlowNetSampler that optionally rescales grid coordinates to a target domain.
+
+    The GFlowNet grid environment operates in ``[cell_min, cell_max]^d``.
     If the downstream oracle/acquisition expects a different domain, pass
-    ``output_bounds`` to rescale the grid coordinates to the target domain.
+    ``output_bounds`` to rescale the grid coordinates to that domain.
     """
 
     def __init__(
@@ -170,6 +172,8 @@ class GFlowNetGridSampler(GFlowNetSampler):
             device=device,
             float_precision=float_precision,
         )
+        self._grid_min = torch.tensor(conf.env.cell_min, dtype=torch.float64)
+        self._grid_max = torch.tensor(conf.env.cell_max, dtype=torch.float64)
         if output_bounds is not None:
             self._out_lb = torch.tensor(
                 [lo for lo, _ in output_bounds], dtype=torch.float64
@@ -182,25 +186,18 @@ class GFlowNetGridSampler(GFlowNetSampler):
             self._out_ub = None
 
     def _states_to_candidates(self, states: Any, env: Any) -> list[Candidate]:
-        """Convert GFlowNet terminating states to ``Candidate`` objects, with rescaling to output_bounds."""
-        if torch.is_tensor(states):
-            proxy_coords = env.states2proxy(states)
-            coords = proxy_coords.detach().cpu().to(torch.float64)
-        elif isinstance(states, list) and len(states) > 0:
-            proxy_coords = env.states2proxy(states)
-            if torch.is_tensor(proxy_coords):
-                coords = proxy_coords.detach().cpu().to(torch.float64)
-            else:
-                coords = torch.tensor(
-                    [list(s) for s in proxy_coords], dtype=torch.float64
-                )
-        else:
-            return []
-        if self._out_lb is not None:
-            grid_range = self._grid_max - self._grid_min
+        """Convert GFlowNet states to ``Candidate`` objects, rescaling to ``output_bounds`` if set."""
+        candidates = super()._states_to_candidates(states, env)
+        if self._out_lb is None:
+            return candidates
+        grid_range = self._grid_max - self._grid_min
+        rescaled = []
+        for c in candidates:
+            coords = torch.tensor(c.x, dtype=torch.float64)
             normed = (coords - self._grid_min) / grid_range
-            coords = normed * (self._out_ub - self._out_lb) + self._out_lb
-        return [Candidate(x=tuple(row.tolist())) for row in coords]
+            new_coords = normed * (self._out_ub - self._out_lb) + self._out_lb
+            rescaled.append(Candidate(x=tuple(new_coords.tolist())))
+        return rescaled
 
 
 # ---------------------------------------------------------------------------
