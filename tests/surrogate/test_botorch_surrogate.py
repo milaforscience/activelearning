@@ -49,6 +49,15 @@ def scalar_multi_fidelity_observations():
 
 
 @pytest.fixture
+def multi_output_observations():
+    return [
+        Observation(x=[1.0, 2.0], y=[5.0, 50.0]),
+        Observation(x=[2.0, 3.0], y=[6.0, 60.0]),
+        Observation(x=[3.0, 4.0], y=[7.0, 70.0]),
+    ]
+
+
+@pytest.fixture
 def dataset_with_observations(single_fidelity_observations):
     """Create a dataset with observations."""
     dataset = ListDataset()
@@ -146,6 +155,28 @@ def test_scalar_multi_fidelity_observation_parsing_uses_column_vector(
     assert is_multi_fidelity is True
     assert torch.allclose(
         train_X[:, -1], torch.tensor([0.25, 0.95, 0.25, 0.95], dtype=torch.float64)
+    )
+
+
+def test_multi_output_observation_parsing_preserves_output_dimension(
+    multi_output_observations,
+):
+    """Test that vector-valued outputs keep their output dimension."""
+    surrogate = BoTorchGPSurrogate()
+
+    train_X, train_Y, is_multi_fidelity = surrogate._parse_observations(
+        multi_output_observations
+    )
+
+    assert train_X.shape == (3, 2)
+    assert train_Y.shape == (3, 2)
+    assert is_multi_fidelity is False
+    assert torch.allclose(
+        train_Y,
+        torch.tensor(
+            [[5.0, 50.0], [6.0, 60.0], [7.0, 70.0]],
+            dtype=torch.float64,
+        ),
     )
 
 
@@ -259,6 +290,32 @@ def test_direct_update_full_refits_when_partial_updates_disabled(
     assert surrogate.model is not initial_model
     assert train_X.shape == (3, 2)
     assert train_Y.shape == (3, 1)
+
+
+def test_get_train_data_after_multi_output_fit(multi_output_observations):
+    """Test that multi-output training tensors retain their output width."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.fit(multi_output_observations)
+
+    train_X, train_Y = surrogate.get_train_data()
+
+    assert train_X.shape == (3, 2)
+    assert train_Y.shape == (3, 2)
+
+
+def test_multi_output_predict_preserves_nested_output_shape(multi_output_observations):
+    """Test that predict preserves the output dimension for multi-output models."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.fit(multi_output_observations)
+
+    predictions = surrogate.predict([Candidate(x=[1.5, 2.5]), Candidate(x=[2.5, 3.5])])
+
+    assert len(predictions["mean"]) == 2
+    assert len(predictions["std"]) == 2
+    assert len(predictions["mean"][0]) == 2
+    assert len(predictions["std"][0]) == 2
+    assert isinstance(predictions["mean"][0], list)
+    assert isinstance(predictions["std"][0], list)
 
 
 def test_direct_update_full_refit_runs_custom_optimizer(single_fidelity_observations):

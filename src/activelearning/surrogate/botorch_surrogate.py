@@ -267,8 +267,10 @@ class BoTorchGPSurrogate(Surrogate):
         -------
         result : Mapping[str, Any]
             Dictionary containing:
-            - ``"mean"``: list of posterior means
-            - ``"std"``: list of posterior standard deviations
+            - ``"mean"``: posterior means as a list for single-output models,
+              or a nested list of shape ``(N, m)`` for multi-output models
+            - ``"std"``: posterior standard deviations with the same shape
+              convention as ``"mean"``
             - ``"posterior"``: raw BoTorch posterior object
 
         Raises
@@ -285,9 +287,19 @@ class BoTorchGPSurrogate(Surrogate):
         with torch.no_grad():
             posterior = model.posterior(test_X)
 
+        mean = posterior.mean
+        std = posterior.variance.sqrt()
+
+        if mean.ndim >= 2 and mean.shape[-1] == 1:
+            mean_out = mean.squeeze(-1).tolist()
+            std_out = std.squeeze(-1).tolist()
+        else:
+            mean_out = mean.tolist()
+            std_out = std.tolist()
+
         return {
-            "mean": posterior.mean.squeeze(-1).tolist(),
-            "std": posterior.variance.sqrt().squeeze(-1).tolist(),
+            "mean": mean_out,
+            "std": std_out,
             "posterior": posterior,
         }
 
@@ -562,7 +574,12 @@ class BoTorchGPSurrogate(Surrogate):
 
         X, y, fidelities = observations_to_tensors(obs_list, self._fidelity_confidences)
         train_X = self._ensure_feature_matrix(X)
-        train_Y = y.view(-1, 1)
+        if y.ndim == 0:
+            train_Y = y.view(1, 1)
+        elif y.ndim == 1:
+            train_Y = y.unsqueeze(-1)
+        else:
+            train_Y = y
         obs_count = len(obs_list)
 
         if is_multi_fidelity:
