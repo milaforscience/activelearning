@@ -22,7 +22,8 @@ def candidates():
 def mock_acquisition():
     """Create a mock acquisition function."""
     acquisition = Mock()
-    acquisition.return_value = [10.0, 20.0, 30.0, 40.0, 50.0]
+    acquisition.supports_singleton_scoring.return_value = True
+    acquisition.score.return_value = [10.0, 20.0, 30.0, 40.0, 50.0]
     return acquisition
 
 
@@ -87,7 +88,8 @@ def test_selects_by_utility_cost_ratio(selector, candidates):
     # Costs:              [10, 5,  2,  1,  1]
     # Ratios:             [1,  4,  15, 40, 50] <- descending order: 4, 3, 2, 1, 0
     acquisition = Mock()
-    acquisition.return_value = [10.0, 20.0, 30.0, 40.0, 50.0]
+    acquisition.supports_singleton_scoring.return_value = True
+    acquisition.score.return_value = [10.0, 20.0, 30.0, 40.0, 50.0]
 
     def cost_fn(c):
         return [10.0, 5.0, 2.0, 1.0, 1.0]
@@ -116,7 +118,8 @@ def test_stops_when_budget_exhausted(selector, candidates):
     # Costs:              [1,  1,  2,  5,  10]
     # Ratios:             [50, 40, 15, 4,  1] <- sorted by ratio descending
     acquisition = Mock()
-    acquisition.return_value = [50.0, 40.0, 30.0, 20.0, 10.0]
+    acquisition.supports_singleton_scoring.return_value = True
+    acquisition.score.return_value = [50.0, 40.0, 30.0, 20.0, 10.0]
 
     def cost_fn(c):
         return [1.0, 1.0, 2.0, 5.0, 10.0]
@@ -137,7 +140,8 @@ def test_uniform_costs_varying_utilities(selector, candidates, uniform_cost_fn):
     # All costs are 5.0, so ranking is purely by acquisition value
     # Acquisition values: [10, 20, 30, 40, 50]
     acquisition = Mock()
-    acquisition.return_value = [10.0, 20.0, 30.0, 40.0, 50.0]
+    acquisition.supports_singleton_scoring.return_value = True
+    acquisition.score.return_value = [10.0, 20.0, 30.0, 40.0, 50.0]
 
     # Budget 12.0 allows 2 candidates (2 * 5.0 = 10.0)
     selected = selector(
@@ -155,7 +159,8 @@ def test_varying_costs_uniform_utilities(selector, candidates, varying_cost_fn):
     # Costs: [1, 2, 3, 4, 5]
     # Ratios: [100, 50, 33.3, 25, 20] <- descending
     acquisition = Mock()
-    acquisition.return_value = [100.0, 100.0, 100.0, 100.0, 100.0]
+    acquisition.supports_singleton_scoring.return_value = True
+    acquisition.score.return_value = [100.0, 100.0, 100.0, 100.0, 100.0]
 
     # Budget 6.0 allows candidates 0 (cost 1), 1 (cost 2), 2 (cost 3) = 6.0 total
     selected = selector(
@@ -172,7 +177,8 @@ def test_zero_cost_candidate(selector):
     """Test handling of candidate with zero cost (infinite ratio)."""
     candidates = [Candidate(x=0), Candidate(x=1), Candidate(x=2)]
     acquisition = Mock()
-    acquisition.return_value = [10.0, 20.0, 30.0]
+    acquisition.supports_singleton_scoring.return_value = True
+    acquisition.score.return_value = [10.0, 20.0, 30.0]
 
     def cost_fn(c):
         return [0.0, 5.0, 10.0]  # First candidate has zero cost
@@ -190,7 +196,8 @@ def test_negative_cost_candidate(selector):
     """Test that negative candidate costs raise ValueError."""
     candidates = [Candidate(x=0), Candidate(x=1), Candidate(x=2)]
     acquisition = Mock()
-    acquisition.return_value = [10.0, 20.0, 30.0]
+    acquisition.supports_singleton_scoring.return_value = True
+    acquisition.score.return_value = [10.0, 20.0, 30.0]
 
     def cost_fn(c):
         return [-5.0, 5.0, 10.0]  # First candidate has negative cost
@@ -217,7 +224,8 @@ def test_exact_budget_fit(selector):
     """Test selection when candidates exactly fit budget."""
     candidates = [Candidate(x=i) for i in range(3)]
     acquisition = Mock()
-    acquisition.return_value = [30.0, 20.0, 10.0]
+    acquisition.supports_singleton_scoring.return_value = True
+    acquisition.score.return_value = [30.0, 20.0, 10.0]
 
     def cost_fn(c):
         return [5.0, 5.0, 5.0]
@@ -235,7 +243,8 @@ def test_greedy_not_optimal(selector):
     # Classic knapsack counter-example
     candidates = [Candidate(x=0), Candidate(x=1)]
     acquisition = Mock()
-    acquisition.return_value = [10.0, 9.0]  # Candidate 0 slightly better utility
+    acquisition.supports_singleton_scoring.return_value = True
+    acquisition.score.return_value = [10.0, 9.0]  # Candidate 0 slightly better utility
 
     def cost_fn(c):
         return [6.0, 5.0]  # Candidate 0 costs more
