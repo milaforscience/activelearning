@@ -32,7 +32,9 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         *,
         maximize: bool = True,
         target_fidelity_value: Optional[float] = None,
-        project_to_target_fidelity_fn: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+        project_to_target_fidelity_fn: Optional[
+            Callable[[torch.Tensor], torch.Tensor]
+        ] = None,
         fidelity_costs: Optional[dict[int, float]] = None,
         cost_model: Optional[Any] = None,
         cost_aware_utility: Optional[Any] = None,
@@ -65,7 +67,9 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         # User-specified multi-fidelity / cost-aware configuration
         self._target_fidelity_value_override = target_fidelity_value
         self._project_to_target_fidelity_fn_override = project_to_target_fidelity_fn
-        self._fidelity_costs = dict(fidelity_costs) if fidelity_costs is not None else None
+        self._fidelity_costs = (
+            dict(fidelity_costs) if fidelity_costs is not None else None
+        )
         self._cost_model_override = cost_model
         self._cost_aware_utility_override = cost_aware_utility
 
@@ -552,7 +556,6 @@ class AnalyticBoTorchAcquisition(BoTorchAcquisitionBase):
             values = botorch_acqf(X)
 
         return self._tensor_to_list(values)
-    
 
 
 class QBatchBoTorchAcquisition(BoTorchAcquisitionBase):
@@ -651,7 +654,9 @@ class QBatchBoTorchAcquisition(BoTorchAcquisitionBase):
         botorch_acqf = self._require_botorch_acqf()
 
         assert self._botorch_surrogate is not None
-        X = self._botorch_surrogate.encode_candidate_batches(candidate_batches)  # (B, q, d)
+        X = self._botorch_surrogate.encode_candidate_batches(
+            candidate_batches
+        )  # (B, q, d)
 
         with torch.no_grad():
             values = botorch_acqf(X)

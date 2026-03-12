@@ -820,7 +820,9 @@ def test_encode_candidate_batches_ragged_raises(single_fidelity_observations):
         )
 
 
-def test_encode_candidate_batches_empty_inner_batch_raises(single_fidelity_observations):
+def test_encode_candidate_batches_empty_inner_batch_raises(
+    single_fidelity_observations,
+):
     """Test that empty inner batches are rejected."""
     surrogate = BoTorchGPSurrogate()
     surrogate.fit(single_fidelity_observations)
