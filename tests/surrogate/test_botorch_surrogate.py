@@ -575,6 +575,33 @@ def test_parse_candidates_missing_fidelity_raises(multi_fidelity_observations):
         surrogate.predict(candidates)
 
 
+def test_encode_candidates_mixed_fidelity_candidates_raise(
+    multi_fidelity_observations,
+):
+    """Test that mixed candidate fidelity specification is rejected explicitly."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
+    surrogate.fit(multi_fidelity_observations)
+
+    candidates = [
+        Candidate(x=[1.5, 2.5], fidelity=1),
+        Candidate(x=[2.5, 3.5]),
+    ]
+
+    with pytest.raises(ValueError, match="Mixed fidelity specification detected"):
+        surrogate.encode_candidates(candidates)
+
+
+def test_encode_candidates_unknown_fidelity_raises(multi_fidelity_observations):
+    """Test that unknown candidate fidelities raise a clear validation error."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
+    surrogate.fit(multi_fidelity_observations)
+
+    with pytest.raises(ValueError, match="Invalid candidate indices: \\[0\\]"):
+        surrogate.encode_candidates([Candidate(x=[1.5, 2.5], fidelity=999)])
+
+
 def test_parse_candidates_fidelity_confidence_mapping(multi_fidelity_observations):
     """Test that fidelity confidence mapping is applied to candidates, not just observations."""
     surrogate = BoTorchGPSurrogate()
