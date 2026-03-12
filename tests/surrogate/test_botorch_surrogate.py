@@ -819,6 +819,18 @@ def test_encode_candidates_rejects_fidelity_in_single_fidelity_model(
         surrogate.encode_candidates([Candidate(x=[1.5, 2.5], fidelity=1)])
 
 
+def test_encode_candidates_single_fidelity_rejects_before_mapping_lookup(
+    single_fidelity_observations,
+):
+    """Test that singleton-mode validation runs before any fidelity lookup occurs."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.set_fidelity_confidences({})
+    surrogate.fit(single_fidelity_observations)
+
+    with pytest.raises(ValueError, match="must not provide fidelity values"):
+        surrogate.encode_candidates([Candidate(x=[1.5, 2.5], fidelity=1)])
+
+
 def test_encode_candidate_batches_single_fidelity_shape(single_fidelity_observations):
     """Test q-batch encoding shape in the single-fidelity setting."""
     surrogate = BoTorchGPSurrogate()

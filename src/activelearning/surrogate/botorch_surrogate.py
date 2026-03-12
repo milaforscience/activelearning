@@ -379,13 +379,19 @@ class BoTorchGPSurrogate(Surrogate):
         if not cand_list:
             raise ValueError("Cannot encode an empty candidate iterable.")
 
-        test_X, fidelities = candidates_to_tensor(cand_list, self._fidelity_confidences)
-        test_X = self._ensure_feature_matrix(test_X)
-        candidate_count = len(cand_list)
-
         incoming_is_multi_fidelity = any(
             cand.fidelity is not None for cand in cand_list
         )
+
+        if not self._is_multi_fidelity and incoming_is_multi_fidelity:
+            raise ValueError(
+                "Surrogate was fitted in single-fidelity mode. "
+                "Candidates must not provide fidelity values."
+            )
+
+        test_X, fidelities = candidates_to_tensor(cand_list, self._fidelity_confidences)
+        test_X = self._ensure_feature_matrix(test_X)
+        candidate_count = len(cand_list)
 
         if self._is_multi_fidelity:
             if not incoming_is_multi_fidelity or len(fidelities) != candidate_count:
@@ -395,12 +401,6 @@ class BoTorchGPSurrogate(Surrogate):
                 )
             fid_tensor = torch.tensor(fidelities, dtype=torch.float64).view(-1, 1)
             test_X = torch.cat([test_X, fid_tensor], dim=-1)
-        else:
-            if incoming_is_multi_fidelity:
-                raise ValueError(
-                    "Surrogate was fitted in single-fidelity mode. "
-                    "Candidates must not provide fidelity values."
-                )
 
         return test_X
 
