@@ -104,6 +104,15 @@ class BoTorchGPSurrogate(Surrogate):
             values in the range [0, 1].
         """
         copied_confidences = dict(confidences)
+        if (
+            self.model is not None
+            or self._train_X is not None
+            or self._train_Y is not None
+        ) and copied_confidences != self._fidelity_confidences:
+            raise RuntimeError(
+                "Cannot change fidelity confidences after the surrogate has been "
+                "fitted. Set them before calling fit() or update()."
+            )
         self._fidelity_confidences = copied_confidences
 
         # Optional protocol for custom kernels that need access to the mapping.
@@ -204,6 +213,16 @@ class BoTorchGPSurrogate(Surrogate):
 
         if not self.use_partial_updates:
             self._build_model(self._train_X, self._train_Y)
+            assert self.model is not None
+            assert self.mll is not None
+
+            if self.optimize_hyperparameters:
+                if self.custom_fit_function is not None:
+                    self.custom_fit_function(self.mll, **self.fit_kwargs)
+                else:
+                    fit_gpytorch_mll(self.mll, **self.fit_kwargs)
+
+            self.model.eval()
             return
 
         # Fast Cholesky update (internal data scaling transforms apply automatically)
@@ -218,6 +237,8 @@ class BoTorchGPSurrogate(Surrogate):
             SingleTaskGP | SingleTaskMultiFidelityGP,
             self.model.condition_on_observations(X=new_X, Y=new_Y),
         )
+        self.mll = ExactMarginalLogLikelihood(self.model.likelihood, self.model)
+        self.model.eval()
 
     def updates_from_latest(self) -> bool:
         """Return True when the model is fitted and partial updates are enabled.
