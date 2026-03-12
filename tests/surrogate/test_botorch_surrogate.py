@@ -30,6 +30,25 @@ def multi_fidelity_observations():
 
 
 @pytest.fixture
+def scalar_single_fidelity_observations():
+    return [
+        Observation(x=1.0, y=5.0),
+        Observation(x=2.0, y=6.0),
+        Observation(x=3.0, y=7.0),
+    ]
+
+
+@pytest.fixture
+def scalar_multi_fidelity_observations():
+    return [
+        Observation(x=1.0, y=4.5, fidelity=0),
+        Observation(x=1.0, y=5.0, fidelity=1),
+        Observation(x=2.0, y=5.5, fidelity=0),
+        Observation(x=2.0, y=6.0, fidelity=1),
+    ]
+
+
+@pytest.fixture
 def dataset_with_observations(single_fidelity_observations):
     """Create a dataset with observations."""
     dataset = ListDataset()
@@ -94,6 +113,40 @@ def test_tensor_parsing_shapes(multi_fidelity_observations):
     # Check that the last column of train_X matches the mapped confidences (0.0, 1.0, 0.0, 1.0)
     expected_fidelities = torch.tensor([0.0, 1.0, 0.0, 1.0])
     assert torch.all(train_X[:, -1] == expected_fidelities)
+
+
+def test_scalar_observation_parsing_uses_column_vector(
+    scalar_single_fidelity_observations,
+):
+    """Test that scalar observations are reshaped to ``(N, 1)``."""
+    surrogate = BoTorchGPSurrogate()
+
+    train_X, train_Y, is_multi_fidelity = surrogate._parse_observations(
+        scalar_single_fidelity_observations
+    )
+
+    assert train_X.shape == (3, 1)
+    assert train_Y.shape == (3, 1)
+    assert is_multi_fidelity is False
+
+
+def test_scalar_multi_fidelity_observation_parsing_uses_column_vector(
+    scalar_multi_fidelity_observations,
+):
+    """Test that scalar multi-fidelity observations keep the observation axis."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.set_fidelity_confidences({0: 0.25, 1: 0.95})
+
+    train_X, train_Y, is_multi_fidelity = surrogate._parse_observations(
+        scalar_multi_fidelity_observations
+    )
+
+    assert train_X.shape == (4, 2)
+    assert train_Y.shape == (4, 1)
+    assert is_multi_fidelity is True
+    assert torch.allclose(
+        train_X[:, -1], torch.tensor([0.25, 0.95, 0.25, 0.95], dtype=torch.float64)
+    )
 
 
 def test_mixed_fidelity_raises_error():
@@ -180,6 +233,32 @@ def test_update_with_dataset_full_refit(dataset_with_observations):
     candidates = [Candidate(x=[1.5, 2.5])]
     predictions = surrogate.predict(candidates)
     assert len(predictions["mean"]) == 1
+
+
+def test_direct_update_full_refits_when_partial_updates_disabled(
+    single_fidelity_observations, monkeypatch
+):
+    """Test that direct update() honors use_partial_updates=False."""
+    surrogate = BoTorchGPSurrogate(use_partial_updates=False)
+    surrogate.fit(single_fidelity_observations[:2])
+    initial_model = surrogate.model
+    assert initial_model is not None
+
+    def fail_condition_on_observations(*args, **kwargs):
+        raise AssertionError("condition_on_observations should not be called")
+
+    monkeypatch.setattr(
+        initial_model,
+        "condition_on_observations",
+        fail_condition_on_observations,
+    )
+
+    surrogate.update([single_fidelity_observations[2]])
+
+    train_X, train_Y = surrogate.get_train_data()
+    assert surrogate.model is not initial_model
+    assert train_X.shape == (3, 2)
+    assert train_Y.shape == (3, 1)
 
 
 def test_update_with_dataset_partial_updates(dataset_with_observations):
@@ -406,6 +485,36 @@ def test_parse_candidates_fidelity_confidence_mapping(multi_fidelity_observation
 
     expected_confidences = torch.tensor([0.5, 0.95], dtype=torch.float64)
     assert torch.allclose(test_X[:, -1], expected_confidences)
+
+
+def test_scalar_candidate_encoding_uses_column_vector(
+    scalar_single_fidelity_observations,
+):
+    """Test that scalar candidates are reshaped to ``(N, 1)``."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.fit(scalar_single_fidelity_observations)
+
+    test_X = surrogate.encode_candidates([Candidate(x=1.5), Candidate(x=2.5)])
+
+    assert test_X.shape == (2, 1)
+
+
+def test_scalar_multi_fidelity_candidate_encoding_uses_column_vector(
+    scalar_multi_fidelity_observations,
+):
+    """Test that scalar multi-fidelity candidates preserve the candidate axis."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.set_fidelity_confidences({0: 0.25, 1: 0.95})
+    surrogate.fit(scalar_multi_fidelity_observations)
+
+    test_X = surrogate.encode_candidates(
+        [Candidate(x=1.5, fidelity=0), Candidate(x=2.5, fidelity=1)]
+    )
+
+    assert test_X.shape == (2, 2)
+    assert torch.allclose(
+        test_X[:, -1], torch.tensor([0.25, 0.95], dtype=torch.float64)
+    )
 
 
 def test_state_dict_before_fit_returns_none():
