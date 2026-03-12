@@ -152,9 +152,12 @@ class BoTorchGPSurrogate(Surrogate):
         self.model.eval()
 
     def update(self, observations: Iterable[Observation]) -> None:
-        """Incrementally update the fitted surrogate using new observations.
+        """Update the fitted surrogate using newly acquired observations.
 
-        Called only when ``updates_from_latest()`` returns ``True``.
+        When ``use_partial_updates=True`` and a model is already fitted, this uses
+        fast incremental conditioning. Otherwise, it rebuilds the model on the
+        accumulated training data so direct ``update()`` calls still respect the
+        constructor contract.
 
         Parameters
         ----------
@@ -165,8 +168,7 @@ class BoTorchGPSurrogate(Surrogate):
         ------
         ValueError
             If the incoming observations are incompatible with the fitted model
-            mode (single-fidelity vs multi-fidelity).  Uses a fast low-rank Cholesky conditioning step without
-            retraining hyperparameters.
+            mode (single-fidelity vs multi-fidelity).
         """
         if self.model is None or self._train_X is None or self._train_Y is None:
             # Fallback to a full fit if the model hasn't been initialized
@@ -199,6 +201,10 @@ class BoTorchGPSurrogate(Surrogate):
 
         self._train_X = torch.cat([self._train_X, new_X], dim=0)
         self._train_Y = torch.cat([self._train_Y, new_Y], dim=0)
+
+        if not self.use_partial_updates:
+            self._build_model(self._train_X, self._train_Y)
+            return
 
         # Fast Cholesky update (internal data scaling transforms apply automatically)
         # Note: condition_on_observations requires the model to have made at least one prediction
@@ -353,8 +359,8 @@ class BoTorchGPSurrogate(Surrogate):
             raise ValueError("Cannot encode an empty candidate iterable.")
 
         test_X, fidelities = candidates_to_tensor(cand_list, self._fidelity_confidences)
-        test_X = torch.atleast_2d(test_X)
-        candidate_count = test_X.shape[0]
+        test_X = self._ensure_feature_matrix(test_X)
+        candidate_count = len(cand_list)
 
         incoming_is_multi_fidelity = any(
             cand.fidelity is not None for cand in cand_list
@@ -480,6 +486,26 @@ class BoTorchGPSurrogate(Surrogate):
     # Internal helpers
     # ------------------------------------------------------------------
 
+    def _ensure_feature_matrix(self, X: torch.Tensor) -> torch.Tensor:
+        """Normalize scalar and vector features to BoTorch's ``(N, d)`` layout.
+
+        Parameters
+        ----------
+        X : torch.Tensor
+            Raw feature tensor returned by the generic conversion helpers.
+
+        Returns
+        -------
+        result : torch.Tensor
+            Feature tensor with scalar inputs reshaped to ``(N, 1)`` while
+            leaving already batched feature tensors unchanged.
+        """
+        if X.ndim == 0:
+            return X.view(1, 1)
+        if X.ndim == 1:
+            return X.unsqueeze(-1)
+        return X
+
     def _parse_observations(
         self,
         observations: Iterable[Observation],
@@ -514,9 +540,9 @@ class BoTorchGPSurrogate(Surrogate):
         is_multi_fidelity = self._infer_is_multi_fidelity(obs_list)
 
         X, y, fidelities = observations_to_tensors(obs_list, self._fidelity_confidences)
-        train_X = torch.atleast_2d(X)
+        train_X = self._ensure_feature_matrix(X)
         train_Y = y.view(-1, 1)
-        obs_count = train_X.shape[0]
+        obs_count = len(obs_list)
 
         if is_multi_fidelity:
             if len(fidelities) != obs_count:
