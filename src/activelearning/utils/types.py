@@ -115,9 +115,10 @@ def observations_to_tensors(
         Observations to convert. Materialized to a list if not already a list.
     fidelity_confidences : dict[int, float], optional
         Mapping from integer fidelity IDs to continuous confidence values.
-        If None or empty, single-fidelity mode is assumed and fidelities
-        returns as an empty list. Raises ``KeyError`` if a fidelity ID in
-        the observations is missing from the mapping.
+        If None, single-fidelity mode is assumed and fidelities returns as an
+        empty list. If a mapping is provided, every non-None fidelity must be
+        present in it. Raises ``KeyError`` if a fidelity ID in the observations
+        is missing from the mapping.
 
     Returns
     -------
@@ -138,7 +139,7 @@ def observations_to_tensors(
             for obs in obs_list
             if obs.fidelity is not None
         ]
-        if fidelity_confidences
+        if fidelity_confidences is not None
         else []
     )
 
@@ -161,9 +162,10 @@ def candidates_to_tensor(
         Candidates to convert. Materialized to a list internally.
     fidelity_confidences : dict[int, float], optional
         Mapping from integer fidelity IDs to continuous confidence values.
-        If None or empty, single-fidelity mode is assumed and fidelities
-        returns as an empty list. Raises ``KeyError`` if a fidelity ID in
-        the candidates is missing from the mapping.
+        If None, single-fidelity mode is assumed and fidelities returns as an
+        empty list. If a mapping is provided, every non-None fidelity must be
+        present in it. Raises ``KeyError`` if a fidelity ID in the candidates
+        is missing from the mapping.
 
     Returns
     -------
@@ -174,7 +176,7 @@ def candidates_to_tensor(
     """
     cand_list = candidates if isinstance(candidates, list) else list(candidates)
     X = _to_tensor([cand.x for cand in cand_list], torch.float64)
-    if fidelity_confidences:
+    if fidelity_confidences is not None:
         fidelities = [
             fidelity_confidences[cand.fidelity]
             for cand in cand_list

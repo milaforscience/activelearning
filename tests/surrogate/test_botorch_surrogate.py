@@ -261,6 +261,27 @@ def test_direct_update_full_refits_when_partial_updates_disabled(
     assert train_Y.shape == (3, 1)
 
 
+def test_direct_update_full_refit_runs_custom_optimizer(single_fidelity_observations):
+    """Test that full-refit updates reuse the configured optimization path."""
+    call_tracker: dict[str, list[Any]] = {"models": []}
+
+    def my_mock_optimizer(mll, **kwargs):
+        call_tracker["models"].append(mll.model)
+
+    surrogate = BoTorchGPSurrogate(
+        use_partial_updates=False,
+        custom_fit_function=my_mock_optimizer,
+    )
+    surrogate.fit(single_fidelity_observations[:2])
+
+    assert len(call_tracker["models"]) == 1
+
+    surrogate.update([single_fidelity_observations[2]])
+
+    assert len(call_tracker["models"]) == 2
+    assert surrogate.model is call_tracker["models"][-1]
+
+
 def test_update_with_dataset_partial_updates(dataset_with_observations):
     """Test use_partial_updates=True: first call does full fit, subsequent calls use update()."""
     surrogate = BoTorchGPSurrogate(use_partial_updates=True)
@@ -288,6 +309,22 @@ def test_update_with_dataset_partial_updates(dataset_with_observations):
     candidates = [Candidate(x=[1.5, 2.5])]
     predictions = surrogate.predict(candidates)
     assert len(predictions["mean"]) == 1
+
+
+def test_partial_update_refreshes_mll(single_fidelity_observations):
+    """Test that partial updates keep the stored MLL synchronized with the model."""
+    surrogate = BoTorchGPSurrogate(use_partial_updates=True)
+    surrogate.fit(single_fidelity_observations[:2])
+
+    old_mll = surrogate.mll
+    surrogate.update([single_fidelity_observations[2]])
+
+    assert surrogate.mll is not None
+    assert surrogate.mll is not old_mll
+    assert surrogate.model is surrogate.mll.model
+    assert surrogate.model is not None
+    assert surrogate.model.likelihood is surrogate.mll.likelihood
+    assert surrogate.model.training is False
 
 
 def test_update_first_call_always_fits(single_fidelity_observations):
@@ -371,6 +408,16 @@ def test_fidelity_confidence_mapping(multi_fidelity_observations):
     # The last column should now contain the mapped floats, not the 0 and 1 IDs
     expected_confidences = torch.tensor([0.5, 0.95, 0.5, 0.95], dtype=torch.float64)
     assert torch.allclose(train_X[:, -1], expected_confidences)
+
+
+def test_multi_fidelity_fit_without_confidences_raises_key_error(
+    multi_fidelity_observations,
+):
+    """Test that missing explicit fidelity mappings fail fast with KeyError."""
+    surrogate = BoTorchGPSurrogate()
+
+    with pytest.raises(KeyError, match="0"):
+        surrogate.fit(multi_fidelity_observations)
 
 
 def test_custom_covar_module_routing(multi_fidelity_observations):
@@ -586,6 +633,18 @@ def test_set_fidelity_confidences_propagates_to_covar_module():
     assert received == {0: 0.3, 1: 0.9}, (
         "Confidences were not propagated to the covar_module"
     )
+
+
+def test_set_fidelity_confidences_after_fit_rejects_changes(
+    multi_fidelity_observations,
+):
+    """Test that fidelity encodings cannot change after fitting."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.set_fidelity_confidences({0: 0.3, 1: 0.9})
+    surrogate.fit(multi_fidelity_observations)
+
+    with pytest.raises(RuntimeError, match="Cannot change fidelity confidences"):
+        surrogate.set_fidelity_confidences({0: 0.2, 1: 1.0})
 
 
 def test_update_fallback_when_model_none(single_fidelity_observations):
