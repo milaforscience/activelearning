@@ -391,28 +391,46 @@ class BoTorchGPSurrogate(Surrogate):
         if not cand_list:
             raise ValueError("Cannot encode an empty candidate iterable.")
 
-        test_X, fidelities = candidates_to_tensor(cand_list, self._fidelity_confidences)
-        test_X = self._ensure_feature_matrix(test_X)
-        candidate_count = len(cand_list)
+        has_fidelity = [cand.fidelity is not None for cand in cand_list]
+        if any(has_fidelity) and not all(has_fidelity):
+            missing = [i for i, present in enumerate(has_fidelity) if not present]
+            raise ValueError(
+                "Mixed fidelity specification detected: either all candidates must "
+                f"provide a fidelity or none should. Missing indices: {missing}."
+            )
 
-        incoming_is_multi_fidelity = any(
-            cand.fidelity is not None for cand in cand_list
-        )
+        incoming_is_multi_fidelity = all(has_fidelity)
+
+        if not self._is_multi_fidelity and incoming_is_multi_fidelity:
+            raise ValueError(
+                "Surrogate was fitted in single-fidelity mode. "
+                "Candidates must not provide fidelity values."
+            )
+
+        if self._is_multi_fidelity and not incoming_is_multi_fidelity:
+            raise ValueError(
+                "Surrogate was fitted in multi-fidelity mode. "
+                "All candidates must provide a fidelity."
+            )
 
         if self._is_multi_fidelity:
-            if not incoming_is_multi_fidelity or len(fidelities) != candidate_count:
+            unknown = [
+                i
+                for i, cand in enumerate(cand_list)
+                if cand.fidelity not in self._fidelity_confidences
+            ]
+            if unknown:
                 raise ValueError(
-                    "Surrogate was fitted in multi-fidelity mode. "
-                    "All candidates must provide a fidelity."
+                    "Some candidate fidelities are not present in the fidelity-confidence "
+                    f"map. Invalid candidate indices: {unknown}."
                 )
+
+        test_X, fidelities = candidates_to_tensor(cand_list, self._fidelity_confidences)
+        test_X = self._ensure_feature_matrix(test_X)
+
+        if self._is_multi_fidelity:
             fid_tensor = torch.tensor(fidelities, dtype=torch.float64).view(-1, 1)
             test_X = torch.cat([test_X, fid_tensor], dim=-1)
-        else:
-            if incoming_is_multi_fidelity:
-                raise ValueError(
-                    "Surrogate was fitted in single-fidelity mode. "
-                    "Candidates must not provide fidelity values."
-                )
 
         return test_X
 
