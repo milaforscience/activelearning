@@ -570,3 +570,156 @@ def test_scale_inputs_excludes_fidelity_column(multi_fidelity_observations):
     assert transform_indices.tolist() == expected_indices, (
         "Normalize should only cover feature columns, not the fidelity column"
     )
+
+
+def test_get_model_before_fit_raises():
+    """Test that get_model raises before the surrogate is fitted."""
+    surrogate = BoTorchGPSurrogate()
+
+    with pytest.raises(RuntimeError, match="has not been fitted yet"):
+        surrogate.get_model()
+
+
+def test_get_train_data_before_fit_raises():
+    """Test that get_train_data raises before training data is available."""
+    surrogate = BoTorchGPSurrogate()
+
+    with pytest.raises(RuntimeError, match="training data is not available yet"):
+        surrogate.get_train_data()
+
+
+def test_get_model_and_train_data_after_fit(single_fidelity_observations):
+    """Test that fitted model and training tensors are exposed consistently."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.fit(single_fidelity_observations)
+
+    model = surrogate.get_model()
+    train_X, train_Y = surrogate.get_train_data()
+
+    assert model is surrogate.model
+    assert train_X is surrogate._train_X
+    assert train_Y is surrogate._train_Y
+    assert train_X.shape == (3, 2)
+    assert train_Y.shape == (3, 1)
+
+
+def test_single_fidelity_metadata_accessors(single_fidelity_observations):
+    """Test single-fidelity metadata accessors after fitting."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.fit(single_fidelity_observations)
+
+    assert surrogate.is_multi_fidelity() is False
+    assert surrogate.get_fidelity_dimension() is None
+    assert surrogate.get_target_fidelity_value() is None
+    assert surrogate.get_fidelity_confidences() == {}
+
+
+def test_multi_fidelity_metadata_accessors(multi_fidelity_observations):
+    """Test multi-fidelity metadata accessors after fitting."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.set_fidelity_confidences({0: 0.25, 1: 0.95})
+    surrogate.fit(multi_fidelity_observations)
+
+    confidences = surrogate.get_fidelity_confidences()
+
+    assert surrogate.is_multi_fidelity() is True
+    assert surrogate.get_fidelity_dimension() == 2
+    assert surrogate.get_target_fidelity_value() == pytest.approx(0.95)
+    assert confidences == {0: 0.25, 1: 0.95}
+
+    confidences[0] = -1.0
+    assert surrogate.get_fidelity_confidences() == {0: 0.25, 1: 0.95}
+
+
+def test_encode_candidates_empty_raises(single_fidelity_observations):
+    """Test that encoding an empty candidate iterable raises a clear error."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.fit(single_fidelity_observations)
+
+    with pytest.raises(ValueError, match="empty candidate iterable"):
+        surrogate.encode_candidates([])
+
+
+def test_encode_candidates_rejects_fidelity_in_single_fidelity_model(
+    single_fidelity_observations,
+):
+    """Test that single-fidelity models reject candidates carrying fidelity values."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.fit(single_fidelity_observations)
+
+    with pytest.raises(ValueError, match="must not provide fidelity values"):
+        surrogate.encode_candidates([Candidate(x=[1.5, 2.5], fidelity=1)])
+
+
+def test_encode_candidate_batches_single_fidelity_shape(single_fidelity_observations):
+    """Test q-batch encoding shape in the single-fidelity setting."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.fit(single_fidelity_observations)
+
+    batch_X = surrogate.encode_candidate_batches(
+        [
+            [Candidate(x=[1.5, 2.5]), Candidate(x=[2.5, 3.5])],
+            [Candidate(x=[1.0, 2.0]), Candidate(x=[3.0, 4.0])],
+        ]
+    )
+
+    assert batch_X.shape == (2, 2, 2)
+
+
+def test_encode_candidate_batches_multi_fidelity_shape(multi_fidelity_observations):
+    """Test q-batch encoding shape in the multi-fidelity setting."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.set_fidelity_confidences({0: 0.25, 1: 0.95})
+    surrogate.fit(multi_fidelity_observations)
+
+    batch_X = surrogate.encode_candidate_batches(
+        [
+            [Candidate(x=[1.5, 2.5], fidelity=1), Candidate(x=[2.5, 3.5], fidelity=1)],
+            [Candidate(x=[1.5, 2.5], fidelity=0), Candidate(x=[2.5, 3.5], fidelity=0)],
+        ]
+    )
+
+    assert batch_X.shape == (2, 2, 3)
+    assert torch.allclose(
+        batch_X[0, :, -1], torch.tensor([0.95, 0.95], dtype=torch.float64)
+    )
+    assert torch.allclose(
+        batch_X[1, :, -1], torch.tensor([0.25, 0.25], dtype=torch.float64)
+    )
+
+
+def test_encode_candidate_batches_empty_raises(single_fidelity_observations):
+    """Test that empty batch iterables are rejected."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.fit(single_fidelity_observations)
+
+    with pytest.raises(ValueError, match="empty batch iterable"):
+        surrogate.encode_candidate_batches([])
+
+
+def test_encode_candidate_batches_ragged_raises(single_fidelity_observations):
+    """Test that ragged candidate batches are rejected."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.fit(single_fidelity_observations)
+
+    with pytest.raises(ValueError, match="Ragged batch indices"):
+        surrogate.encode_candidate_batches(
+            [
+                [Candidate(x=[1.5, 2.5]), Candidate(x=[2.5, 3.5])],
+                [Candidate(x=[1.0, 2.0])],
+            ]
+        )
+
+
+def test_encode_candidate_batches_empty_inner_batch_raises(single_fidelity_observations):
+    """Test that empty inner batches are rejected."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.fit(single_fidelity_observations)
+
+    with pytest.raises(ValueError, match="must not be empty"):
+        surrogate.encode_candidate_batches(
+            [
+                [Candidate(x=[1.5, 2.5])],
+                [],
+            ]
+        )
