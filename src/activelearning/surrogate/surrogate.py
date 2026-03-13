@@ -96,6 +96,26 @@ class Surrogate(ABC):
             "Override fit() or ensure updates_from_latest() returns True and override update()."
         )
 
+    def is_fitted(self) -> bool:
+        """Return whether the surrogate has been fitted on at least one observation.
+
+        The active learning loop calls this after each fit/update to determine
+        whether to use acquisition-driven scoring or fall back to uninformed
+        (random) candidate selection.
+
+        The default implementation returns ``True``, which preserves backward
+        compatibility for surrogates that do not track fitted state (e.g.
+        in-memory surrogates that handle empty data gracefully).  Surrogates
+        that require at least one observation before scoring should override
+        this to return ``False`` until data is available.
+
+        Returns
+        -------
+        bool
+            ``True`` if the surrogate is ready for prediction, ``False`` otherwise.
+        """
+        return True
+
     def set_fidelity_confidences(self, confidences: dict[int, float]) -> None:
         """Set per-fidelity confidence metadata for multi-fidelity surrogate models.
 
