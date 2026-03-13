@@ -97,17 +97,22 @@ class Surrogate(ABC):
         )
 
     def is_fitted(self) -> bool:
-        """Return whether the surrogate has been fitted on at least one observation.
+        """Return whether the surrogate is ready to make predictions.
 
-        The active learning loop calls this after each fit/update to determine
-        whether to use acquisition-driven scoring or fall back to uninformed
-        (random) candidate selection.
+        The active learning loop calls this before passing the surrogate to the
+        acquisition function. When ``False``, the loop skips ``acquisition.update()``
+        and the acquisition falls back to uninformed (e.g. constant) scoring,
+        enabling random candidate selection on the first round.
 
-        The default implementation returns ``True``, which preserves backward
-        compatibility for surrogates that do not track fitted state (e.g.
-        in-memory surrogates that handle empty data gracefully).  Surrogates
-        that require at least one observation before scoring should override
-        this to return ``False`` until data is available.
+        The default implementation returns ``True``, which is correct for surrogates
+        that are always ready to predict regardless of whether they have seen data
+        (e.g. simple in-memory or analytic surrogates).
+
+        .. important::
+            If your surrogate builds its model from data — meaning ``predict()``
+            will fail or produce undefined results before ``fit()`` or ``update()``
+            has been called with at least one observation — you **must** override
+            this method to return ``False`` until the model has been initialised.
 
         Returns
         -------
