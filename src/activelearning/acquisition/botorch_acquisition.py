@@ -445,6 +445,11 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
     def score(self, candidates: Iterable[Candidate]) -> list[float]:
         """Score candidates independently by encoding each as a q=1 batch.
 
+        Returns a constant score of ``1.0`` for every candidate when the
+        acquisition has not yet been coupled to a fitted surrogate (cold start).
+        This allows the active learning loop to sample candidates randomly
+        on the first round before any observations are available.
+
         Parameters
         ----------
         candidates : Iterable[Candidate]
@@ -454,14 +459,19 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         -------
         result : list[float]
             Acquisition scores in the same order as the input candidates.
+            All ``1.0`` when called before ``update()``.
 
         Raises
         ------
         RuntimeError
-            If the internal BoTorch acquisition object has not yet been built.
+            If the internal BoTorch acquisition object has not yet been built
+            and the candidate list cannot be materialised.
         """
+        cand_list = list(candidates)
+        if self._botorch_acqf is None:
+            return [1.0] * len(cand_list)
         assert self._botorch_surrogate is not None
-        X = self._botorch_surrogate.encode_candidates(candidates).unsqueeze(1)
+        X = self._botorch_surrogate.encode_candidates(cand_list).unsqueeze(1)
         return self._score_encoded(X)
 
 
@@ -555,6 +565,9 @@ class QBatchBoTorchAcquisition(BoTorchAcquisitionBase):
     ) -> list[float]:
         """Score candidate batches jointly using q-batch semantics.
 
+        Returns a constant score of ``1.0`` for every batch when the
+        acquisition has not yet been coupled to a fitted surrogate (cold start).
+
         Parameters
         ----------
         candidate_batches : Iterable[Iterable[Candidate]]
@@ -565,14 +578,16 @@ class QBatchBoTorchAcquisition(BoTorchAcquisitionBase):
         -------
         result : list[float]
             Acquisition scores in the same order as the input batches.
+            All ``1.0`` when called before ``update()``.
 
         Raises
         ------
         RuntimeError
             If the internal BoTorch acquisition object has not yet been built.
         """
+        batch_list = [list(b) for b in candidate_batches]
+        if self._botorch_acqf is None:
+            return [1.0] * len(batch_list)
         assert self._botorch_surrogate is not None
-        X = self._botorch_surrogate.encode_candidate_batches(
-            candidate_batches
-        )  # (B, q, d)
+        X = self._botorch_surrogate.encode_candidate_batches(batch_list)  # (B, q, d)
         return self._score_encoded(X)

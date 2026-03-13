@@ -314,10 +314,11 @@ class TestRepeatedUpdate:
 class TestAnalyticScore:
     """AnalyticBoTorchAcquisition.score() delegates to _score_encoded."""
 
-    def test_raises_before_update(self, candidates: list[Candidate]) -> None:
+    def test_returns_ones_before_update(self, candidates: list[Candidate]) -> None:
+        """Before update(), score() returns constant 1.0 for every candidate."""
         acq = StubAnalytic()
-        with pytest.raises((RuntimeError, AssertionError)):
-            acq.score(candidates)
+        scores = acq.score(candidates)
+        assert scores == [1.0] * len(candidates)
 
     def test_returns_correct_length(
         self,
@@ -385,17 +386,19 @@ class TestAnalyticScore:
 class TestQBatchScore:
     """QBatchBoTorchAcquisition supports both scoring modes."""
 
-    def test_singleton_score_raises_before_update(self, candidates: list[Candidate]) -> None:
+    def test_singleton_returns_ones_before_update(self, candidates: list[Candidate]) -> None:
+        """Before update(), score() returns constant 1.0 for every candidate."""
         acq = StubQBatch()
-        with pytest.raises((RuntimeError, AssertionError)):
-            acq.score(candidates)
+        scores = acq.score(candidates)
+        assert scores == [1.0] * len(candidates)
 
-    def test_batch_score_raises_before_update(
+    def test_batch_returns_ones_before_update(
         self, candidate_batches: list[list[Candidate]]
     ) -> None:
+        """Before update(), score_batches() returns constant 1.0 for every batch."""
         acq = StubQBatch()
-        with pytest.raises((RuntimeError, AssertionError)):
-            acq.score_batches(candidate_batches)
+        scores = acq.score_batches(candidate_batches)
+        assert scores == [1.0] * len(candidate_batches)
 
     def test_singleton_returns_correct_length(
         self,
