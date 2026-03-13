@@ -784,11 +784,12 @@ def test_is_multi_fidelity_resets_between_fits(
     assert len(predictions["mean"]) == 1
 
 
-def test_fit_empty_observations_raises():
-    """Test that fit raises a clear ValueError when given an empty observation list."""
+def test_fit_empty_observations_is_noop():
+    """fit([]) must be a no-op: no exception and surrogate stays unfitted."""
     surrogate = BoTorchGPSurrogate()
-    with pytest.raises(ValueError, match="empty observation list"):
-        surrogate.fit([])
+    surrogate.fit([])  # Must not raise
+    assert not surrogate.is_fitted()
+    assert surrogate.model is None
 
 
 def test_update_raises_on_fidelity_mismatch(multi_fidelity_observations):

@@ -136,9 +136,9 @@ class BoTorchGPSurrogate(Surrogate):
         """
         obs_list = list(observations)
         if not obs_list:
-            raise ValueError(
-                "Cannot fit BoTorchGPSurrogate on an empty observation list."
-            )
+            # No-op on empty data: surrogate stays unfitted. The AL loop checks
+            # is_fitted() and will use random candidate selection for this round.
+            return
 
         train_X, train_Y, is_multi_fidelity = self._parse_observations(obs_list)
         self._is_multi_fidelity = is_multi_fidelity
@@ -254,6 +254,17 @@ class BoTorchGPSurrogate(Surrogate):
             been fitted at least once; ``False`` otherwise.
         """
         return self.use_partial_updates and self.model is not None
+
+    def is_fitted(self) -> bool:
+        """Return whether the GP model has been built on at least one observation.
+
+        Returns
+        -------
+        bool
+            ``True`` once a GP model has been built; ``False`` before the first
+            non-empty ``fit()`` call.
+        """
+        return self.model is not None
 
     def predict(self, candidates: Iterable[Candidate]) -> Mapping[str, Any]:
         """Predict posterior quantities for candidates.
