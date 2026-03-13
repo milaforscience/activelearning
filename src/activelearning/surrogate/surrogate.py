@@ -106,8 +106,13 @@ class Surrogate(ABC):
 
         The default implementation returns ``True``, which is correct for surrogates
         that are always ready to predict regardless of whether they have seen data
-        (e.g. simple in-memory or analytic surrogates). Surrogates that require at
-        least one observation before scoring should override this method.
+        (e.g. simple in-memory or analytic surrogates).
+
+        .. important::
+            If your surrogate builds its model from data — meaning ``predict()``
+            will fail or produce undefined results before ``fit()`` or ``update()``
+            has been called with at least one observation — you **must** override
+            this method to return ``False`` until the model has been initialised.
 
         Returns
         -------
