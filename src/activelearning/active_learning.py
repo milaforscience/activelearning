@@ -74,7 +74,12 @@ def active_learning(
             surrogate.update(dataset.get_latest_observations_iterable())
         else:
             surrogate.fit(observations)
-        acquisition.update(surrogate, observations)
+
+        # Only couple the acquisition to the surrogate once it has been fitted.
+        # Before fitting, acquisition falls back to its unfitted behaviour (e.g.
+        # returning zero scores), enabling random candidate selection on cold start.
+        if surrogate.is_fitted():
+            acquisition.update(surrogate, observations)
 
         # Sampler can use acquisition for scoring candidates and observations to avoid re-sampling
         samples = sampler.sample(acquisition=acquisition, observations=observations)
