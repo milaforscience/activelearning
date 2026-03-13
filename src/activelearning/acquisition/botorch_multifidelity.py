@@ -1,0 +1,199 @@
+"""Concrete wrappers for BoTorch multi-fidelity acquisition functions.
+
+All multi-fidelity acquisitions in BoTorch are q-batch / Monte Carlo.
+Each class subclasses :class:`QBatchBoTorchAcquisition` and implements
+:meth:`_build_botorch_acquisition`, wiring the resolved cost-aware utility
+and target-fidelity projection from the base class into the BoTorch object.
+"""
+
+from typing import Any, Callable, Optional
+
+import torch
+from botorch.acquisition.knowledge_gradient import (
+    qMultiFidelityKnowledgeGradient as _qMFKG,
+)
+from botorch.acquisition.max_value_entropy_search import (
+    qMultiFidelityLowerBoundMaxValueEntropy as _qMFLBMES,
+    qMultiFidelityMaxValueEntropy as _qMFMES,
+)
+
+from activelearning.acquisition.botorch_acquisition import QBatchBoTorchAcquisition
+
+
+class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
+    """Multi-fidelity q-Knowledge Gradient (qMFKG).
+
+    Extends qKG with cost-aware utility, target-fidelity projection, and
+    trace-observation expansion. When cost-aware / projection helpers are
+    configured on the base class (via constructor kwargs or surrogate
+    metadata), they are wired in automatically.
+
+    Parameters
+    ----------
+    num_fantasies : int, default=64
+        Number of fantasy models used for inner optimization.
+    current_value : float, optional
+        Current best objective value.
+    expand : callable, optional
+        Callable for trace-observation expansion.
+    **kwargs
+        Forwarded to :class:`QBatchBoTorchAcquisition`.
+    """
+
+    def __init__(
+        self,
+        *,
+        num_fantasies: int = 64,
+        current_value: Optional[float] = None,
+        expand: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(supports_batch_scoring=False, **kwargs)
+        self._num_fantasies = num_fantasies
+        self._current_value = current_value
+        self._expand = expand
+
+    def _build_botorch_acquisition(self) -> Any:
+        """Construct the BoTorch qMultiFidelityKnowledgeGradient object."""
+        assert self._botorch_surrogate is not None
+
+        current_value = (
+            torch.tensor(self._current_value) if self._current_value is not None else None
+        )
+
+        build_kwargs: dict[str, Any] = {
+            "model": self._botorch_surrogate.get_model(),
+            "num_fantasies": self._num_fantasies,
+            "current_value": current_value,
+        }
+
+        if self._resolved_cost_aware_utility is not None:
+            build_kwargs["cost_aware_utility"] = self._resolved_cost_aware_utility
+        if self._resolved_project_to_target_fidelity_fn is not None:
+            build_kwargs["project"] = self._resolved_project_to_target_fidelity_fn
+        if self._expand is not None:
+            build_kwargs["expand"] = self._expand
+
+        return _qMFKG(**build_kwargs)
+
+
+class QMultiFidelityMaxValueEntropy(QBatchBoTorchAcquisition):
+    """Multi-fidelity q-Max-Value Entropy Search (qMFMES).
+
+    Parameters
+    ----------
+    candidate_set : torch.Tensor
+        Discrete set of candidates used to approximate the max-value
+        distribution.  Shape ``(N, d)`` in **model** space.
+    num_fantasies : int, default=16
+        Number of fantasy models.
+    num_mv_samples : int, default=10
+        Number of max-value samples.
+    num_y_samples : int, default=128
+        Number of outcome samples per max-value sample.
+    expand : callable, optional
+        Callable for trace-observation expansion.
+    **kwargs
+        Forwarded to :class:`QBatchBoTorchAcquisition`.
+    """
+
+    def __init__(
+        self,
+        *,
+        candidate_set: torch.Tensor,
+        num_fantasies: int = 16,
+        num_mv_samples: int = 10,
+        num_y_samples: int = 128,
+        expand: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(supports_batch_scoring=False, **kwargs)
+        self._candidate_set = candidate_set
+        self._num_fantasies = num_fantasies
+        self._num_mv_samples = num_mv_samples
+        self._num_y_samples = num_y_samples
+        self._expand = expand
+
+    def _build_botorch_acquisition(self) -> Any:
+        """Construct the BoTorch qMultiFidelityMaxValueEntropy object."""
+        assert self._botorch_surrogate is not None
+
+        build_kwargs: dict[str, Any] = {
+            "model": self._botorch_surrogate.get_model(),
+            "candidate_set": self._candidate_set,
+            "num_fantasies": self._num_fantasies,
+            "num_mv_samples": self._num_mv_samples,
+            "num_y_samples": self._num_y_samples,
+            "maximize": self.maximize,
+        }
+
+        if self._resolved_cost_aware_utility is not None:
+            build_kwargs["cost_aware_utility"] = self._resolved_cost_aware_utility
+        if self._resolved_project_to_target_fidelity_fn is not None:
+            build_kwargs["project"] = self._resolved_project_to_target_fidelity_fn
+        if self._expand is not None:
+            build_kwargs["expand"] = self._expand
+
+        return _qMFMES(**build_kwargs)
+
+
+class QMultiFidelityLowerBoundMaxValueEntropy(QBatchBoTorchAcquisition):
+    """Multi-fidelity lower-bound q-Max-Value Entropy Search (qMFLBMES).
+
+    A cheaper approximation of :class:`QMultiFidelityMaxValueEntropy`.
+
+    Parameters
+    ----------
+    candidate_set : torch.Tensor
+        Discrete set of candidates for max-value approximation.
+        Shape ``(N, d)`` in model space.
+    num_fantasies : int, default=16
+        Number of fantasy models.
+    num_mv_samples : int, default=10
+        Number of max-value samples.
+    num_y_samples : int, default=128
+        Number of outcome samples per max-value sample.
+    expand : callable, optional
+        Callable for trace-observation expansion.
+    **kwargs
+        Forwarded to :class:`QBatchBoTorchAcquisition`.
+    """
+
+    def __init__(
+        self,
+        *,
+        candidate_set: torch.Tensor,
+        num_fantasies: int = 16,
+        num_mv_samples: int = 10,
+        num_y_samples: int = 128,
+        expand: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(supports_batch_scoring=False, **kwargs)
+        self._candidate_set = candidate_set
+        self._num_fantasies = num_fantasies
+        self._num_mv_samples = num_mv_samples
+        self._num_y_samples = num_y_samples
+        self._expand = expand
+
+    def _build_botorch_acquisition(self) -> Any:
+        """Construct the BoTorch qMultiFidelityLowerBoundMaxValueEntropy object."""
+        assert self._botorch_surrogate is not None
+
+        build_kwargs: dict[str, Any] = {
+            "model": self._botorch_surrogate.get_model(),
+            "candidate_set": self._candidate_set,
+            "num_fantasies": self._num_fantasies,
+            "num_mv_samples": self._num_mv_samples,
+            "num_y_samples": self._num_y_samples,
+            "maximize": self.maximize,
+        }
+
+        if self._resolved_cost_aware_utility is not None:
+            build_kwargs["cost_aware_utility"] = self._resolved_cost_aware_utility
+        if self._resolved_project_to_target_fidelity_fn is not None:
+            build_kwargs["project"] = self._resolved_project_to_target_fidelity_fn
+        if self._expand is not None:
+            build_kwargs["expand"] = self._expand
+
+        return _qMFLBMES(**build_kwargs)

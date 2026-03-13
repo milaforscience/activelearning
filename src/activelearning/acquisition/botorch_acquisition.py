@@ -5,6 +5,7 @@ import torch
 
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
+from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import Candidate, Observation
 
 
@@ -38,30 +39,35 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         fidelity_costs: Optional[dict[int, float]] = None,
         cost_model: Optional[Any] = None,
         cost_aware_utility: Optional[Any] = None,
+        supports_singleton_scoring: bool = False,
+        supports_batch_scoring: bool = False,
     ) -> None:
         """Initialize the BoTorch acquisition base.
 
         Parameters
         ----------
         maximize : bool, default=True
-            If True, the acquisition assumes a maximization objective. If False,
-            subclasses should interpret objective-related quantities accordingly.
+            If True, the acquisition assumes a maximization objective.
         target_fidelity_value : float, optional
-            Optional override for the encoded target fidelity value used in
-            model space. If None, the value is inferred from the surrogate.
+            Override for the encoded target fidelity value. If None, inferred
+            from the surrogate.
         project_to_target_fidelity_fn : callable, optional
-            Optional callable that projects encoded model-space inputs to the
-            target fidelity. If None, a default projection is built when needed.
+            Callable that projects encoded inputs to the target fidelity.
         fidelity_costs : dict[int, float], optional
-            Optional mapping from integer fidelity ids to query costs. Used by
-            multi-fidelity acquisitions to construct default cost-aware helpers.
+            Mapping from fidelity ids to query costs.
         cost_model : object, optional
-            Optional custom BoTorch-compatible cost model.
+            Custom BoTorch-compatible cost model.
         cost_aware_utility : object, optional
-            Optional custom BoTorch-compatible cost-aware utility. If provided,
-            this takes precedence over default cost-aware construction.
+            Custom BoTorch-compatible cost-aware utility.
+        supports_singleton_scoring : bool, default=False
+            Forwarded to ``Acquisition.__init__``.
+        supports_batch_scoring : bool, default=False
+            Forwarded to ``Acquisition.__init__``.
         """
-        super().__init__()
+        super().__init__(
+            supports_singleton_scoring=supports_singleton_scoring,
+            supports_batch_scoring=supports_batch_scoring,
+        )
         self.maximize = maximize
 
         # User-specified multi-fidelity / cost-aware configuration
@@ -88,92 +94,44 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
 
     @property
     def botorch_surrogate(self) -> Optional[BoTorchGPSurrogate]:
-        """Return the typed BoTorch surrogate, if available.
-
-        Returns
-        -------
-        result : Optional[BoTorchGPSurrogate]
-            The typed BoTorch surrogate attached during ``update()``, or
-            ``None`` if ``update()`` has not yet been called.
-        """
+        """The typed BoTorch surrogate, or ``None`` before ``update()``."""
         return self._botorch_surrogate
 
     @property
     def botorch_acqf(self) -> Optional[Any]:
-        """Return the internal BoTorch acquisition object, if available.
-
-        Returns
-        -------
-        result : Optional[Any]
-            The internal BoTorch acquisition object constructed during
-            ``update()``, or ``None`` if not yet built.
-        """
+        """The internal BoTorch acquisition object, or ``None`` before ``update()``."""
         return self._botorch_acqf
 
     @property
     def observations_cache(self) -> Optional[list[Observation]]:
-        """Return the materialized observations cached during ``update()``.
-
-        Returns
-        -------
-        result : Optional[list[Observation]]
-            Materialized observations from the current update cycle, or
-            ``None`` if no observations were provided.
-        """
+        """Materialized observations from the current update cycle, or ``None``."""
         return self._observations_cache
 
     @property
     def resolved_target_fidelity_value(self) -> Optional[float]:
-        """Return the resolved encoded target fidelity value.
-
-        Returns
-        -------
-        result : Optional[float]
-            Encoded target fidelity value resolved during ``update()``, or
-            ``None`` when single-fidelity or not applicable.
-        """
+        """Encoded target fidelity value, or ``None`` when not applicable."""
         return self._resolved_target_fidelity_value
 
     @property
     def resolved_project_to_target_fidelity_fn(
         self,
     ) -> Optional[Callable[[torch.Tensor], torch.Tensor]]:
-        """Return the resolved target-fidelity projection callable.
-
-        Returns
-        -------
-        result : Optional[Callable[[torch.Tensor], torch.Tensor]]
-            Projection callable resolved during ``update()``, or ``None`` if not
-            applicable.
-        """
+        """Target-fidelity projection callable, or ``None`` if not applicable."""
         return self._resolved_project_to_target_fidelity_fn
 
     @property
     def resolved_cost_model(self) -> Optional[Any]:
-        """Return the resolved cost model.
-
-        Returns
-        -------
-        result : Optional[Any]
-            Cost model resolved during ``update()``, or ``None`` if not used.
-        """
+        """Resolved cost model, or ``None`` if not used."""
         return self._resolved_cost_model
 
     @property
     def resolved_cost_aware_utility(self) -> Optional[Any]:
-        """Return the resolved cost-aware utility.
-
-        Returns
-        -------
-        result : Optional[Any]
-            Cost-aware utility resolved during ``update()``, or ``None`` if not
-            used.
-        """
+        """Resolved cost-aware utility, or ``None`` if not used."""
         return self._resolved_cost_aware_utility
 
     def update(
         self,
-        surrogate,
+        surrogate: Surrogate,
         observations: Optional[Iterable[Observation]] = None,
     ) -> None:
         """Refresh the acquisition state after the surrogate has been updated.
@@ -198,15 +156,15 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         """
         super().update(surrogate, observations)
 
-        self._botorch_surrogate = self._require_botorch_surrogate(surrogate)
-        self._observations_cache = self._materialize_observations(observations)
-
-        # Clear any stale state from a previous update cycle.
-        self._botorch_acqf = None
-        self._resolved_target_fidelity_value = None
-        self._resolved_project_to_target_fidelity_fn = None
-        self._resolved_cost_model = None
-        self._resolved_cost_aware_utility = None
+        if not isinstance(surrogate, BoTorchGPSurrogate):
+            raise TypeError(
+                f"{self.__class__.__name__} requires a BoTorchGPSurrogate, "
+                f"but received {type(surrogate).__name__}."
+            )
+        self._botorch_surrogate = surrogate
+        self._observations_cache = (
+            list(observations) if observations is not None else None
+        )
 
         # Resolve shared MF / cost-aware helpers before building the acqf.
         self._resolved_target_fidelity_value = self._resolve_target_fidelity_value()
@@ -217,52 +175,6 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         self._resolved_cost_aware_utility = self._resolve_cost_aware_utility()
 
         self._botorch_acqf = self._build_botorch_acquisition()
-
-    def _require_botorch_surrogate(self, surrogate: Any) -> BoTorchGPSurrogate:
-        """Validate and return a typed BoTorch surrogate.
-
-        Parameters
-        ----------
-        surrogate : Any
-            Surrogate supplied to ``update()``.
-
-        Returns
-        -------
-        result : BoTorchGPSurrogate
-            The validated BoTorch surrogate.
-
-        Raises
-        ------
-        TypeError
-            If the surrogate is not a ``BoTorchGPSurrogate``.
-        """
-        if not isinstance(surrogate, BoTorchGPSurrogate):
-            raise TypeError(
-                f"{self.__class__.__name__} requires a BoTorchGPSurrogate, "
-                f"but received {type(surrogate).__name__}."
-            )
-        return surrogate
-
-    def _materialize_observations(
-        self,
-        observations: Optional[Iterable[Observation]],
-    ) -> Optional[list[Observation]]:
-        """Materialize observations into a reusable list.
-
-        Parameters
-        ----------
-        observations : Optional[Iterable[Observation]]
-            Iterable of observations, possibly one-pass.
-
-        Returns
-        -------
-        result : Optional[list[Observation]]
-            Materialized observation list, or ``None`` if no observations were
-            supplied.
-        """
-        if observations is None:
-            return None
-        return list(observations)
 
     def _require_botorch_acqf(self) -> Any:
         """Return the internal BoTorch acquisition object.
@@ -283,22 +195,6 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
                 "Call update() after fitting the surrogate before scoring."
             )
         return self._botorch_acqf
-
-    def _tensor_to_list(self, values: torch.Tensor) -> list[float]:
-        """Convert an acquisition output tensor to a Python list of floats.
-
-        Parameters
-        ----------
-        values : torch.Tensor
-            Tensor containing one acquisition value per singleton candidate or
-            per candidate batch.
-
-        Returns
-        -------
-        result : list[float]
-            Flattened list of floats in the same order as the tensor entries.
-        """
-        return values.detach().cpu().reshape(-1).tolist()
 
     def _resolve_target_fidelity_value(self) -> Optional[float]:
         """Resolve the encoded target fidelity value.
@@ -489,6 +385,85 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         """
         pass
 
+    def _resolve_best_f(self, best_f_override: Optional[float] = None) -> float:
+        """Resolve the best observed objective value for improvement-based acquisitions.
+
+        Resolution order:
+        1. User-provided override.
+        2. Computed from cached observations (max if maximize, min otherwise).
+        3. Computed from surrogate training targets as fallback.
+
+        Parameters
+        ----------
+        best_f_override : float, optional
+            User-provided best objective value.
+
+        Returns
+        -------
+        result : float
+            Best observed objective value.
+
+        Raises
+        ------
+        RuntimeError
+            If no observations or training data are available.
+        """
+        if best_f_override is not None:
+            return best_f_override
+
+        if self._observations_cache is not None and len(self._observations_cache) > 0:
+            ys = [float(obs.y) for obs in self._observations_cache]
+            return max(ys) if self.maximize else min(ys)
+
+        if self._botorch_surrogate is not None:
+            _, train_Y = self._botorch_surrogate.get_train_data()
+            return train_Y.max().item() if self.maximize else train_Y.min().item()
+
+        raise RuntimeError(
+            "Cannot resolve best_f: no observations or training data available. "
+            "Call update() with observations or provide best_f explicitly."
+        )
+
+    def _score_encoded(self, X: torch.Tensor) -> list[float]:
+        """Evaluate the BoTorch acquisition on an already-encoded tensor.
+
+        Parameters
+        ----------
+        X : torch.Tensor
+            Encoded input tensor ready for the BoTorch acquisition function.
+
+        Returns
+        -------
+        result : list[float]
+            Acquisition scores in input order.
+        """
+        botorch_acqf = self._require_botorch_acqf()
+        with torch.no_grad():
+            values = botorch_acqf(X)
+        return values.detach().cpu().reshape(-1).tolist()
+
+    def score(self, candidates: Iterable[Candidate]) -> list[float]:
+        """Score candidates independently by encoding each as a q=1 batch.
+
+        Parameters
+        ----------
+        candidates : Iterable[Candidate]
+            Iterable of candidates to score independently.
+
+        Returns
+        -------
+        result : list[float]
+            Acquisition scores in the same order as the input candidates.
+
+        Raises
+        ------
+        RuntimeError
+            If the internal BoTorch acquisition object has not yet been built.
+        """
+        assert self._botorch_surrogate is not None
+        X = self._botorch_surrogate.encode_candidates(candidates).unsqueeze(1)
+        return self._score_encoded(X)
+
 
 class AnalyticBoTorchAcquisition(BoTorchAcquisitionBase):
     """Intermediate base class for analytic BoTorch acquisition functions.
@@ -509,53 +484,19 @@ class AnalyticBoTorchAcquisition(BoTorchAcquisitionBase):
     leaves ``score_batches()`` unsupported.
     """
 
-    def supports_singleton_scoring(self) -> bool:
-        """Return whether singleton scoring is supported.
-
-        Returns
-        -------
-        result : bool
-            Always ``True`` for analytic BoTorch acquisitions.
-        """
-        return True
-
-    def supports_batch_scoring(self) -> bool:
-        """Return whether joint batch scoring is supported.
-
-        Returns
-        -------
-        result : bool
-            Always ``False`` for analytic BoTorch acquisitions.
-        """
-        return False
-
-    def score(self, candidates: Iterable[Candidate]) -> list[float]:
-        """Score candidates independently using the analytic BoTorch acquisition.
+    def __init__(self, **kwargs: Any) -> None:
+        """Initialize with singleton scoring enabled, batch scoring disabled.
 
         Parameters
         ----------
-        candidates : Iterable[Candidate]
-            Iterable of candidates to score independently.
-
-        Returns
-        -------
-        result : list[float]
-            Acquisition scores in the same order as the input candidates.
-
-        Raises
-        ------
-        RuntimeError
-            If the internal BoTorch acquisition object has not yet been built.
+        **kwargs
+            Forwarded to ``BoTorchAcquisitionBase.__init__``.
         """
-        botorch_acqf = self._require_botorch_acqf()
-
-        assert self._botorch_surrogate is not None
-        X = self._botorch_surrogate.encode_candidates(candidates).unsqueeze(1)
-
-        with torch.no_grad():
-            values = botorch_acqf(X)
-
-        return self._tensor_to_list(values)
+        super().__init__(
+            supports_singleton_scoring=True,
+            supports_batch_scoring=False,
+            **kwargs,
+        )
 
 
 class QBatchBoTorchAcquisition(BoTorchAcquisitionBase):
@@ -571,63 +512,42 @@ class QBatchBoTorchAcquisition(BoTorchAcquisitionBase):
     - ``score_batches(candidate_batches)`` evaluates each candidate batch
       jointly, which is the native mode for q-acquisition functions.
 
+    Not all q-batch acquisitions support joint batch scoring (q > 1). For
+    example, the MES family enforces ``expected_q=1`` in its ``forward()``
+    and Knowledge Gradient requires a special q-layout with fantasy points.
+    Concrete subclasses that do not support batch scoring should pass
+    ``supports_batch_scoring=False``.
+
     Examples include:
-    - qUCB
-    - qEI
-    - qNEI
-    - qMES
-    - multi-fidelity q-acquisition variants
+    - qUCB, qEI, qNEI (support both singleton and batch)
+    - qMES, qKG (singleton only — batch selection is handled at the
+      optimizer level via fantasization / ``X_pending``)
     """
 
-    def supports_singleton_scoring(self) -> bool:
-        """Return whether singleton scoring is supported.
-
-        Returns
-        -------
-        result : bool
-            Always ``True`` for q-batch BoTorch acquisitions, since singleton
-            scoring is implemented via q-batches of size 1.
-        """
-        return True
-
-    def supports_batch_scoring(self) -> bool:
-        """Return whether joint batch scoring is supported.
-
-        Returns
-        -------
-        result : bool
-            Always ``True`` for q-batch BoTorch acquisitions.
-        """
-        return True
-
-    def score(self, candidates: Iterable[Candidate]) -> list[float]:
-        """Score candidates independently using q-batch semantics with q=1.
+    def __init__(
+        self,
+        *,
+        supports_batch_scoring: bool = True,
+        **kwargs: Any,
+    ) -> None:
+        """Initialize with singleton scoring enabled.
 
         Parameters
         ----------
-        candidates : Iterable[Candidate]
-            Iterable of candidates to score independently.
-
-        Returns
-        -------
-        result : list[float]
-            Acquisition scores in the same order as the input candidates.
-
-        Raises
-        ------
-        RuntimeError
-            If the internal BoTorch acquisition object has not yet been built.
+        supports_batch_scoring : bool, default=True
+            Whether the underlying BoTorch acquisition supports joint
+            q-batch scoring (q > 1).  Concrete subclasses whose BoTorch
+            objects enforce ``expected_q=1`` (e.g. MES family) or require
+            special q-layouts (e.g. Knowledge Gradient) should pass
+            ``False``.
+        **kwargs
+            Forwarded to ``BoTorchAcquisitionBase.__init__``.
         """
-        botorch_acqf = self._require_botorch_acqf()
-
-        assert self._botorch_surrogate is not None
-        X = self._botorch_surrogate.encode_candidates(candidates)  # (N, d)
-        X = X.unsqueeze(1)  # (N, 1, d)
-
-        with torch.no_grad():
-            values = botorch_acqf(X)
-
-        return self._tensor_to_list(values)
+        super().__init__(
+            supports_singleton_scoring=True,
+            supports_batch_scoring=supports_batch_scoring,
+            **kwargs,
+        )
 
     def score_batches(
         self,
@@ -651,14 +571,8 @@ class QBatchBoTorchAcquisition(BoTorchAcquisitionBase):
         RuntimeError
             If the internal BoTorch acquisition object has not yet been built.
         """
-        botorch_acqf = self._require_botorch_acqf()
-
         assert self._botorch_surrogate is not None
         X = self._botorch_surrogate.encode_candidate_batches(
             candidate_batches
         )  # (B, q, d)
-
-        with torch.no_grad():
-            values = botorch_acqf(X)
-
-        return self._tensor_to_list(values)
+        return self._score_encoded(X)

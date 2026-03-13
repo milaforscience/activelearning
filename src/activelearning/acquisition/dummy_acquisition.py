@@ -21,7 +21,7 @@ class DummyAcquisition(Acquisition):
     """
 
     def __init__(self, beta: float = 1.0) -> None:
-        super().__init__()
+        super().__init__(supports_singleton_scoring=True)
         self._beta = float(beta)
 
     def score(self, candidates: Iterable[Candidate]) -> list[float]:
@@ -63,7 +63,3 @@ class DummyAcquisition(Acquisition):
         if stds is None:
             return list(means)
         return [mean + self._beta * std for mean, std in zip(means, stds)]
-
-    def supports_singleton_scoring(self) -> bool:
-        """Return whether singleton scoring is supported."""
-        return True

@@ -34,9 +34,32 @@ class Acquisition(ABC):
     validate compatibility in ``update()``.
     """
 
-    def __init__(self) -> None:
-        """Initialize the acquisition with no attached surrogate."""
+    def __init__(
+        self,
+        *,
+        supports_singleton_scoring: bool = False,
+        supports_batch_scoring: bool = False,
+    ) -> None:
+        """Initialize the acquisition with capability flags.
+
+        Subclasses declare their scoring capabilities by passing the appropriate
+        flags here.  The base ``supports_singleton_scoring()`` and
+        ``supports_batch_scoring()`` methods read from these flags, so
+        subclasses should **not** override those methods — set the flags
+        instead.
+
+        Parameters
+        ----------
+        supports_singleton_scoring : bool, default=False
+            Whether this acquisition supports independent candidate scoring via
+            ``score()``.
+        supports_batch_scoring : bool, default=False
+            Whether this acquisition supports joint batch scoring via
+            ``score_batches()``.
+        """
         self._surrogate: Optional[Surrogate] = None
+        self._supports_singleton_scoring = supports_singleton_scoring
+        self._supports_batch_scoring = supports_batch_scoring
 
     @property
     def surrogate(self) -> Optional[Surrogate]:
@@ -77,8 +100,8 @@ class Acquisition(ABC):
         Notes
         -----
         The base implementation stores the surrogate reference only. Subclasses
-        should override this method when they need additional validation or
-        bookkeeping, but should typically call ``super().update(...)`` first.
+        that override this method should typically validate first, then call
+        ``super().update(...)`` once validation succeeds.
         """
         self._surrogate = surrogate
 
@@ -155,7 +178,7 @@ class Acquisition(ABC):
         result : bool
             ``True`` if ``score()`` is supported.
         """
-        return False
+        return self._supports_singleton_scoring
 
     def supports_batch_scoring(self) -> bool:
         """Return whether joint batch scoring is supported.
@@ -165,4 +188,4 @@ class Acquisition(ABC):
         result : bool
             ``True`` if ``score_batches()`` is supported.
         """
-        return False
+        return self._supports_batch_scoring
