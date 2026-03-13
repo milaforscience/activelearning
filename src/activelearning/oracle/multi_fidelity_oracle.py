@@ -50,17 +50,7 @@ class MultiFidelityOracle(Oracle):
                     f"Missing 'fidelity_confidence' in config for fidelity {fidelity}"
                 )
             fidelity_confidence = config["fidelity_confidence"]
-            if not isinstance(fidelity_confidence, (int, float)) or isinstance(
-                fidelity_confidence, bool
-            ):
-                raise ValueError(
-                    "fidelity_confidence must be a number in [0, 1] "
-                    f"for fidelity {fidelity}"
-                )
-            if not 0.0 <= float(fidelity_confidence) <= 1.0:
-                raise ValueError(
-                    f"fidelity_confidence must be in [0, 1] for fidelity {fidelity}"
-                )
+            self._validate_fidelity_confidences({fidelity: fidelity_confidence})
 
         self.fidelity_configs = fidelity_configs
         self._supported_fidelities = sorted(self.fidelity_configs.keys())
@@ -71,16 +61,6 @@ class MultiFidelityOracle(Oracle):
             fidelity: float(self.fidelity_configs[fidelity]["fidelity_confidence"])
             for fidelity in self._supported_fidelities
         }
-
-    def _get_config_for_fidelity(self, fidelity: int) -> dict[str, Any]:
-        """Return per-fidelity config or raise ValueError if unsupported."""
-        config = self.fidelity_configs.get(fidelity)
-        if config is None:
-            raise ValueError(
-                f"Unsupported fidelity {fidelity}. "
-                f"Supported: {self._supported_fidelities}"
-            )
-        return config
 
     def get_costs(self, candidates: Sequence[Candidate]) -> list[float]:
         """Get the cost of querying each candidate.
@@ -102,12 +82,10 @@ class MultiFidelityOracle(Oracle):
         """
         costs = []
         for candidate in candidates:
-            if candidate.fidelity is None:
-                raise ValueError(
-                    "Candidate fidelity must be specified for MultiFidelityOracle."
-                )
-            fidelity_config = self._get_config_for_fidelity(candidate.fidelity)
-            costs.append(fidelity_config["cost_per_sample"])
+            fidelity = self._validate_candidate_fidelity(
+                candidate, self.fidelity_configs
+            )
+            costs.append(self.fidelity_configs[fidelity]["cost_per_sample"])
         return costs
 
     def query(self, candidates: Sequence[Candidate]) -> list[Observation]:
@@ -132,16 +110,14 @@ class MultiFidelityOracle(Oracle):
         """
         observations = []
         for candidate in candidates:
-            if candidate.fidelity is None:
-                raise ValueError(
-                    "Candidate fidelity must be specified for MultiFidelityOracle."
-                )
-            fidelity_config = self._get_config_for_fidelity(candidate.fidelity)
-            score_fn = fidelity_config["score_fn"]
+            fidelity = self._validate_candidate_fidelity(
+                candidate, self.fidelity_configs
+            )
+            score_fn = self.fidelity_configs[fidelity]["score_fn"]
             observation = Observation(
                 x=candidate.x,
                 y=score_fn(candidate.x),
-                fidelity=candidate.fidelity,
+                fidelity=fidelity,
             )
             observations.append(observation)
 
