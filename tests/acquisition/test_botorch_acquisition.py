@@ -9,7 +9,6 @@ import torch
 
 from activelearning.acquisition.botorch_acquisition import (
     AnalyticBoTorchAcquisition,
-    BoTorchAcquisitionBase,
     QBatchBoTorchAcquisition,
 )
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
@@ -88,14 +87,18 @@ def candidate_batches() -> list[list[Candidate]]:
 
 
 @pytest.fixture()
-def fitted_surrogate(single_fidelity_observations: list[Observation]) -> BoTorchGPSurrogate:
+def fitted_surrogate(
+    single_fidelity_observations: list[Observation],
+) -> BoTorchGPSurrogate:
     surrogate = BoTorchGPSurrogate()
     surrogate.fit(single_fidelity_observations)
     return surrogate
 
 
 @pytest.fixture()
-def fitted_mf_surrogate(multi_fidelity_observations: list[Observation]) -> BoTorchGPSurrogate:
+def fitted_mf_surrogate(
+    multi_fidelity_observations: list[Observation],
+) -> BoTorchGPSurrogate:
     surrogate = BoTorchGPSurrogate()
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
@@ -265,7 +268,9 @@ class TestObservationsCache:
 class TestRepeatedUpdate:
     """Calling update() multiple times should fully replace prior state."""
 
-    def test_replaces_surrogate(self, single_fidelity_observations: list[Observation]) -> None:
+    def test_replaces_surrogate(
+        self, single_fidelity_observations: list[Observation]
+    ) -> None:
         s1 = BoTorchGPSurrogate()
         s1.fit(single_fidelity_observations)
         s2 = BoTorchGPSurrogate()
@@ -386,7 +391,9 @@ class TestAnalyticScore:
 class TestQBatchScore:
     """QBatchBoTorchAcquisition supports both scoring modes."""
 
-    def test_singleton_returns_ones_before_update(self, candidates: list[Candidate]) -> None:
+    def test_singleton_returns_ones_before_update(
+        self, candidates: list[Candidate]
+    ) -> None:
         """Before update(), score() returns constant 1.0 for every candidate."""
         acq = StubQBatch()
         scores = acq.score(candidates)

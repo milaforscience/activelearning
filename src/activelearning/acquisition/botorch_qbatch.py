@@ -5,7 +5,7 @@ Each class subclasses :class:`QBatchBoTorchAcquisition` and implements
 MC acquisition object.
 """
 
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Callable, Optional
 
 import torch
 from botorch.acquisition.knowledge_gradient import (
@@ -305,7 +305,9 @@ class QKnowledgeGradient(QBatchBoTorchAcquisition):
         """Construct the BoTorch qKnowledgeGradient object."""
         assert self._botorch_surrogate is not None
         current_value = (
-            torch.tensor(self._current_value) if self._current_value is not None else None
+            torch.tensor(self._current_value)
+            if self._current_value is not None
+            else None
         )
         return _qKG(
             model=self._botorch_surrogate.get_model(),

@@ -12,23 +12,27 @@ class Acquisition(ABC):
     surrogate model. Two scoring modes are supported:
 
     1. Singleton scoring:
-       Scores each candidate independently.
+       Scores each candidate independently. Suitable when the utility of a
+       candidate does not depend on other candidates being evaluated together.
 
     2. Batch scoring:
-       Scores each candidate batch jointly, which is required for true q-batch
-       acquisition functions where the value of a point depends on the other
-       points selected alongside it.
+       Scores each candidate batch jointly. Required when the utility of a
+       candidate depends on the other candidates selected alongside it.
+
+    Subclasses are not required to implement both modes — only the modes
+    relevant to the acquisition strategy need to be provided. Subclasses
+    declare which modes they support via the ``supports_singleton_scoring``
+    and ``supports_batch_scoring`` constructor flags. Callers should check
+    these flags before invoking the corresponding scoring method.
 
     Surrogate Coupling
     ------------------
     Most acquisition functions depend on the surrogate for posterior information,
-    predictive moments, samples, or internal model access.
+    predictive moments, or samples.
 
-    - Generic acquisitions may rely only on ``surrogate.predict()``.
-    - Framework-specific acquisitions (e.g. BoTorch-based ones) may require
-      richer surrogate capabilities such as direct access to a fitted model,
-      encoded candidate tensors, training data, pending points, or fidelity
-      metadata.
+    - Simple acquisitions may rely only on ``surrogate.predict()``.
+    - More specialised acquisitions may require richer surrogate capabilities
+      such as direct model access, training data, or pending points.
 
     Implementations should clearly document their surrogate requirements and
     validate compatibility in ``update()``.
@@ -108,6 +112,10 @@ class Acquisition(ABC):
     def score(self, candidates: Iterable[Candidate]) -> list[float]:
         """Score candidates independently.
 
+        This method is intentionally optional. Subclasses that only support
+        joint batch scoring need not implement it. Callers should check
+        ``supports_singleton_scoring()`` before calling this method.
+
         Parameters
         ----------
         candidates : Iterable[Candidate]
@@ -123,12 +131,8 @@ class Acquisition(ABC):
         Raises
         ------
         NotImplementedError
-            If the acquisition does not support singleton scoring.
-
-        Notes
-        -----
-        This method is for independent singleton scoring only. It should not be
-        used to assign a joint score to an entire set of candidates.
+            Always, unless overridden by a subclass that supports singleton
+            scoring.
         """
         raise NotImplementedError(
             f"{self.__class__.__name__} does not support singleton scoring."
@@ -139,6 +143,10 @@ class Acquisition(ABC):
         candidate_batches: Iterable[Iterable[Candidate]],
     ) -> list[float]:
         """Score candidate batches jointly.
+
+        This method is intentionally optional. Subclasses that only support
+        singleton scoring need not implement it. Callers should check
+        ``supports_batch_scoring()`` before calling this method.
 
         Parameters
         ----------
@@ -158,13 +166,8 @@ class Acquisition(ABC):
         Raises
         ------
         NotImplementedError
-            If the acquisition does not support joint batch scoring.
-
-        Notes
-        -----
-        This method is required for true q-batch acquisition functions where the
-        utility of a batch cannot be decomposed into independent per-candidate
-        scores.
+            Always, unless overridden by a subclass that supports joint batch
+            scoring.
         """
         raise NotImplementedError(
             f"{self.__class__.__name__} does not support joint batch scoring."

@@ -58,7 +58,9 @@ class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
         assert self._botorch_surrogate is not None
 
         current_value = (
-            torch.tensor(self._current_value) if self._current_value is not None else None
+            torch.tensor(self._current_value)
+            if self._current_value is not None
+            else None
         )
 
         build_kwargs: dict[str, Any] = {
