@@ -10,6 +10,7 @@ from activelearning.logger.logger import (
     ConsoleLogger,
     WandbLogger,
 )
+from activelearning.runtime import RuntimeContext
 
 
 # ---------------------------------------------------------------------------
@@ -413,7 +414,7 @@ class TestActiveLearningLoopIntegration:
             selector=selector,
             oracle=oracle,
             budget=budget,
-            logger=mock_logger,
+            runtime_context=RuntimeContext(logger=mock_logger),
         )
 
         assert mock_logger.log_metric.called
@@ -435,7 +436,6 @@ class TestActiveLearningLoopIntegration:
             selector=selector,
             oracle=oracle,
             budget=budget,
-            logger=None,
         )
         assert num_rounds >= 0
         assert total_cost >= 0.0
@@ -459,7 +459,7 @@ class TestActiveLearningLoopIntegration:
             selector=selector,
             oracle=oracle,
             budget=budget,
-            logger=mock_logger,
+            runtime_context=RuntimeContext(logger=mock_logger),
         )
 
         expected_keys = {

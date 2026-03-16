@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import Iterable, Optional, Sequence
 
+from activelearning.runtime import ALRuntimeMixin
 from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import Candidate, Observation
 
 
-class Acquisition(ABC):
+class Acquisition(ABC, ALRuntimeMixin):
     """Abstract acquisition interface used to evaluate candidates.
 
     Acquisition functions evaluate the utility of querying candidates

@@ -1,10 +1,11 @@
 import logging
 from typing import Callable
+from activelearning.runtime import ALRuntimeMixin
 
 logger = logging.getLogger(__name__)
 
 
-class Budget:
+class Budget(ALRuntimeMixin):
     """Manages budget allocation and consumption for active learning rounds.
 
     The Budget class tracks remaining budget and provides per-round budget

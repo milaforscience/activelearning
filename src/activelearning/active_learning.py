@@ -1,8 +1,12 @@
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.budget.budget import Budget
 from activelearning.dataset.dataset import Dataset
-from activelearning.logger.logger import Logger
 from activelearning.oracle.oracle import Oracle
+from activelearning.runtime import (
+    DEFAULT_RUNTIME_CONTEXT,
+    RuntimeContext,
+    bind_runtime_context,
+)
 from activelearning.sampler.sampler import Sampler
 from activelearning.selector.selector import Selector
 from activelearning.surrogate.surrogate import Surrogate
@@ -16,7 +20,7 @@ def active_learning(
     selector: Selector,
     oracle: Oracle,
     budget: Budget,
-    logger: Logger | None = None,
+    runtime_context: RuntimeContext | None = None,
 ) -> tuple[Dataset, float, int]:
     """Execute the active learning loop with budget constraints.
 
@@ -41,9 +45,10 @@ def active_learning(
         Oracle instance that handles all fidelity levels internally.
     budget : Budget
         Budget object managing allocation and consumption.
-    logger : Logger, optional
-        Logger instance for recording per-round metrics.
-        If None, no logging is performed.
+    runtime_context : RuntimeContext, optional
+        Shared runtime settings propagated to runtime-aware components. If
+        omitted, components fall back to the default context. If the context
+        contains a logger, the loop records per-round metrics through it.
 
     Returns
     -------
@@ -58,6 +63,14 @@ def active_learning(
         The loop terminates early if no candidates can be afforded within
         the remaining budget to prevent infinite loops.
     """
+    resolved_runtime_context = runtime_context or DEFAULT_RUNTIME_CONTEXT
+    logger = resolved_runtime_context.logger
+
+    bind_runtime_context(
+        [dataset, surrogate, acquisition, sampler, selector, oracle, budget],
+        resolved_runtime_context,
+    )
+
     initial_budget = budget.available_budget
     num_rounds = 0
 
