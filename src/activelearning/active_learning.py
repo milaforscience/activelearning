@@ -1,6 +1,7 @@
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.budget.budget import Budget
 from activelearning.dataset.dataset import Dataset
+from activelearning.logger.logger import Logger
 from activelearning.oracle.oracle import Oracle
 from activelearning.sampler.sampler import Sampler
 from activelearning.selector.selector import Selector
@@ -15,6 +16,7 @@ def active_learning(
     selector: Selector,
     oracle: Oracle,
     budget: Budget,
+    logger: Logger | None = None,
 ) -> tuple[Dataset, float, int]:
     """Execute the active learning loop with budget constraints.
 
@@ -39,6 +41,9 @@ def active_learning(
         Oracle instance that handles all fidelity levels internally.
     budget : Budget
         Budget object managing allocation and consumption.
+    logger : Logger, optional
+        Logger instance for recording per-round metrics.
+        If None, no logging is performed.
 
     Returns
     -------
@@ -103,5 +108,17 @@ def active_learning(
 
         num_rounds += 1
 
+        if logger is not None:
+            logger.log_metric("round", num_rounds)
+            logger.log_metric("num_new_samples", len(selected_samples))
+            logger.log_metric("round_cost", total_cost)
+            logger.log_metric("total_cost", initial_budget - budget.available_budget)
+            logger.log_metric("budget_remaining", budget.available_budget)
+            logger.log_step(num_rounds)
+
     total_cost = initial_budget - budget.available_budget
+
+    if logger is not None:
+        logger.end()
+
     return dataset, total_cost, num_rounds

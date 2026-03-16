@@ -1,6 +1,5 @@
-from unittest.mock import Mock
-
 import pytest
+from unittest.mock import Mock
 
 from activelearning.acquisition.dummy_acquisition import DummyAcquisition
 from activelearning.budget.budget import Budget
@@ -11,6 +10,7 @@ from activelearning.selector.score_selector import TopKAcquisitionSelector
 from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
 from activelearning.active_learning import active_learning
 from activelearning.utils.types import Candidate
+from activelearning.logger.logger import ConsoleLogger
 
 
 class ConfidenceAwareDummyMeanSurrogate(DummyMeanSurrogate):
@@ -112,6 +112,36 @@ def test_active_learning_loop(
     assert isinstance(best, list)
     assert isinstance(cost, float)
     assert isinstance(num_iter, int)
+
+
+def test_active_learning_logs_metrics_with_console_logger(
+    dataset, surrogate, acquisition, sampler, selector, oracle, budget, capsys
+):
+    """Test that the active learning loop integrates with a logger."""
+    logger = ConsoleLogger(project_name="test_project", run_name="console_test_run")
+    capsys.readouterr()
+
+    _, cost, num_iter = active_learning(
+        dataset=dataset,
+        surrogate=surrogate,
+        acquisition=acquisition,
+        sampler=sampler,
+        selector=selector,
+        oracle=oracle,
+        budget=budget,
+        logger=logger,
+    )
+    out = capsys.readouterr().out
+
+    assert num_iter > 0
+    assert cost > 0.0
+    assert out.count("[Step ") == num_iter
+    assert "round=" in out
+    assert "num_new_samples=" in out
+    assert "round_cost=" in out
+    assert "total_cost=" in out
+    assert "budget_remaining=" in out
+    assert "[Logger] Run 'console_test_run' finished." in out
 
 
 def test_active_learning_passes_fidelity_confidences_to_surrogate(
