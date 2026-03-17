@@ -84,8 +84,8 @@ class Acquisition(ABC):
     ) -> None:
         """Update internal state after the surrogate has been fit or refreshed.
 
-        Called by the active learning loop whenever the surrogate is refit from
-        scratch or incrementally updated. Implementations may use this hook to:
+        Called whenever the surrogate is refit or updated. Implementations
+        may use this hook to:
 
         - validate surrogate compatibility,
         - cache a typed surrogate reference,
@@ -153,8 +153,7 @@ class Acquisition(ABC):
         candidate_batches : Iterable[Iterable[Candidate]]
             Iterable of candidate batches. Each inner iterable represents one
             jointly scored batch. Implementations may materialize these iterables
-            internally if multiple passes, shape checks, or tensor stacking are
-            needed.
+            internally if multiple passes or shape checks are needed.
 
         Returns
         -------
