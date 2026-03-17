@@ -517,7 +517,10 @@ class TestMultiFidelityResolution:
         multi_fidelity_observations: list[Observation],
     ) -> None:
         """User-specified projection callable takes precedence."""
-        custom_fn = lambda X: X * 0.0
+
+        def custom_fn(X: torch.Tensor) -> torch.Tensor:
+            return X * 0.0
+
         acq = StubAnalytic(project_to_target_fidelity_fn=custom_fn)
         acq.update(fitted_mf_surrogate, multi_fidelity_observations)
         assert acq.resolved_project_to_target_fidelity_fn is custom_fn
