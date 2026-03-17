@@ -24,6 +24,17 @@ class PoolScoreSampler(Sampler):
         self.candidate_pool = candidate_pool
         self.num_samples = num_samples
 
+    def _get_sampling_weights(
+        self, acquisition_values: Sequence[float]
+    ) -> torch.Tensor:
+        """Convert acquisition values into sampling probabilities."""
+        acquisition_tensor = torch.as_tensor(
+            acquisition_values,
+            dtype=self.dtype,
+            device=self.device,
+        )
+        return torch.softmax(acquisition_tensor, dim=0)
+
     def sample(
         self,
         acquisition: Optional[Acquisition] = None,
@@ -53,8 +64,10 @@ class PoolScoreSampler(Sampler):
         acq_values = acquisition(self.candidate_pool)
 
         # Apply softmax to convert acquisition values to valid probabilities
-        weights = torch.softmax(torch.tensor(acq_values), dim=0)
-        sampled_indices = torch.multinomial(
-            weights, num_samples=self.num_samples, replacement=False
-        ).tolist()
+        weights = self._get_sampling_weights(acq_values)
+        sampled_indices = (
+            torch.multinomial(weights, num_samples=self.num_samples, replacement=False)
+            .cpu()
+            .tolist()
+        )
         return [self.candidate_pool[i] for i in sampled_indices]
