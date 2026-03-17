@@ -14,11 +14,11 @@ Three built-in strategies are provided:
 
 - :class:`HypercubeCandidateSetSpec` — for **continuous** domains. Generates
   points by sampling from a user-specified bounded hypercube (uniform or Latin
-  Hypercube Sampling). Handles multi-fidelity problems automatically by
-  appending the target fidelity to each candidate.
+  Hypercube Sampling). The target fidelity column is appended automatically in
+  multi-fidelity mode.
 - :class:`TrainDataCandidateSetSpec` — a simple default for **discrete**
   domains. Reuses the surrogate's training inputs as the support set.
-- :class:`TensorCandidateSetSpec` — for users who wish to supply their own
+- :class:`TensorCandidateSetSpec` — for users who want to supply their own
   precomputed candidate set directly.
 
 Custom strategies can be implemented by subclassing :class:`CandidateSetSpec`
@@ -38,14 +38,7 @@ class CandidateSetSpec(ABC):
 
     A :class:`CandidateSetSpec` defines how to produce the discrete set of
     points used by entropy-based acquisition functions to approximate the
-    distribution of the optimum.  The candidate set is constructed by calling
-    :meth:`build` after the surrogate has been fitted.
-
-    The ``target_fidelity_value`` parameter is provided by the calling
-    acquisition and represents the already-resolved encoded fidelity value
-    (e.g. ``1.0`` for the highest-confidence fidelity).  Passing it explicitly
-    ensures the candidate set is always consistent with the acquisition's own
-    target-fidelity resolution — including any user-specified overrides.
+    distribution of the optimum.
 
     The returned tensor is in **model space** — the feature representation
     expected by the surrogate's internal model — with shape ``(N, d)``, where
@@ -68,10 +61,9 @@ class CandidateSetSpec(ABC):
         surrogate : BoTorchGPSurrogate
             A fitted surrogate.
         target_fidelity_value : float, optional
-            Encoded target fidelity value, passed by the acquisition after its
-            own resolution step.  When provided, implementations should use
-            this value to populate the fidelity column rather than inferring
-            it independently.
+            The encoded fidelity value to append as the last column of the
+            candidate set in multi-fidelity mode (e.g. ``1.0`` for the
+            highest-confidence fidelity).  ``None`` in single-fidelity mode.
 
         Returns
         -------
@@ -86,10 +78,8 @@ class HypercubeCandidateSetSpec(CandidateSetSpec):
     Generates points by uniform or Latin Hypercube Sampling within the
     specified feature bounds.  Suitable for **continuous** domains.
 
-    In multi-fidelity mode the target fidelity value is appended as the last
-    column of the returned tensor.  This value is provided by the calling
-    acquisition at :meth:`build` time, ensuring it is always consistent with
-    the acquisition's own target-fidelity resolution.
+    In multi-fidelity mode, the target fidelity value is appended as the
+    last column of the returned tensor.
 
     Parameters
     ----------
@@ -164,11 +154,11 @@ class HypercubeCandidateSetSpec(CandidateSetSpec):
         Parameters
         ----------
         surrogate : BoTorchGPSurrogate
-            Accepted for interface compatibility; not used directly.
+            A fitted surrogate.
         target_fidelity_value : float, optional
             When provided, appended as the fidelity column of every candidate
-            in the returned tensor.  Should be the encoded confidence value
-            (e.g. ``1.0``) as resolved by the calling acquisition.
+            in the returned tensor (e.g. ``1.0`` for the highest-confidence
+            fidelity).
 
         Returns
         -------
@@ -218,9 +208,8 @@ class TrainDataCandidateSetSpec(CandidateSetSpec):
         surrogate : BoTorchGPSurrogate
             Fitted surrogate.
         target_fidelity_value : float, optional
-            Accepted for interface compatibility; not used.  The training
-            inputs already include the encoded fidelity column when the
-            surrogate is in multi-fidelity mode.
+            Not used — the training inputs already include the fidelity
+            column in multi-fidelity mode.
 
         Returns
         -------
@@ -237,16 +226,16 @@ class TrainDataCandidateSetSpec(CandidateSetSpec):
 
 
 class TensorCandidateSetSpec(CandidateSetSpec):
-    """Wrap a precomputed tensor as a :class:`CandidateSetSpec`.
+    """Supply a precomputed tensor as a candidate set.
 
-    This is an escape hatch for advanced users who already have a model-space
-    tensor (e.g. from precomputation, a pool dataset, or a custom grid) and
-    want to remain within the spec API without subclassing.
+    For users who want to provide their own candidate set directly —
+    for example from a precomputed grid, a pool dataset, or a custom
+    sampling procedure.
 
     Parameters
     ----------
     tensor : torch.Tensor
-        Precomputed candidate set in model space.  Shape ``(N, d)``.
+        Candidate set in model space.  Shape ``(N, d)``.
     """
 
     def __init__(self, tensor: torch.Tensor) -> None:
@@ -263,9 +252,9 @@ class TensorCandidateSetSpec(CandidateSetSpec):
         Parameters
         ----------
         surrogate : BoTorchGPSurrogate
-            Accepted for interface compatibility; not used.
+            Not used.
         target_fidelity_value : float, optional
-            Accepted for interface compatibility; not used.
+            Not used.
 
         Returns
         -------
