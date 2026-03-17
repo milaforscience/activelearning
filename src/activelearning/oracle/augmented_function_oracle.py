@@ -1,8 +1,14 @@
-import torch
+from collections.abc import Sequence
 from typing import Any, Callable, Optional
+
+import matplotlib.pyplot as plt
+import torch
 from botorch.test_functions.multi_fidelity import AugmentedBranin, AugmentedHartmann
 from botorch.test_functions.synthetic import SyntheticTestFunction
+
 from activelearning.oracle.multi_fidelity_oracle import MultiFidelityOracle
+from activelearning.oracle.plotting import build_augmented_2d_landscape_figure
+from activelearning.utils.types import Candidate, Observation
 
 
 class AugmentedFunctionOracle(MultiFidelityOracle):
@@ -51,6 +57,8 @@ class AugmentedFunctionOracle(MultiFidelityOracle):
                 f"expected {sorted(fidelity_costs.keys())}"
             )
 
+        self._function = function
+
         fidelity_configs: dict[int, dict[str, Any]] = {
             fidelity: {
                 "cost_per_sample": fidelity_costs[fidelity],
@@ -63,9 +71,10 @@ class AugmentedFunctionOracle(MultiFidelityOracle):
         }
         super().__init__(fidelity_configs=fidelity_configs)
 
-    @staticmethod
     def _make_score_fn(
-        function: SyntheticTestFunction, confidence: float
+        self,
+        function: SyntheticTestFunction,
+        confidence: float,
     ) -> Callable[[Any], float]:
         """Return a score function that evaluates ``function`` at a fixed fidelity level.
 
@@ -87,7 +96,11 @@ class AugmentedFunctionOracle(MultiFidelityOracle):
         """
 
         def score_fn(x: Any) -> float:
-            x_tensor = torch.tensor([*x, confidence], dtype=torch.float64).unsqueeze(0)
+            x_tensor = torch.tensor(
+                [*x, confidence],
+                dtype=self.dtype,
+                device=self.device,
+            ).unsqueeze(0)
             return function(x_tensor).item()
 
         return score_fn
@@ -96,13 +109,13 @@ class AugmentedFunctionOracle(MultiFidelityOracle):
 class BraninOracle(AugmentedFunctionOracle):
     """Oracle based on the Augmented Branin multi-fidelity test function.
 
-    Uses the positive (non-negated) AugmentedBranin from BoTorch. Fidelity
-    levels {1, 2, 3} are mapped to the [0, 1] fidelity range, with level 3
-    corresponding to the full-fidelity Branin (s=1.0).
+    Uses the negated AugmentedBranin from BoTorch so the active learning loop
+    can maximize oracle scores while effectively minimizing the underlying
+    Branin objective.
 
-    The active learning loop is formulated as a maximization problem.
-    ``negate=False`` keeps the Branin function in its natural positive form,
-    so the loop directly maximizes Branin values.
+    Each query also logs a 2-D landscape figure of the Branin objective at the
+    highest configured fidelity, with the queried candidates overlaid and
+    colored by fidelity when a runtime logger is bound.
 
     Parameters
     ----------
@@ -119,12 +132,38 @@ class BraninOracle(AugmentedFunctionOracle):
         fidelity_confidences: Optional[dict[int, float]] = None,
     ) -> None:
         super().__init__(
-            # negate=False keeps the natural positive form; the active learning
-            # loop maximizes Branin values directly.
-            function=AugmentedBranin(negate=False),
+            # negate=True flips Branin so maximizing the oracle minimizes the
+            # original Branin objective.
+            function=AugmentedBranin(negate=True),
             fidelity_costs=fidelity_costs,
             fidelity_confidences=fidelity_confidences,
         )
+
+    def query(self, candidates: Sequence[Candidate]) -> list[Observation]:
+        """Query Branin observations and log the queried landscape when possible."""
+        observations = super().query(candidates)
+        self._log_query_landscape(candidates)
+        return observations
+
+    def _log_query_landscape(self, candidates: Sequence[Candidate]) -> None:
+        """Log a contour plot of the Branin landscape with queried candidates."""
+        if self.logger is None:
+            return
+
+        figure = build_augmented_2d_landscape_figure(
+            evaluator=self._function,
+            candidates=candidates,
+            bounds=((-5.0, 10.0), (0.0, 15.0)),
+            fidelity_confidences=self.get_fidelity_confidences(),
+            supported_fidelities=self.get_supported_fidelities(),
+            dtype=self.dtype,
+            device=self.device,
+            title="Branin landscape with queried candidates",
+        )
+        try:
+            self.logger.log_figure("branin_landscape_query", figure)
+        finally:
+            plt.close(figure)
 
 
 class Hartmann6DOracle(AugmentedFunctionOracle):
