@@ -19,10 +19,10 @@ class Acquisition(ABC):
        Scores each candidate batch jointly. Required when the utility of a
        candidate depends on the other candidates selected alongside it.
 
-    Subclasses declare which modes they support implicitly: implement ``score()``
-    to enable singleton scoring, implement ``score_batches()`` to enable batch
-    scoring. The ``supports_singleton_scoring`` and ``supports_batch_scoring``
-    properties reflect this automatically — no flags need to be set.
+    Implement ``score()`` to support singleton scoring, ``score_batches()``
+    to support joint batch scoring, or both. The ``supports_singleton_scoring``
+    and ``supports_batch_scoring`` properties reflect whichever methods are
+    implemented.
 
     Surrogate Coupling
     ------------------
@@ -149,27 +149,23 @@ class Acquisition(ABC):
 
     @property
     def supports_singleton_scoring(self) -> bool:
-        """Return whether independent singleton scoring is supported.
-
-        Returns ``True`` when ``score()`` has been overridden in a subclass.
+        """Return whether this acquisition supports independent singleton scoring.
 
         Returns
         -------
         result : bool
-            ``True`` if ``score()`` is supported.
+            ``True`` if ``score()`` is implemented.
         """
         return getattr(self.score, "__func__", None) != Acquisition.score
 
     @property
     def supports_batch_scoring(self) -> bool:
-        """Return whether joint batch scoring is supported.
-
-        Returns ``True`` when ``score_batches()`` has been overridden in a subclass.
+        """Return whether this acquisition supports joint batch scoring.
 
         Returns
         -------
         result : bool
-            ``True`` if ``score_batches()`` is supported.
+            ``True`` if ``score_batches()`` is implemented.
         """
         return (
             getattr(self.score_batches, "__func__", None) != Acquisition.score_batches

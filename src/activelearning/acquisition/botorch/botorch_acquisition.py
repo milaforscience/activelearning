@@ -497,20 +497,20 @@ class AnalyticBoTorchAcquisition(BoTorchAcquisitionBase):
 
 
 class BatchScoringMixin:
-    """Mixin that adds joint batch scoring for q-batch acquisition functions.
+    """Adds joint batch scoring to a q-batch acquisition.
 
-    Mix this into a :class:`QBatchBoTorchAcquisition` subclass to advertise
-    and implement ``score_batches()``.  Classes that do not mix this in will
-    have ``supports_batch_scoring`` return ``False`` automatically.
+    BoTorch q-batch acquisitions naturally operate on batches of candidates
+    evaluated jointly. However, not all of them support this mode — some
+    (e.g. MES, Knowledge Gradient) are constrained to evaluating one candidate
+    at a time despite using Monte Carlo internals.
 
-    Examples
-    --------
-    Subclasses that support q > 1 batch scoring::
+    Add this class as a base to enable ``score_batches()`` for acquisitions
+    that do support joint evaluation::
 
-        class QExpectedImprovement(QBatchBoTorchAcquisition, BatchScoringMixin):
+        class QExpectedImprovement(BatchScoringMixin, QBatchBoTorchAcquisition):
             ...
 
-    Subclasses that only support singleton scoring (e.g. MES, KG)::
+    Omit it for acquisitions that only support singleton scoring::
 
         class QKnowledgeGradient(QBatchBoTorchAcquisition):
             ...
@@ -557,9 +557,10 @@ class QBatchBoTorchAcquisition(BoTorchAcquisitionBase):
     that operate on q-batches. Each candidate is evaluated independently as a
     q-batch of size 1.
 
-    To also support joint batch scoring (q > 1), mix in :class:`BatchScoringMixin`::
+    To also support joint batch scoring (q > 1), add :class:`BatchScoringMixin`
+    as the first base class::
 
-        class QExpectedImprovement(QBatchBoTorchAcquisition, BatchScoringMixin):
+        class QExpectedImprovement(BatchScoringMixin, QBatchBoTorchAcquisition):
             ...
 
     Acquisitions that only support singleton scoring (e.g. MES family, Knowledge
@@ -576,4 +577,3 @@ class QBatchBoTorchAcquisition(BoTorchAcquisitionBase):
             Forwarded to ``BoTorchAcquisitionBase.__init__``.
         """
         super().__init__(**kwargs)
-
