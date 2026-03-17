@@ -18,6 +18,7 @@ from botorch.acquisition.max_value_entropy_search import (
 )
 
 from activelearning.acquisition.botorch_acquisition import QBatchBoTorchAcquisition
+from activelearning.acquisition.candidate_set import CandidateSetSpec
 
 
 class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
@@ -84,9 +85,16 @@ class QMultiFidelityMaxValueEntropy(QBatchBoTorchAcquisition):
 
     Parameters
     ----------
-    candidate_set : torch.Tensor
-        Discrete set of candidates used to approximate the max-value
-        distribution.  Shape ``(N, d)`` in **model** space.
+    candidate_set_spec : CandidateSetSpec
+        Specification describing how to build the discrete candidate set used
+        to approximate the max-value distribution.  The tensor is materialized
+        at acquisition-build time when the fitted surrogate is available.
+        Use :class:`~activelearning.acquisition.candidate_set.HypercubeCandidateSetSpec`
+        for continuous domains,
+        :class:`~activelearning.acquisition.candidate_set.TrainDataCandidateSetSpec`
+        as a discrete default, or
+        :class:`~activelearning.acquisition.candidate_set.TensorCandidateSetSpec`
+        to pass a precomputed tensor directly.
     num_fantasies : int, default=16
         Number of fantasy models.
     num_mv_samples : int, default=10
@@ -102,7 +110,7 @@ class QMultiFidelityMaxValueEntropy(QBatchBoTorchAcquisition):
     def __init__(
         self,
         *,
-        candidate_set: torch.Tensor,
+        candidate_set_spec: CandidateSetSpec,
         num_fantasies: int = 16,
         num_mv_samples: int = 10,
         num_y_samples: int = 128,
@@ -110,7 +118,7 @@ class QMultiFidelityMaxValueEntropy(QBatchBoTorchAcquisition):
         **kwargs: Any,
     ) -> None:
         super().__init__(supports_batch_scoring=False, **kwargs)
-        self._candidate_set = candidate_set
+        self._candidate_set_spec = candidate_set_spec
         self._num_fantasies = num_fantasies
         self._num_mv_samples = num_mv_samples
         self._num_y_samples = num_y_samples
@@ -122,7 +130,7 @@ class QMultiFidelityMaxValueEntropy(QBatchBoTorchAcquisition):
 
         build_kwargs: dict[str, Any] = {
             "model": self._botorch_surrogate.get_model(),
-            "candidate_set": self._candidate_set,
+            "candidate_set": self._candidate_set_spec.build(self._botorch_surrogate),
             "num_fantasies": self._num_fantasies,
             "num_mv_samples": self._num_mv_samples,
             "num_y_samples": self._num_y_samples,
@@ -146,9 +154,16 @@ class QMultiFidelityLowerBoundMaxValueEntropy(QBatchBoTorchAcquisition):
 
     Parameters
     ----------
-    candidate_set : torch.Tensor
-        Discrete set of candidates for max-value approximation.
-        Shape ``(N, d)`` in model space.
+    candidate_set_spec : CandidateSetSpec
+        Specification describing how to build the discrete candidate set for
+        max-value approximation.  The tensor is materialized at
+        acquisition-build time when the fitted surrogate is available.
+        Use :class:`~activelearning.acquisition.candidate_set.HypercubeCandidateSetSpec`
+        for continuous domains,
+        :class:`~activelearning.acquisition.candidate_set.TrainDataCandidateSetSpec`
+        as a discrete default, or
+        :class:`~activelearning.acquisition.candidate_set.TensorCandidateSetSpec`
+        to pass a precomputed tensor directly.
     num_fantasies : int, default=16
         Number of fantasy models.
     num_mv_samples : int, default=10
@@ -164,7 +179,7 @@ class QMultiFidelityLowerBoundMaxValueEntropy(QBatchBoTorchAcquisition):
     def __init__(
         self,
         *,
-        candidate_set: torch.Tensor,
+        candidate_set_spec: CandidateSetSpec,
         num_fantasies: int = 16,
         num_mv_samples: int = 10,
         num_y_samples: int = 128,
@@ -172,7 +187,7 @@ class QMultiFidelityLowerBoundMaxValueEntropy(QBatchBoTorchAcquisition):
         **kwargs: Any,
     ) -> None:
         super().__init__(supports_batch_scoring=False, **kwargs)
-        self._candidate_set = candidate_set
+        self._candidate_set_spec = candidate_set_spec
         self._num_fantasies = num_fantasies
         self._num_mv_samples = num_mv_samples
         self._num_y_samples = num_y_samples
@@ -184,7 +199,7 @@ class QMultiFidelityLowerBoundMaxValueEntropy(QBatchBoTorchAcquisition):
 
         build_kwargs: dict[str, Any] = {
             "model": self._botorch_surrogate.get_model(),
-            "candidate_set": self._candidate_set,
+            "candidate_set": self._candidate_set_spec.build(self._botorch_surrogate),
             "num_fantasies": self._num_fantasies,
             "num_mv_samples": self._num_mv_samples,
             "num_y_samples": self._num_y_samples,
