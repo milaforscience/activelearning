@@ -1,9 +1,11 @@
 import pytest
+from unittest.mock import Mock, patch
 
 from activelearning.oracle.augmented_function_oracle import (
     BraninOracle,
     Hartmann6DOracle,
 )
+from activelearning.runtime import RuntimeContext
 from activelearning.utils.types import Candidate
 
 
@@ -108,6 +110,42 @@ class TestBraninOracleQuery:
         oracle = BraninOracle(fidelity_costs=branin_fidelity_costs)
         with pytest.raises(ValueError, match="Unsupported fidelity"):
             oracle.get_costs([Candidate(x=[0.5, 7.5], fidelity=99)])
+
+    def test_query_does_not_build_landscape_by_default(self, branin_fidelity_costs):
+        oracle = BraninOracle(fidelity_costs=branin_fidelity_costs)
+        logger = Mock()
+        oracle.bind_runtime_context(RuntimeContext(logger=logger))
+
+        with patch(
+            "activelearning.oracle.augmented_function_oracle."
+            "build_augmented_2d_landscape_figure"
+        ) as build_figure:
+            oracle.query([Candidate(x=[0.5, 7.5], fidelity=3)])
+
+        build_figure.assert_not_called()
+        logger.log_figure.assert_not_called()
+
+    def test_query_logs_landscape_when_enabled(self, branin_fidelity_costs):
+        oracle = BraninOracle(fidelity_costs=branin_fidelity_costs, log_landscape=True)
+        logger = Mock()
+        oracle.bind_runtime_context(RuntimeContext(logger=logger))
+        figure = Mock()
+
+        with (
+            patch(
+                "activelearning.oracle.augmented_function_oracle."
+                "build_augmented_2d_landscape_figure",
+                return_value=figure,
+            ) as build_figure,
+            patch(
+                "activelearning.oracle.augmented_function_oracle.plt.close"
+            ) as close_figure,
+        ):
+            oracle.query([Candidate(x=[0.5, 7.5], fidelity=3)])
+
+        build_figure.assert_called_once()
+        logger.log_figure.assert_called_once_with("branin_landscape_query", figure)
+        close_figure.assert_called_once_with(figure)
 
 
 class TestHartmann6DOracleQuery:

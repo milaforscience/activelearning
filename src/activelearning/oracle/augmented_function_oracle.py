@@ -124,13 +124,18 @@ class BraninOracle(AugmentedFunctionOracle):
     fidelity_confidences : Optional[dict[int, float]], optional
         Mapping from integer fidelity level to confidence in [0, 1].
         If None, confidences are derived proportionally from costs.
+    log_landscape : bool, optional
+        Whether to log the Branin landscape figure on each query when a runtime
+        logger is bound. Defaults to False.
     """
 
     def __init__(
         self,
         fidelity_costs: dict[int, float],
         fidelity_confidences: Optional[dict[int, float]] = None,
+        log_landscape: bool = False,
     ) -> None:
+        self.log_landscape = log_landscape
         super().__init__(
             # negate=True flips Branin so maximizing the oracle minimizes the
             # original Branin objective.
@@ -142,7 +147,8 @@ class BraninOracle(AugmentedFunctionOracle):
     def query(self, candidates: Sequence[Candidate]) -> list[Observation]:
         """Query Branin observations and log the queried landscape when possible."""
         observations = super().query(candidates)
-        self._log_query_landscape(candidates)
+        if self.log_landscape:
+            self._log_query_landscape(candidates)
         return observations
 
     def _log_query_landscape(self, candidates: Sequence[Candidate]) -> None:
