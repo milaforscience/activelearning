@@ -2,9 +2,10 @@ from abc import ABC, abstractmethod
 from typing import Sequence, Iterable
 
 from activelearning.utils.types import Observation
+from activelearning.runtime import ALRuntimeMixin
 
 
-class Dataset(ABC):
+class Dataset(ABC, ALRuntimeMixin):
     """Abstract dataset interface for managing observations and candidates.
 
     Datasets store observations (labeled data points) and provide access

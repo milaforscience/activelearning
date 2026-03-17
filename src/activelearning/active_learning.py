@@ -2,6 +2,11 @@ from activelearning.acquisition.acquisition import Acquisition
 from activelearning.budget.budget import Budget
 from activelearning.dataset.dataset import Dataset
 from activelearning.oracle.oracle import Oracle
+from activelearning.runtime import (
+    DEFAULT_RUNTIME_CONTEXT,
+    RuntimeContext,
+    bind_runtime_context,
+)
 from activelearning.sampler.sampler import Sampler
 from activelearning.selector.selector import Selector
 from activelearning.surrogate.surrogate import Surrogate
@@ -15,6 +20,7 @@ def active_learning(
     selector: Selector,
     oracle: Oracle,
     budget: Budget,
+    runtime_context: RuntimeContext | None = None,
 ) -> tuple[Dataset, float, int]:
     """Execute the active learning loop with budget constraints.
 
@@ -39,6 +45,10 @@ def active_learning(
         Oracle instance that handles all fidelity levels internally.
     budget : Budget
         Budget object managing allocation and consumption.
+    runtime_context : RuntimeContext, optional
+        Shared runtime settings propagated to runtime-aware components. If
+        omitted, components fall back to the default context. If the context
+        contains a logger, the loop records per-round metrics through it.
 
     Returns
     -------
@@ -53,6 +63,14 @@ def active_learning(
         The loop terminates early if no candidates can be afforded within
         the remaining budget to prevent infinite loops.
     """
+    resolved_runtime_context = runtime_context or DEFAULT_RUNTIME_CONTEXT
+    logger = resolved_runtime_context.logger
+
+    bind_runtime_context(
+        [dataset, surrogate, acquisition, sampler, selector, oracle, budget],
+        resolved_runtime_context,
+    )
+
     initial_budget = budget.available_budget
     num_rounds = 0
 
@@ -103,5 +121,17 @@ def active_learning(
 
         num_rounds += 1
 
+        if logger is not None:
+            logger.log_metric("round", num_rounds)
+            logger.log_metric("num_new_samples", len(selected_samples))
+            logger.log_metric("round_cost", total_cost)
+            logger.log_metric("total_cost", initial_budget - budget.available_budget)
+            logger.log_metric("budget_remaining", budget.available_budget)
+            logger.log_step(num_rounds)
+
     total_cost = initial_budget - budget.available_budget
+
+    if logger is not None:
+        logger.end()
+
     return dataset, total_cost, num_rounds

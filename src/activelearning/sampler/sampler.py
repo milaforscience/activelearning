@@ -2,9 +2,10 @@ from abc import ABC, abstractmethod
 from typing import Any, Iterable, Optional, Sequence
 
 from activelearning.utils.types import Candidate, Observation
+from activelearning.runtime import ALRuntimeMixin
 
 
-class Sampler(ABC):
+class Sampler(ABC, ALRuntimeMixin):
     """Abstract sampler interface used to propose candidate subsets.
 
     Samplers generate candidate pools from which selectors choose the
