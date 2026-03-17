@@ -4,6 +4,7 @@ from typing import Iterable, Literal, Optional, Sequence, Union
 
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.sampler import Sampler
+from activelearning.utils.sampling import latin_hypercube
 from activelearning.utils.types import Candidate, Observation
 
 
@@ -99,33 +100,9 @@ class HypercubeSampler(Sampler):
         """
         n_dims = len(self.bounds)
         if self.point_strategy == "lhs":
-            return self._latin_hypercube(self.num_samples, n_dims)
+            return latin_hypercube(self.num_samples, n_dims)
         # Default: uniform
         return torch.rand(self.num_samples, n_dims, dtype=torch.float64)
-
-    @staticmethod
-    def _latin_hypercube(num_samples: int, n_dims: int) -> torch.Tensor:
-        """
-        Generates a Latin Hypercube Sample (LHS) of points in the unit hypercube [0, 1]^d.
-
-        LHS ensures that each dimension is divided into 'num_samples' equal-width bins,
-        and each bin contains exactly one sample. This provides better space-filling
-        properties than simple random sampling.
-        """
-        # 1. Generate jitter/offsets: rand(0, 1) for each sample's position within its bin.
-        offsets = torch.rand(num_samples, n_dims, dtype=torch.float64)
-
-        # 2. Create a unique permutation for each dimension.
-        # This 'shuffles' the bin indices [0, 1, ..., n-1] independently across dimensions,
-        # satisfying the Latin Hypercube requirement that no two samples share a bin index.
-        perms = torch.stack([torch.randperm(num_samples) for _ in range(n_dims)], dim=1)
-
-        # 3. Combine permutations and offsets, then normalize.
-        # (perms + offsets) results in values in the range [0, num_samples].
-        # Dividing by num_samples scales the final output to the [0, 1] unit range.
-        samples = (perms.to(torch.float64) + offsets) / num_samples
-
-        return samples
 
     def _assign_fidelities(self) -> list[Optional[int]]:
         """Assign fidelity levels to ``num_samples`` candidates.

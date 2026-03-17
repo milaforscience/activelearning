@@ -39,8 +39,6 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         fidelity_costs: Optional[dict[int, float]] = None,
         cost_model: Optional[Any] = None,
         cost_aware_utility: Optional[Any] = None,
-        supports_singleton_scoring: bool = False,
-        supports_batch_scoring: bool = False,
     ) -> None:
         """Initialize the BoTorch acquisition base.
 
@@ -59,15 +57,8 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
             Custom BoTorch-compatible cost model.
         cost_aware_utility : object, optional
             Custom BoTorch-compatible cost-aware utility.
-        supports_singleton_scoring : bool, default=False
-            Forwarded to ``Acquisition.__init__``.
-        supports_batch_scoring : bool, default=False
-            Forwarded to ``Acquisition.__init__``.
         """
-        super().__init__(
-            supports_singleton_scoring=supports_singleton_scoring,
-            supports_batch_scoring=supports_batch_scoring,
-        )
+        super().__init__()
         self.maximize = maximize
 
         # User-specified multi-fidelity / cost-aware configuration
@@ -495,69 +486,35 @@ class AnalyticBoTorchAcquisition(BoTorchAcquisitionBase):
     """
 
     def __init__(self, **kwargs: Any) -> None:
-        """Initialize with singleton scoring enabled, batch scoring disabled.
+        """Initialize the analytic BoTorch acquisition.
 
         Parameters
         ----------
         **kwargs
             Forwarded to ``BoTorchAcquisitionBase.__init__``.
         """
-        super().__init__(
-            supports_singleton_scoring=True,
-            supports_batch_scoring=False,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
-class QBatchBoTorchAcquisition(BoTorchAcquisitionBase):
-    """Intermediate base class for q-batch / Monte Carlo BoTorch acquisitions.
+class BatchScoringMixin:
+    """Mixin that adds joint batch scoring for q-batch acquisition functions.
 
-    This class implements both singleton and joint batch scoring for BoTorch
-    acquisition functions that naturally operate on q-batches.
+    Mix this into a :class:`QBatchBoTorchAcquisition` subclass to advertise
+    and implement ``score_batches()``.  Classes that do not mix this in will
+    have ``supports_batch_scoring`` return ``False`` automatically.
 
-    Scoring semantics
-    -----------------
-    - ``score(candidates)`` evaluates each candidate independently by treating
-      it as a q-batch of size 1.
-    - ``score_batches(candidate_batches)`` evaluates each candidate batch
-      jointly, which is the native mode for q-acquisition functions.
+    Examples
+    --------
+    Subclasses that support q > 1 batch scoring::
 
-    Not all q-batch acquisitions support joint batch scoring (q > 1). For
-    example, the MES family enforces ``expected_q=1`` in its ``forward()``
-    and Knowledge Gradient requires a special q-layout with fantasy points.
-    Concrete subclasses that do not support batch scoring should pass
-    ``supports_batch_scoring=False``.
+        class QExpectedImprovement(QBatchBoTorchAcquisition, BatchScoringMixin):
+            ...
 
-    Examples include:
-    - qUCB, qEI, qNEI (support both singleton and batch)
-    - qMES, qKG (singleton only — batch selection is handled at the
-      optimizer level via fantasization / ``X_pending``)
+    Subclasses that only support singleton scoring (e.g. MES, KG)::
+
+        class QKnowledgeGradient(QBatchBoTorchAcquisition):
+            ...
     """
-
-    def __init__(
-        self,
-        *,
-        supports_batch_scoring: bool = True,
-        **kwargs: Any,
-    ) -> None:
-        """Initialize with singleton scoring enabled.
-
-        Parameters
-        ----------
-        supports_batch_scoring : bool, default=True
-            Whether the underlying BoTorch acquisition supports joint
-            q-batch scoring (q > 1).  Concrete subclasses whose BoTorch
-            objects enforce ``expected_q=1`` (e.g. MES family) or require
-            special q-layouts (e.g. Knowledge Gradient) should pass
-            ``False``.
-        **kwargs
-            Forwarded to ``BoTorchAcquisitionBase.__init__``.
-        """
-        super().__init__(
-            supports_singleton_scoring=True,
-            supports_batch_scoring=supports_batch_scoring,
-            **kwargs,
-        )
 
     def score_batches(
         self,
@@ -586,8 +543,37 @@ class QBatchBoTorchAcquisition(BoTorchAcquisitionBase):
             If the internal BoTorch acquisition object has not yet been built.
         """
         batch_list = [list(b) for b in candidate_batches]
-        if self._botorch_acqf is None:
+        if self._botorch_acqf is None:  # type: ignore[attr-defined]
             return [1.0] * len(batch_list)
-        assert self._botorch_surrogate is not None
+        assert self._botorch_surrogate is not None  # type: ignore[attr-defined]
         X = self._botorch_surrogate.encode_candidate_batches(batch_list)  # (B, q, d)
-        return self._score_encoded(X)
+        return self._score_encoded(X)  # type: ignore[attr-defined]
+
+
+class QBatchBoTorchAcquisition(BoTorchAcquisitionBase):
+    """Intermediate base class for q-batch / Monte Carlo BoTorch acquisitions.
+
+    This class implements singleton scoring for BoTorch acquisition functions
+    that operate on q-batches. Each candidate is evaluated independently as a
+    q-batch of size 1.
+
+    To also support joint batch scoring (q > 1), mix in :class:`BatchScoringMixin`::
+
+        class QExpectedImprovement(QBatchBoTorchAcquisition, BatchScoringMixin):
+            ...
+
+    Acquisitions that only support singleton scoring (e.g. MES family, Knowledge
+    Gradient) should subclass :class:`QBatchBoTorchAcquisition` directly without
+    the mixin.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        """Initialize the q-batch BoTorch acquisition.
+
+        Parameters
+        ----------
+        **kwargs
+            Forwarded to ``BoTorchAcquisitionBase.__init__``.
+        """
+        super().__init__(**kwargs)
+

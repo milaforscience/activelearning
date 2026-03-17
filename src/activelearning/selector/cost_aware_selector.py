@@ -56,7 +56,7 @@ class CostAwareSelector(Selector):
 
         if not candidates:
             return []
-        if not acquisition.supports_singleton_scoring():
+        if not acquisition.supports_singleton_scoring:
             raise ValueError(
                 "CostAwareSelector requires an acquisition that supports singleton "
                 "scoring."

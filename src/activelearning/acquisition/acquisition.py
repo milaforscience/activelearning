@@ -19,11 +19,10 @@ class Acquisition(ABC):
        Scores each candidate batch jointly. Required when the utility of a
        candidate depends on the other candidates selected alongside it.
 
-    Subclasses are not required to implement both modes — only the modes
-    relevant to the acquisition strategy need to be provided. Subclasses
-    declare which modes they support via the ``supports_singleton_scoring``
-    and ``supports_batch_scoring`` constructor flags. Callers should check
-    these flags before invoking the corresponding scoring method.
+    Subclasses declare which modes they support implicitly: implement ``score()``
+    to enable singleton scoring, implement ``score_batches()`` to enable batch
+    scoring. The ``supports_singleton_scoring`` and ``supports_batch_scoring``
+    properties reflect this automatically — no flags need to be set.
 
     Surrogate Coupling
     ------------------
@@ -38,32 +37,8 @@ class Acquisition(ABC):
     validate compatibility in ``update()``.
     """
 
-    def __init__(
-        self,
-        *,
-        supports_singleton_scoring: bool = False,
-        supports_batch_scoring: bool = False,
-    ) -> None:
-        """Initialize the acquisition with capability flags.
-
-        Subclasses declare their scoring capabilities by passing the appropriate
-        flags here.  The base ``supports_singleton_scoring()`` and
-        ``supports_batch_scoring()`` methods read from these flags, so
-        subclasses should **not** override those methods — set the flags
-        instead.
-
-        Parameters
-        ----------
-        supports_singleton_scoring : bool, default=False
-            Whether this acquisition supports independent candidate scoring via
-            ``score()``.
-        supports_batch_scoring : bool, default=False
-            Whether this acquisition supports joint batch scoring via
-            ``score_batches()``.
-        """
+    def __init__(self) -> None:
         self._surrogate: Optional[Surrogate] = None
-        self._supports_singleton_scoring = supports_singleton_scoring
-        self._supports_batch_scoring = supports_batch_scoring
 
     @property
     def surrogate(self) -> Optional[Surrogate]:
@@ -114,7 +89,7 @@ class Acquisition(ABC):
 
         This method is intentionally optional. Subclasses that only support
         joint batch scoring need not implement it. Callers should check
-        ``supports_singleton_scoring()`` before calling this method.
+        ``supports_singleton_scoring`` before calling this method.
 
         Parameters
         ----------
@@ -146,7 +121,7 @@ class Acquisition(ABC):
 
         This method is intentionally optional. Subclasses that only support
         singleton scoring need not implement it. Callers should check
-        ``supports_batch_scoring()`` before calling this method.
+        ``supports_batch_scoring`` before calling this method.
 
         Parameters
         ----------
@@ -172,22 +147,30 @@ class Acquisition(ABC):
             f"{self.__class__.__name__} does not support joint batch scoring."
         )
 
+    @property
     def supports_singleton_scoring(self) -> bool:
         """Return whether independent singleton scoring is supported.
+
+        Returns ``True`` when ``score()`` has been overridden in a subclass.
 
         Returns
         -------
         result : bool
             ``True`` if ``score()`` is supported.
         """
-        return self._supports_singleton_scoring
+        return getattr(self.score, "__func__", None) != Acquisition.score
 
+    @property
     def supports_batch_scoring(self) -> bool:
         """Return whether joint batch scoring is supported.
+
+        Returns ``True`` when ``score_batches()`` has been overridden in a subclass.
 
         Returns
         -------
         result : bool
             ``True`` if ``score_batches()`` is supported.
         """
-        return self._supports_batch_scoring
+        return (
+            getattr(self.score_batches, "__func__", None) != Acquisition.score_batches
+        )

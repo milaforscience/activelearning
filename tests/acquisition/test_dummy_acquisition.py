@@ -87,4 +87,4 @@ def test_surrogate_update(surrogate):
 def test_supports_singleton_scoring():
     """Test that DummyAcquisition declares singleton scoring support."""
     acq = DummyAcquisition()
-    assert acq.supports_singleton_scoring() is True
+    assert acq.supports_singleton_scoring is True

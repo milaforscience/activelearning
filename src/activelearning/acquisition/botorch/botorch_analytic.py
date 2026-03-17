@@ -16,7 +16,7 @@ from botorch.acquisition.analytic import (
     UpperConfidenceBound as _UCB,
 )
 
-from activelearning.acquisition.botorch_acquisition import AnalyticBoTorchAcquisition
+from activelearning.acquisition.botorch.botorch_acquisition import AnalyticBoTorchAcquisition
 
 
 class UpperConfidenceBound(AnalyticBoTorchAcquisition):

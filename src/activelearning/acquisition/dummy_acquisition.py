@@ -21,7 +21,7 @@ class DummyAcquisition(Acquisition):
     """
 
     def __init__(self, beta: float = 1.0) -> None:
-        super().__init__(supports_singleton_scoring=True)
+        super().__init__()
         self._beta = float(beta)
 
     def score(self, candidates: Iterable[Candidate]) -> list[float]:

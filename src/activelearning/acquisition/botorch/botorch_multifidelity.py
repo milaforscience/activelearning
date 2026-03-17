@@ -6,7 +6,7 @@ Each class subclasses :class:`QBatchBoTorchAcquisition` and implements
 and target-fidelity projection from the base class into the BoTorch object.
 """
 
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 import torch
 from botorch.acquisition.knowledge_gradient import (
@@ -17,8 +17,10 @@ from botorch.acquisition.max_value_entropy_search import (
     qMultiFidelityMaxValueEntropy as _qMFMES,
 )
 
-from activelearning.acquisition.botorch_acquisition import QBatchBoTorchAcquisition
+from activelearning.acquisition.botorch.botorch_acquisition import QBatchBoTorchAcquisition
 from activelearning.acquisition.candidate_set import CandidateSetSpec
+from activelearning.surrogate.surrogate import Surrogate
+from activelearning.utils.types import Observation
 
 
 class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
@@ -49,7 +51,7 @@ class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
         expand: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(supports_batch_scoring=False, **kwargs)
+        super().__init__(**kwargs)
         self._num_fantasies = num_fantasies
         self._current_value = current_value
         self._expand = expand
@@ -117,15 +119,35 @@ class QMultiFidelityMaxValueEntropy(QBatchBoTorchAcquisition):
         expand: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(supports_batch_scoring=False, **kwargs)
+        super().__init__(**kwargs)
         self._candidate_set_spec = candidate_set_spec
         self._num_fantasies = num_fantasies
         self._num_mv_samples = num_mv_samples
         self._num_y_samples = num_y_samples
         self._expand = expand
 
+    def update(
+        self,
+        surrogate: Surrogate,
+        observations: Optional[Iterable[Observation]] = None,
+    ) -> None:
+        """Update candidate set spec with current observations, then update base.
+
+        Parameters
+        ----------
+        surrogate : Surrogate
+            The fitted surrogate.
+        observations : Iterable[Observation], optional
+            Current observations forwarded to the candidate set spec and base.
+        """
+        if observations is not None:
+            obs_list = list(observations)
+            self._candidate_set_spec.update(obs_list)
+            super().update(surrogate, obs_list)
+        else:
+            super().update(surrogate, observations)
+
     def _build_botorch_acquisition(self) -> Any:
-        """Construct the BoTorch qMultiFidelityMaxValueEntropy object."""
         assert self._botorch_surrogate is not None
 
         build_kwargs: dict[str, Any] = {
@@ -189,12 +211,33 @@ class QMultiFidelityLowerBoundMaxValueEntropy(QBatchBoTorchAcquisition):
         expand: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(supports_batch_scoring=False, **kwargs)
+        super().__init__(**kwargs)
         self._candidate_set_spec = candidate_set_spec
         self._num_fantasies = num_fantasies
         self._num_mv_samples = num_mv_samples
         self._num_y_samples = num_y_samples
         self._expand = expand
+
+    def update(
+        self,
+        surrogate: Surrogate,
+        observations: Optional[Iterable[Observation]] = None,
+    ) -> None:
+        """Update candidate set spec with current observations, then update base.
+
+        Parameters
+        ----------
+        surrogate : Surrogate
+            The fitted surrogate.
+        observations : Iterable[Observation], optional
+            Current observations forwarded to the candidate set spec and base.
+        """
+        if observations is not None:
+            obs_list = list(observations)
+            self._candidate_set_spec.update(obs_list)
+            super().update(surrogate, obs_list)
+        else:
+            super().update(surrogate, observations)
 
     def _build_botorch_acquisition(self) -> Any:
         """Construct the BoTorch qMultiFidelityLowerBoundMaxValueEntropy object."""

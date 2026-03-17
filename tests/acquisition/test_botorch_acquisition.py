@@ -7,8 +7,9 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
-from activelearning.acquisition.botorch_acquisition import (
+from activelearning.acquisition.botorch.botorch_acquisition import (
     AnalyticBoTorchAcquisition,
+    BatchScoringMixin,
     QBatchBoTorchAcquisition,
 )
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
@@ -35,7 +36,7 @@ class StubAnalytic(AnalyticBoTorchAcquisition):
         return lambda X: X.squeeze(-2).sum(dim=-1)
 
 
-class StubQBatch(QBatchBoTorchAcquisition):
+class StubQBatch(BatchScoringMixin, QBatchBoTorchAcquisition):
     """Q-batch stub that wraps a callable as the BoTorch acquisition function."""
 
     def __init__(self, acqf_fn: Optional[Any] = None, **kwargs: Any) -> None:
@@ -115,13 +116,13 @@ class TestCapabilityFlags:
 
     def test_analytic_flags(self) -> None:
         acq = StubAnalytic()
-        assert acq.supports_singleton_scoring() is True
-        assert acq.supports_batch_scoring() is False
+        assert acq.supports_singleton_scoring is True
+        assert acq.supports_batch_scoring is False
 
     def test_qbatch_flags(self) -> None:
         acq = StubQBatch()
-        assert acq.supports_singleton_scoring() is True
-        assert acq.supports_batch_scoring() is True
+        assert acq.supports_singleton_scoring is True
+        assert acq.supports_batch_scoring is True
 
     def test_maximize_default(self) -> None:
         assert StubAnalytic().maximize is True

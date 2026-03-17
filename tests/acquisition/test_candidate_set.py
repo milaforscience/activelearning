@@ -14,7 +14,7 @@ from activelearning.acquisition.candidate_set import (
     TrainDataCandidateSetSpec,
 )
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
-from activelearning.utils.types import Observation
+from activelearning.utils.types import Candidate, Observation
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +170,15 @@ class TestHypercubeCandidateSetSpec:
         r2 = spec.build(fitted_sf_surrogate)
         assert not torch.allclose(r1, r2)
 
+    # --- update is a no-op ---------------------------------------------------
+
+    def test_update_is_noop(
+        self, single_fidelity_observations: list[Observation]
+    ) -> None:
+        """update() should be accepted without error."""
+        spec = HypercubeCandidateSetSpec(bounds=self.BOUNDS_2D, n_points=self.N)
+        spec.update(single_fidelity_observations)  # should not raise
+
 
 # ---------------------------------------------------------------------------
 # TrainDataCandidateSetSpec
@@ -179,26 +188,69 @@ class TestHypercubeCandidateSetSpec:
 class TestTrainDataCandidateSetSpec:
     """Tests for TrainDataCandidateSetSpec."""
 
-    def test_returns_train_x(self, fitted_sf_surrogate: BoTorchGPSurrogate) -> None:
-        """Output is exactly the model's train_X."""
+    def test_sf_shape_and_dtype(
+        self,
+        fitted_sf_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+    ) -> None:
+        """Output shape and dtype match the encoded candidates."""
         spec = TrainDataCandidateSetSpec()
+        spec.update(single_fidelity_observations)
         result = spec.build(fitted_sf_surrogate)
-        train_X, _ = fitted_sf_surrogate.get_train_data()
-        assert torch.equal(result, train_X)
+        assert result.shape == (len(single_fidelity_observations), 2)
+        assert result.dtype == torch.float64
 
-    def test_returns_train_x_mf(self, fitted_mf_surrogate: BoTorchGPSurrogate) -> None:
-        """Output is exactly the model's train_X including the fidelity column."""
+    def test_mf_shape_includes_fidelity_column(
+        self,
+        fitted_mf_surrogate: BoTorchGPSurrogate,
+        multi_fidelity_observations: list[Observation],
+    ) -> None:
+        """In MF mode the encoded output includes the fidelity column."""
         spec = TrainDataCandidateSetSpec()
+        spec.update(multi_fidelity_observations)
         result = spec.build(fitted_mf_surrogate)
-        train_X, _ = fitted_mf_surrogate.get_train_data()
-        assert torch.equal(result, train_X)
+        assert result.shape == (
+            len(multi_fidelity_observations),
+            3,
+        )  # 2 features + 1 fidelity
+        assert result.dtype == torch.float64
 
-    def test_raises_before_fit(self) -> None:
-        """Calling build() on an unfitted surrogate raises RuntimeError."""
-        surrogate = BoTorchGPSurrogate()
+    def test_matches_encode_candidates(
+        self,
+        fitted_sf_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+    ) -> None:
+        """Output equals encoding the same candidates directly via the surrogate."""
         spec = TrainDataCandidateSetSpec()
-        with pytest.raises(RuntimeError):
-            spec.build(surrogate)
+        spec.update(single_fidelity_observations)
+        result = spec.build(fitted_sf_surrogate)
+        candidates = [
+            Candidate(x=obs.x, fidelity=obs.fidelity)
+            for obs in single_fidelity_observations
+        ]
+        expected = fitted_sf_surrogate.encode_candidates(candidates)
+        assert torch.allclose(result, expected)
+
+    def test_raises_before_update(
+        self, fitted_sf_surrogate: BoTorchGPSurrogate
+    ) -> None:
+        """build() raises RuntimeError when update() has not been called."""
+        spec = TrainDataCandidateSetSpec()
+        with pytest.raises(RuntimeError, match="no cached candidates"):
+            spec.build(fitted_sf_surrogate)
+
+    def test_update_replaces_cached_candidates(
+        self,
+        fitted_sf_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+    ) -> None:
+        """A second call to update() replaces the previously cached observations."""
+        spec = TrainDataCandidateSetSpec()
+        spec.update(single_fidelity_observations)
+        new_obs = [Observation(x=[0.1, 0.2], y=1.0)]
+        spec.update(new_obs)
+        result = spec.build(fitted_sf_surrogate)
+        assert result.shape[0] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -224,3 +276,11 @@ class TestTensorCandidateSetSpec:
         surrogate = BoTorchGPSurrogate()
         result = spec.build(surrogate)
         assert torch.equal(result, tensor)
+
+    def test_update_is_noop(
+        self, single_fidelity_observations: list[Observation]
+    ) -> None:
+        """update() should be accepted without error."""
+        tensor = torch.zeros(5, 2, dtype=torch.float64)
+        spec = TensorCandidateSetSpec(tensor)
+        spec.update(single_fidelity_observations)  # should not raise

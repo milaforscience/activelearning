@@ -17,7 +17,7 @@ Three built-in strategies are provided:
   Hypercube Sampling). The target fidelity column is appended automatically in
   multi-fidelity mode.
 - :class:`TrainDataCandidateSetSpec` — a simple default for **discrete**
-  domains. Reuses the surrogate's training inputs as the support set.
+  domains. Reuses the observations seen so far as the support set.
 - :class:`TensorCandidateSetSpec` — for users who want to supply their own
   precomputed candidate set directly.
 
@@ -26,11 +26,13 @@ and overriding :meth:`~CandidateSetSpec.build`.
 """
 
 from abc import ABC, abstractmethod
-from typing import Literal, Optional
+from typing import Iterable, Literal, Optional
 
 import torch
 
-from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
+from activelearning.surrogate.surrogate import Surrogate
+from activelearning.utils.sampling import latin_hypercube
+from activelearning.utils.types import Candidate, Observation
 
 
 class CandidateSetSpec(ABC):
@@ -47,10 +49,25 @@ class CandidateSetSpec(ABC):
     Implement this class to define custom candidate-set strategies.
     """
 
+    def update(self, observations: Iterable[Observation]) -> None:
+        """Notify the spec of the current observations.
+
+        Called before :meth:`build` whenever the observation set changes.
+        The default implementation is a no-op. Subclasses that build their
+        candidate set from observed data (e.g. :class:`TrainDataCandidateSetSpec`)
+        should override this to cache the observations.
+
+        Parameters
+        ----------
+        observations : Iterable[Observation]
+            The current set of observations. May be a one-pass iterable;
+            implementations should materialise it if multiple passes are needed.
+        """
+
     @abstractmethod
     def build(
         self,
-        surrogate: BoTorchGPSurrogate,
+        surrogate: Surrogate,
         *,
         target_fidelity_value: Optional[float] = None,
     ) -> torch.Tensor:
@@ -58,7 +75,7 @@ class CandidateSetSpec(ABC):
 
         Parameters
         ----------
-        surrogate : BoTorchGPSurrogate
+        surrogate : Surrogate
             A fitted surrogate.
         target_fidelity_value : float, optional
             The encoded fidelity value to append as the last column of the
@@ -129,15 +146,8 @@ class HypercubeCandidateSetSpec(CandidateSetSpec):
         """Return ``(n_points, n_dims)`` samples in ``[0, 1]^d``."""
         n_dims = len(self.bounds)
         if self.strategy == "lhs":
-            return self._latin_hypercube(self.n_points, n_dims)
+            return latin_hypercube(self.n_points, n_dims)
         return torch.rand(self.n_points, n_dims, dtype=torch.float64)
-
-    @staticmethod
-    def _latin_hypercube(n_points: int, n_dims: int) -> torch.Tensor:
-        """Generate an LHS design in ``[0, 1]^d``."""
-        offsets = torch.rand(n_points, n_dims, dtype=torch.float64)
-        perms = torch.stack([torch.randperm(n_points) for _ in range(n_dims)], dim=1)
-        return (perms.to(torch.float64) + offsets) / n_points
 
     # ------------------------------------------------------------------
     # Public API
@@ -145,7 +155,7 @@ class HypercubeCandidateSetSpec(CandidateSetSpec):
 
     def build(
         self,
-        surrogate: BoTorchGPSurrogate,
+        surrogate: Surrogate,
         *,
         target_fidelity_value: Optional[float] = None,
     ) -> torch.Tensor:
@@ -153,8 +163,8 @@ class HypercubeCandidateSetSpec(CandidateSetSpec):
 
         Parameters
         ----------
-        surrogate : BoTorchGPSurrogate
-            A fitted surrogate.
+        surrogate : Surrogate
+            A fitted surrogate. Not used by this implementation.
         target_fidelity_value : float, optional
             When provided, appended as the fidelity column of every candidate
             in the returned tensor (e.g. ``1.0`` for the highest-confidence
@@ -180,11 +190,15 @@ class HypercubeCandidateSetSpec(CandidateSetSpec):
 
 
 class TrainDataCandidateSetSpec(CandidateSetSpec):
-    """Build a candidate set from the surrogate's training inputs.
+    """Build a candidate set from observed data.
 
-    The candidate set is taken directly from ``surrogate.get_train_data()[0]``
-    (``train_X`` in model space).  This is a convenient default for
+    The candidate set is built from the candidates seen in the observations
+    provided via :meth:`update`.  This is a convenient default for
     **discrete** domains where the observed inputs form a natural support set.
+
+    Call :meth:`update` with the current observations before calling
+    :meth:`build`.  In the library, acquisitions that hold a
+    :class:`TrainDataCandidateSetSpec` do this automatically.
 
     .. note::
        In discrete settings the f* samples drawn from this candidate set will
@@ -195,34 +209,61 @@ class TrainDataCandidateSetSpec(CandidateSetSpec):
        :class:`TensorCandidateSetSpec` or a custom subclass.
     """
 
-    def build(
-        self,
-        surrogate: BoTorchGPSurrogate,
-        *,
-        target_fidelity_value: Optional[float] = None,
-    ) -> torch.Tensor:
-        """Return the surrogate's training inputs as the candidate set.
+    def __init__(self) -> None:
+        self._cached_candidates: list[Candidate] = []
+
+    def update(self, observations: Iterable[Observation]) -> None:
+        """Cache the candidates from the current observations.
 
         Parameters
         ----------
-        surrogate : BoTorchGPSurrogate
-            Fitted surrogate.
+        observations : Iterable[Observation]
+            Current observations. Candidates are extracted and stored for
+            use in the next :meth:`build` call.
+        """
+        self._cached_candidates = [
+            Candidate(x=obs.x, fidelity=obs.fidelity) for obs in observations
+        ]
+
+    def build(
+        self,
+        surrogate: Surrogate,
+        *,
+        target_fidelity_value: Optional[float] = None,
+    ) -> torch.Tensor:
+        """Encode the cached observation candidates and return them as a tensor.
+
+        Parameters
+        ----------
+        surrogate : Surrogate
+            A fitted surrogate with an ``encode_candidates()`` method.
         target_fidelity_value : float, optional
-            Not used — the training inputs already include the fidelity
-            column in multi-fidelity mode.
+            Not used — the encoded candidates already include fidelity
+            information from the observations.
 
         Returns
         -------
         candidate_set : torch.Tensor
-            ``train_X`` tensor of shape ``(N, d)`` already in model space.
+            Encoded candidate tensor of shape ``(N, d)`` in model space.
 
         Raises
         ------
         RuntimeError
-            If the surrogate has not been fitted yet.
+            If :meth:`update` has not been called with at least one observation.
+        AttributeError
+            If the surrogate does not implement ``encode_candidates()``.
         """
-        train_X, _ = surrogate.get_train_data()
-        return train_X
+        if not self._cached_candidates:
+            raise RuntimeError(
+                "TrainDataCandidateSetSpec has no cached candidates. "
+                "Call update() with observations before build()."
+            )
+        if not hasattr(surrogate, "encode_candidates"):
+            raise AttributeError(
+                f"{type(surrogate).__name__} does not implement encode_candidates(). "
+                "TrainDataCandidateSetSpec requires a surrogate with this method."
+            )
+        return surrogate.encode_candidates(self._cached_candidates)  # type: ignore[attr-defined]
 
 
 class TensorCandidateSetSpec(CandidateSetSpec):
@@ -243,7 +284,7 @@ class TensorCandidateSetSpec(CandidateSetSpec):
 
     def build(
         self,
-        surrogate: BoTorchGPSurrogate,
+        surrogate: Surrogate,
         *,
         target_fidelity_value: Optional[float] = None,
     ) -> torch.Tensor:
@@ -251,7 +292,7 @@ class TensorCandidateSetSpec(CandidateSetSpec):
 
         Parameters
         ----------
-        surrogate : BoTorchGPSurrogate
+        surrogate : Surrogate
             Not used.
         target_fidelity_value : float, optional
             Not used.

@@ -23,10 +23,10 @@ from botorch.acquisition.monte_carlo import (
     qUpperConfidenceBound as _qUCB,
 )
 
-from activelearning.acquisition.botorch_acquisition import QBatchBoTorchAcquisition
+from activelearning.acquisition.botorch.botorch_acquisition import BatchScoringMixin, QBatchBoTorchAcquisition
 
 
-class QExpectedImprovement(QBatchBoTorchAcquisition):
+class QExpectedImprovement(BatchScoringMixin, QBatchBoTorchAcquisition):
     """Monte Carlo q-Expected Improvement (qEI).
 
     Parameters
@@ -65,7 +65,7 @@ class QExpectedImprovement(QBatchBoTorchAcquisition):
         )
 
 
-class QLogExpectedImprovement(QBatchBoTorchAcquisition):
+class QLogExpectedImprovement(BatchScoringMixin, QBatchBoTorchAcquisition):
     """Monte Carlo q-Expected Improvement in log-space for improved numerics.
 
     Parameters
@@ -104,7 +104,7 @@ class QLogExpectedImprovement(QBatchBoTorchAcquisition):
         )
 
 
-class QNoisyExpectedImprovement(QBatchBoTorchAcquisition):
+class QNoisyExpectedImprovement(BatchScoringMixin, QBatchBoTorchAcquisition):
     """Monte Carlo q-Noisy Expected Improvement (qNEI).
 
     Uses the training inputs as a baseline rather than requiring an explicit
@@ -148,7 +148,7 @@ class QNoisyExpectedImprovement(QBatchBoTorchAcquisition):
         )
 
 
-class QLogNoisyExpectedImprovement(QBatchBoTorchAcquisition):
+class QLogNoisyExpectedImprovement(BatchScoringMixin, QBatchBoTorchAcquisition):
     """Monte Carlo q-Noisy Expected Improvement in log-space.
 
     Parameters
@@ -189,7 +189,7 @@ class QLogNoisyExpectedImprovement(QBatchBoTorchAcquisition):
         )
 
 
-class QUpperConfidenceBound(QBatchBoTorchAcquisition):
+class QUpperConfidenceBound(BatchScoringMixin, QBatchBoTorchAcquisition):
     """Monte Carlo q-Upper Confidence Bound (qUCB).
 
     Parameters
@@ -213,7 +213,7 @@ class QUpperConfidenceBound(QBatchBoTorchAcquisition):
         )
 
 
-class QProbabilityOfImprovement(QBatchBoTorchAcquisition):
+class QProbabilityOfImprovement(BatchScoringMixin, QBatchBoTorchAcquisition):
     """Monte Carlo q-Probability of Improvement (qPI).
 
     Parameters
@@ -257,7 +257,7 @@ class QProbabilityOfImprovement(QBatchBoTorchAcquisition):
         )
 
 
-class QSimpleRegret(QBatchBoTorchAcquisition):
+class QSimpleRegret(BatchScoringMixin, QBatchBoTorchAcquisition):
     """Monte Carlo q-Simple Regret.
 
     Parameters
@@ -297,7 +297,7 @@ class QKnowledgeGradient(QBatchBoTorchAcquisition):
         current_value: Optional[float] = None,
         **kwargs: Any,
     ) -> None:
-        super().__init__(supports_batch_scoring=False, **kwargs)
+        super().__init__(**kwargs)
         self._num_fantasies = num_fantasies
         self._current_value = current_value
 
