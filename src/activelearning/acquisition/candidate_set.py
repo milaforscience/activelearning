@@ -1,20 +1,28 @@
-"""Candidate-set specifications for acquisition functions that require a
-discrete support set to approximate value distributions (e.g. MES variants).
+"""Candidate-set specifications for entropy-based acquisition functions.
 
-A :class:`CandidateSetSpec` describes *how* to build a candidate set — using
-only plain Python primitives — so that specs can be serialized to and from
-YAML config files without embedding raw tensors.  The actual ``torch.Tensor``
-is materialized lazily at acquisition-build time, when a fitted surrogate is
-available.
+Some acquisition functions — such as Max-Value Entropy Search (MES) variants —
+require a discrete set of candidate points to approximate the distribution of
+the optimum.  The quality of this approximation depends on how well the
+candidate set covers the search space.
 
-Three built-in specs are provided:
+A :class:`CandidateSetSpec` encapsulates the logic for constructing this set.
+Subclasses are instantiated with the parameters that describe the desired
+coverage strategy; the actual candidate tensor is produced by calling
+:meth:`~CandidateSetSpec.build` once a fitted surrogate is available.
 
-- :class:`HypercubeCandidateSetSpec` — samples from a bounded hypercube;
-  suitable for continuous domains.
-- :class:`TrainDataCandidateSetSpec` — reuses the surrogate's training inputs;
-  a simple default for discrete domains.
-- :class:`TensorCandidateSetSpec` — escape hatch for users who already hold a
-  precomputed tensor and want to stay within the spec API.
+Three built-in strategies are provided:
+
+- :class:`HypercubeCandidateSetSpec` — for **continuous** domains. Generates
+  points by sampling from a user-specified bounded hypercube (uniform or Latin
+  Hypercube Sampling). Handles multi-fidelity problems automatically by
+  appending the target fidelity to each candidate.
+- :class:`TrainDataCandidateSetSpec` — a simple default for **discrete**
+  domains. Reuses the surrogate's training inputs as the support set.
+- :class:`TensorCandidateSetSpec` — for users who wish to supply their own
+  precomputed candidate set directly.
+
+Custom strategies can be implemented by subclassing :class:`CandidateSetSpec`
+and overriding :meth:`~CandidateSetSpec.build`.
 """
 
 from abc import ABC, abstractmethod
@@ -27,16 +35,20 @@ from activelearning.utils.types import Candidate
 
 
 class CandidateSetSpec(ABC):
-    """Abstract specification for building a model-space candidate set tensor.
+    """Base class for candidate-set construction strategies.
 
-    Subclasses store only plain Python primitives so that the spec can be
-    represented in a YAML config file.  The tensor is produced on demand by
-    calling :meth:`build` once a fitted surrogate is available.
+    A :class:`CandidateSetSpec` defines how to produce the discrete set of
+    points used by entropy-based acquisition functions to approximate the
+    distribution of the optimum.  The candidate set is constructed by calling
+    :meth:`build` after the surrogate has been fitted, giving each strategy
+    access to the model when needed (e.g. to encode candidates or infer
+    fidelity information).
 
-    The returned tensor must be in **model space** — i.e. the same feature
-    representation that the surrogate's internal BoTorch model expects, with
-    shape ``(N, d)`` where ``d`` is the model input dimension (including any
-    appended fidelity column in multi-fidelity mode).
+    The returned tensor is in **model space** — the feature representation
+    expected by the surrogate's internal model — with shape ``(N, d)``, where
+    ``d`` includes any fidelity column in multi-fidelity settings.
+
+    Implement this class to define custom candidate-set strategies.
     """
 
     @abstractmethod
@@ -105,13 +117,9 @@ class HypercubeCandidateSetSpec(CandidateSetSpec):
             raise ValueError(f"n_points must be > 0, got {n_points}")
         for idx, (lower, upper) in enumerate(bounds):
             if lower >= upper:
-                raise ValueError(
-                    f"Bound {idx} has lower >= upper: ({lower}, {upper})"
-                )
+                raise ValueError(f"Bound {idx} has lower >= upper: ({lower}, {upper})")
         if strategy not in ("uniform", "lhs"):
-            raise ValueError(
-                f"strategy must be 'uniform' or 'lhs', got {strategy!r}"
-            )
+            raise ValueError(f"strategy must be 'uniform' or 'lhs', got {strategy!r}")
 
         self.bounds = bounds
         self.n_points = n_points
@@ -133,9 +141,7 @@ class HypercubeCandidateSetSpec(CandidateSetSpec):
     def _latin_hypercube(n_points: int, n_dims: int) -> torch.Tensor:
         """Generate an LHS design in ``[0, 1]^d``."""
         offsets = torch.rand(n_points, n_dims, dtype=torch.float64)
-        perms = torch.stack(
-            [torch.randperm(n_points) for _ in range(n_dims)], dim=1
-        )
+        perms = torch.stack([torch.randperm(n_points) for _ in range(n_dims)], dim=1)
         return (perms.to(torch.float64) + offsets) / n_points
 
     def _resolve_target_fidelity_id(self, surrogate: BoTorchGPSurrogate) -> int:
@@ -162,12 +168,8 @@ class HypercubeCandidateSetSpec(CandidateSetSpec):
         candidate_set : torch.Tensor
             Model-space tensor of shape ``(n_points, d)``.
         """
-        lowers = torch.tensor(
-            [lo for lo, _ in self.bounds], dtype=torch.float64
-        )
-        ranges = torch.tensor(
-            [hi - lo for lo, hi in self.bounds], dtype=torch.float64
-        )
+        lowers = torch.tensor([lo for lo, _ in self.bounds], dtype=torch.float64)
+        ranges = torch.tensor([hi - lo for lo, hi in self.bounds], dtype=torch.float64)
         unit_points = self._sample_unit()
         feature_points = lowers + unit_points * ranges
 
@@ -180,8 +182,7 @@ class HypercubeCandidateSetSpec(CandidateSetSpec):
             ]
         else:
             candidates = [
-                Candidate(x=feature_points[i].tolist())
-                for i in range(self.n_points)
+                Candidate(x=feature_points[i].tolist()) for i in range(self.n_points)
             ]
 
         return surrogate.encode_candidates(candidates)

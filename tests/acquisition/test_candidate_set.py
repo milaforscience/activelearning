@@ -92,7 +92,9 @@ class TestHypercubeCandidateSetSpec:
     def test_unknown_strategy_raises(self) -> None:
         with pytest.raises(ValueError, match="strategy must be"):
             HypercubeCandidateSetSpec(
-                bounds=self.BOUNDS_2D, n_points=10, strategy="sobol"  # type: ignore[arg-type]
+                bounds=self.BOUNDS_2D,
+                n_points=10,
+                strategy="sobol",  # type: ignore[arg-type]
             )
 
     # --- single-fidelity builds --------------------------------------------
@@ -141,7 +143,9 @@ class TestHypercubeCandidateSetSpec:
         result = spec.build(fitted_mf_surrogate)
         # Fidelity confidences: {0: 0.5, 1: 1.0} → target id=1 → encoded as 1.0
         fid_column = result[:, -1]
-        assert torch.allclose(fid_column, torch.full((self.N,), 1.0, dtype=torch.float64))
+        assert torch.allclose(
+            fid_column, torch.full((self.N,), 1.0, dtype=torch.float64)
+        )
 
     def test_mf_explicit_target_fidelity_id(
         self, fitted_mf_surrogate: BoTorchGPSurrogate
@@ -153,7 +157,9 @@ class TestHypercubeCandidateSetSpec:
         result = spec.build(fitted_mf_surrogate)
         # Fidelity id=0 is encoded as confidence 0.5
         fid_column = result[:, -1]
-        assert torch.allclose(fid_column, torch.full((self.N,), 0.5, dtype=torch.float64))
+        assert torch.allclose(
+            fid_column, torch.full((self.N,), 0.5, dtype=torch.float64)
+        )
 
     # --- dtype & two-run independence --------------------------------------
 
