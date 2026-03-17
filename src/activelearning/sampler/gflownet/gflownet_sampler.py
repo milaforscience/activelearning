@@ -2,6 +2,9 @@ import torch
 from typing import Any, Iterable, Optional
 from omegaconf import DictConfig
 from activelearning.sampler.sampler import Sampler
+from activelearning.sampler.gflownet.logger_wrapper import (
+    RuntimeGFlowNetLoggerWrapper,
+)
 from activelearning.utils.types import Candidate, Observation
 
 
@@ -38,14 +41,14 @@ class GFlowNetSampler(Sampler):
         import hydra
 
         self.n_samples = n_samples
-        self.device = device
-        self.float_precision = float_precision
         self.conf = conf
+        self._gflownet_device = device
+        self._gflownet_float_precision = float_precision
 
         self.env_maker = hydra.utils.instantiate(
             self.conf.env,
-            device=device,
-            float_precision=float_precision,
+            device=self._gflownet_device,
+            float_precision=self._gflownet_float_precision,
             _partial_=True,
         )
         env = self.env_maker()
@@ -53,32 +56,51 @@ class GFlowNetSampler(Sampler):
         self.forward_policy = hydra.utils.instantiate(
             self.conf.policy.forward,
             env=env,
-            device=device,
-            float_precision=float_precision,
+            device=self._gflownet_device,
+            float_precision=self._gflownet_float_precision,
         )
         self.backward_policy = hydra.utils.instantiate(
             self.conf.policy.backward,
             env=env,
-            device=device,
-            float_precision=float_precision,
+            device=self._gflownet_device,
+            float_precision=self._gflownet_float_precision,
         )
         self.state_flow = (
             hydra.utils.instantiate(
                 self.conf.state_flow,
                 env=env,
-                device=device,
-                float_precision=float_precision,
+                device=self._gflownet_device,
+                float_precision=self._gflownet_float_precision,
                 base=self.forward_policy,
             )
             if self.conf.state_flow is not None
             else None
         )
 
+    def _build_logger(self) -> Any:
+        """Build a GFlowNet-compatible logger for the configured runtime."""
+        import hydra
+
+        if self.logger is None:
+            return hydra.utils.instantiate(
+                self.conf.logger,
+                self.conf,
+                _recursive_=False,
+            )
+
+        logger_conf = self.conf.logger
+
+        return RuntimeGFlowNetLoggerWrapper(
+            runtime_logger=self.logger,
+            config=self.conf,
+            logger_conf=logger_conf,
+        )
+
     def _build_agent(self, proxy: Any) -> Any:
         """Assemble and return a ``GFlowNetAgent`` ready for training."""
         import hydra
 
-        logger = hydra.utils.instantiate(self.conf.logger, self.conf, _recursive_=False)
+        logger = self._build_logger()
 
         env = self.env_maker()
         proxy.setup(env)
@@ -88,8 +110,8 @@ class GFlowNetSampler(Sampler):
             forward_policy=self.forward_policy,
             backward_policy=self.backward_policy,
             state_flow=self.state_flow,
-            device=self.device,
-            float_precision=self.float_precision,
+            device=self._gflownet_device,
+            float_precision=self._gflownet_float_precision,
         )
         buffer = hydra.utils.instantiate(
             self.conf.agent.buffer,
@@ -103,8 +125,8 @@ class GFlowNetSampler(Sampler):
             self.conf.agent,
             env_maker=self.env_maker,
             proxy=proxy,
-            device=self.device,
-            float_precision=self.float_precision,
+            device=self._gflownet_device,
+            float_precision=self._gflownet_float_precision,
             loss=loss,
             buffer=buffer,
             forward_policy=self.forward_policy,
@@ -159,8 +181,8 @@ class GFlowNetSampler(Sampler):
         proxy = hydra.utils.instantiate(
             self.conf.proxy,
             acquisition=acquisition,
-            device=self.device,
-            float_precision=self.float_precision,
+            device=self._gflownet_device,
+            float_precision=self._gflownet_float_precision,
         )
         agent = self._build_agent(proxy)
         agent.train()

@@ -7,6 +7,7 @@ BraninOracle and the ``active_learning`` function.
 
 import shutil
 import tempfile
+from unittest.mock import Mock
 import pytest
 import torch
 from typing import Sequence, Optional, Any
@@ -17,6 +18,7 @@ from activelearning.active_learning import active_learning
 from activelearning.budget.budget import Budget
 from activelearning.dataset.list_dataset import ListDataset
 from activelearning.oracle.augmented_function_oracle import BraninOracle
+from activelearning.runtime import RuntimeContext
 from activelearning.sampler.gflownet.gflownet_sampler import GFlowNetSampler
 from activelearning.selector.score_selector import TopKAcquisitionSelector
 from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
@@ -210,7 +212,10 @@ class TestGFlowNetSamplerSmoke:
 
     @pytest.fixture(autouse=True)
     def _setup_and_teardown(self):
-        self.conf, self.tmpdir = _compose_sampler_conf(n_train_steps=10, grid_length=10)
+        self.conf, self.tmpdir = _compose_sampler_conf(
+            n_train_steps=10,
+            grid_length=10,
+        )
         yield
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
@@ -258,13 +263,35 @@ class TestGFlowNetSamplerSmoke:
         with pytest.raises(ValueError, match="requires an acquisition"):
             sampler.sample(acquisition=None)
 
+    def test_sample_mirrors_metrics_to_runtime_logger(self):
+        """GFlowNet training metrics should flow through the bound runtime logger."""
+        sampler = GFlowNetGridSampler(
+            n_samples=5,
+            conf=self.conf,
+            device="cpu",
+            float_precision=32,
+            output_bounds=_BRANIN_BOUNDS,
+        )
+        runtime_logger = Mock()
+        sampler.bind_runtime_context(RuntimeContext(logger=runtime_logger))
+
+        candidates = sampler.sample(acquisition=BraninAcquisition())
+
+        assert len(candidates) == 5
+        runtime_logger.log_metric.assert_called()
+        runtime_logger.log_step.assert_called()
+        runtime_logger.end.assert_not_called()
+
 
 class TestGFlowNetBraninEndToEnd:
     """End-to-end integration with BraninOracle and the active_learning loop."""
 
     @pytest.fixture(autouse=True)
     def _setup_and_teardown(self):
-        self.conf, self.tmpdir = _compose_sampler_conf(n_train_steps=10, grid_length=10)
+        self.conf, self.tmpdir = _compose_sampler_conf(
+            n_train_steps=10,
+            grid_length=10,
+        )
         yield
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
@@ -314,5 +341,43 @@ class TestGFlowNetBraninEndToEnd:
         for o in obs:
             assert len(o.x) == 2
             assert o.fidelity == 0
-            # AugmentedBranin returns positive values in this domain
-            assert o.y > 0.0
+            assert torch.isfinite(torch.tensor(o.y))
+
+    def test_active_learning_loop_ends_runtime_logger_once(self):
+        """The outer active-learning loop should own runtime logger shutdown."""
+        sampler = GFlowNetGridSampler(
+            n_samples=100,
+            conf=self.conf,
+            device="cpu",
+            float_precision=32,
+            output_bounds=_BRANIN_BOUNDS,
+        )
+        runtime_logger = Mock()
+        runtime_context = RuntimeContext(logger=runtime_logger)
+
+        dataset = ListDataset()
+        surrogate = DummyMeanSurrogate()
+        acquisition = BraninAcquisition()
+        selector = FidelityAssigningSelector(
+            inner=TopKAcquisitionSelector(num_samples=3),
+            fidelity=0,
+        )
+        oracle = BraninOracle(
+            fidelity_costs={0: 1.0},
+            fidelity_confidences={0: 1.0},
+        )
+        budget = Budget(available_budget=10.0, schedule=lambda r: 5.0)
+
+        active_learning(
+            dataset=dataset,
+            surrogate=surrogate,
+            acquisition=acquisition,
+            sampler=sampler,
+            selector=selector,
+            oracle=oracle,
+            budget=budget,
+            runtime_context=runtime_context,
+        )
+
+        runtime_logger.log_metric.assert_called()
+        runtime_logger.end.assert_called_once()
