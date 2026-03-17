@@ -1,7 +1,10 @@
 import json
 from abc import ABC, abstractmethod
 from datetime import datetime
+from numbers import Real
 from typing import Any
+
+from matplotlib.figure import Figure as MatplotlibFigure
 
 
 class Logger(ABC):
@@ -276,7 +279,11 @@ class CometLogger(Logger):
         self.experiment.log_parameters(config)
 
     def log_metric(self, key: str, value: Any) -> None:
-        """Log a scalar metric to Comet ML at the current step.
+        """Log a metric-like value to Comet ML at the current step.
+
+        Numeric values are sent to Comet as metrics. Non-numeric values are
+        recorded as step-tagged text entries instead, which avoids Comet's
+        warning about string metrics while preserving the information.
 
         Parameters
         ----------
@@ -285,7 +292,15 @@ class CometLogger(Logger):
         value : Any
             Value of the metric.
         """
-        self.experiment.log_metric(key, value, step=self._current_step)
+        if isinstance(value, Real) and not isinstance(value, bool):
+            self.experiment.log_metric(key, value, step=self._current_step)
+            return
+
+        self.experiment.log_text(
+            str(value),
+            step=self._current_step,
+            metadata={"key": key},
+        )
 
     def log_figure(self, key: str, figure: Any) -> None:
         """Log a figure to Comet ML.
@@ -358,7 +373,11 @@ class AimLogger(Logger):
         self.run["config"] = config
 
     def log_metric(self, key: str, value: Any) -> None:
-        """Buffer a metric to be tracked at the next log_step call.
+        """Buffer a metric-like value to be tracked at the next log_step call.
+
+        Aim accepts numeric scalars or Aim objects in ``track()``. Non-numeric
+        values are therefore wrapped as ``aim.Text`` so string-valued metadata
+        such as ``best_candidate`` can still be logged safely.
 
         Parameters
         ----------
@@ -367,7 +386,11 @@ class AimLogger(Logger):
         value : Any
             Value of the metric.
         """
-        self._buffer[key] = value
+        if isinstance(value, Real) and not isinstance(value, bool):
+            self._buffer[key] = value
+            return
+
+        self._buffer[key] = self._aim.Text(str(value))
 
     def log_figure(self, key: str, figure: Any) -> None:
         """Buffer a figure to be tracked at the next log_step call.
@@ -377,8 +400,14 @@ class AimLogger(Logger):
         key : str
             Name or identifier for the figure.
         figure : Any
-            The figure object (e.g., matplotlib Figure).
+            The figure object. Matplotlib figures are buffered as ``aim.Image``
+            to avoid Aim's Plotly conversion path; other figure-like objects
+            continue to use ``aim.Figure``.
         """
+        if isinstance(figure, MatplotlibFigure):
+            self._buffer[key] = self._aim.Image(figure)
+            return
+
         self._buffer[key] = self._aim.Figure(figure)
 
     def log_step(self, step: int) -> None:
