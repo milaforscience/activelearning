@@ -17,7 +17,9 @@ from botorch.acquisition.max_value_entropy_search import (
     qMultiFidelityMaxValueEntropy as _qMFMES,
 )
 
-from activelearning.acquisition.botorch.botorch_acquisition import QBatchBoTorchAcquisition
+from activelearning.acquisition.botorch.botorch_acquisition import (
+    QBatchBoTorchAcquisition,
+)
 from activelearning.acquisition.candidate_set import CandidateSetSpec
 from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import Observation

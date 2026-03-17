@@ -23,7 +23,10 @@ from botorch.acquisition.monte_carlo import (
     qUpperConfidenceBound as _qUCB,
 )
 
-from activelearning.acquisition.botorch.botorch_acquisition import BatchScoringMixin, QBatchBoTorchAcquisition
+from activelearning.acquisition.botorch.botorch_acquisition import (
+    BatchScoringMixin,
+    QBatchBoTorchAcquisition,
+)
 
 
 class QExpectedImprovement(BatchScoringMixin, QBatchBoTorchAcquisition):
