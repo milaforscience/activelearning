@@ -100,7 +100,7 @@ class TestHypercubeCandidateSetSpec:
     # --- single-fidelity builds --------------------------------------------
 
     def test_uniform_sf_shape(self, fitted_sf_surrogate: BoTorchGPSurrogate) -> None:
-        """Output shape is (n_points, feature_dims) in single-fidelity mode."""
+        """Output shape is (n_points, feature_dims) with no fidelity column."""
         spec = HypercubeCandidateSetSpec(bounds=self.BOUNDS_2D, n_points=self.N)
         result = spec.build(fitted_sf_surrogate)
         assert result.shape == (self.N, 2)
@@ -112,15 +112,12 @@ class TestHypercubeCandidateSetSpec:
         result = spec.build(fitted_sf_surrogate)
         assert result.shape == (self.N, 2)
 
-    def test_uniform_sf_values_in_bounds(
+    def test_sf_no_fidelity_column_when_not_passed(
         self, fitted_sf_surrogate: BoTorchGPSurrogate
     ) -> None:
-        """Raw feature values respect the specified bounds."""
+        """When target_fidelity_value is not passed, no fidelity column is appended."""
         spec = HypercubeCandidateSetSpec(bounds=self.BOUNDS_2D, n_points=self.N)
         result = spec.build(fitted_sf_surrogate)
-        # Surrogate applies Normalize internally, so check raw columns via
-        # manual decode: the surrogate's Normalize layer will have shifted values;
-        # we check that the encoded output is a 2D float tensor instead.
         assert result.dtype == torch.float64
         assert result.ndim == 2
         assert result.shape[1] == 2
@@ -130,32 +127,28 @@ class TestHypercubeCandidateSetSpec:
     def test_mf_shape_includes_fidelity_column(
         self, fitted_mf_surrogate: BoTorchGPSurrogate
     ) -> None:
-        """In MF mode the output has an extra fidelity column: (n_points, d+1)."""
+        """When target_fidelity_value is passed, the output has an extra fidelity column."""
         spec = HypercubeCandidateSetSpec(bounds=self.BOUNDS_2D, n_points=self.N)
-        result = spec.build(fitted_mf_surrogate)
+        result = spec.build(fitted_mf_surrogate, target_fidelity_value=1.0)
         assert result.shape == (self.N, 3)  # 2 features + 1 fidelity
 
-    def test_mf_inferred_target_fidelity(
+    def test_mf_target_fidelity_value_high(
         self, fitted_mf_surrogate: BoTorchGPSurrogate
     ) -> None:
-        """When target_fidelity_id is None, the fidelity with max confidence is used."""
+        """The passed target_fidelity_value is set correctly in the fidelity column."""
         spec = HypercubeCandidateSetSpec(bounds=self.BOUNDS_2D, n_points=self.N)
-        result = spec.build(fitted_mf_surrogate)
-        # Fidelity confidences: {0: 0.5, 1: 1.0} → target id=1 → encoded as 1.0
+        result = spec.build(fitted_mf_surrogate, target_fidelity_value=1.0)
         fid_column = result[:, -1]
         assert torch.allclose(
             fid_column, torch.full((self.N,), 1.0, dtype=torch.float64)
         )
 
-    def test_mf_explicit_target_fidelity_id(
+    def test_mf_target_fidelity_value_low(
         self, fitted_mf_surrogate: BoTorchGPSurrogate
     ) -> None:
-        """Explicit target_fidelity_id is respected over the inferred default."""
-        spec = HypercubeCandidateSetSpec(
-            bounds=self.BOUNDS_2D, n_points=self.N, target_fidelity_id=0
-        )
-        result = spec.build(fitted_mf_surrogate)
-        # Fidelity id=0 is encoded as confidence 0.5
+        """A lower target_fidelity_value is correctly reflected in the fidelity column."""
+        spec = HypercubeCandidateSetSpec(bounds=self.BOUNDS_2D, n_points=self.N)
+        result = spec.build(fitted_mf_surrogate, target_fidelity_value=0.5)
         fid_column = result[:, -1]
         assert torch.allclose(
             fid_column, torch.full((self.N,), 0.5, dtype=torch.float64)

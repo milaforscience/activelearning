@@ -130,7 +130,10 @@ class QMultiFidelityMaxValueEntropy(QBatchBoTorchAcquisition):
 
         build_kwargs: dict[str, Any] = {
             "model": self._botorch_surrogate.get_model(),
-            "candidate_set": self._candidate_set_spec.build(self._botorch_surrogate),
+            "candidate_set": self._candidate_set_spec.build(
+                self._botorch_surrogate,
+                target_fidelity_value=self._resolved_target_fidelity_value,
+            ),
             "num_fantasies": self._num_fantasies,
             "num_mv_samples": self._num_mv_samples,
             "num_y_samples": self._num_y_samples,
@@ -199,7 +202,10 @@ class QMultiFidelityLowerBoundMaxValueEntropy(QBatchBoTorchAcquisition):
 
         build_kwargs: dict[str, Any] = {
             "model": self._botorch_surrogate.get_model(),
-            "candidate_set": self._candidate_set_spec.build(self._botorch_surrogate),
+            "candidate_set": self._candidate_set_spec.build(
+                self._botorch_surrogate,
+                target_fidelity_value=self._resolved_target_fidelity_value,
+            ),
             "num_fantasies": self._num_fantasies,
             "num_mv_samples": self._num_mv_samples,
             "num_y_samples": self._num_y_samples,
