@@ -61,7 +61,7 @@ class Surrogate(ABC):
 
         Notes
         -----
-            This method is *not* called when ``updates_from_latest()`` returns
+            This method is *never* called if ``updates_from_latest()`` returns
             ``False``. In that case the loop calls ``fit(observations)`` instead.
 
         Raises
@@ -77,7 +77,7 @@ class Surrogate(ABC):
     def fit(self, observations: Iterable[Observation]) -> None:
         """Fit the surrogate model to observations from scratch.
 
-        Called by the active learning loop when ``updates_from_latest()`` returns
+        Called by the active learning loop if ``updates_from_latest()`` returns
         ``False``, passing the shared round iterable (same one used by acquisition
         and sampler). Also useful for standalone use such as notebooks and tests.
 
