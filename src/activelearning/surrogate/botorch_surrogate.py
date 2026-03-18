@@ -422,7 +422,7 @@ class BoTorchGPSurrogate(Surrogate):
 
         fidelity_confidences = self._fidelity_confidences or None
         test_X, fidelities = candidates_to_tensor(cand_list, fidelity_confidences)
-        test_X = self._ensure_feature_matrix(test_X)
+        test_X = self._ensure_batch_shape(test_X)
 
         if self._is_multi_fidelity:
             fid_tensor = torch.tensor(fidelities, dtype=torch.float64).view(-1, 1)
@@ -434,25 +434,26 @@ class BoTorchGPSurrogate(Surrogate):
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _ensure_feature_matrix(self, X: torch.Tensor) -> torch.Tensor:
-        """Normalize scalar and vector features to BoTorch's ``(N, d)`` layout.
+    def _ensure_batch_shape(self, t: torch.Tensor) -> torch.Tensor:
+        """Normalize a tensor to BoTorch's ``(N, d)`` batch layout.
 
         Parameters
         ----------
-        X : torch.Tensor
-            Raw feature tensor returned by the generic conversion helpers.
+        t : torch.Tensor
+            Raw tensor returned by the generic conversion helpers.
 
         Returns
         -------
         result : torch.Tensor
-            Feature tensor with scalar inputs reshaped to ``(N, 1)`` while
-            leaving already batched feature tensors unchanged.
+            Tensor with scalar inputs reshaped to ``(1, 1)`` and 1-D inputs
+            reshaped to ``(N, 1)``, while already batched tensors are left
+            unchanged.
         """
-        if X.ndim == 0:
-            return X.view(1, 1)
-        if X.ndim == 1:
-            return X.unsqueeze(-1)
-        return X
+        if t.ndim == 0:
+            return t.view(1, 1)
+        if t.ndim == 1:
+            return t.unsqueeze(-1)
+        return t
 
     def _parse_observations(
         self,
@@ -489,13 +490,8 @@ class BoTorchGPSurrogate(Surrogate):
 
         fidelity_confidences = self._fidelity_confidences or None
         X, y, fidelities = observations_to_tensors(obs_list, fidelity_confidences)
-        train_X = self._ensure_feature_matrix(X)
-        if y.ndim == 0:
-            train_Y = y.view(1, 1)
-        elif y.ndim == 1:
-            train_Y = y.unsqueeze(-1)
-        else:
-            train_Y = y
+        train_X = self._ensure_batch_shape(X)
+        train_Y = self._ensure_batch_shape(y)
         obs_count = len(obs_list)
 
         if is_multi_fidelity:
