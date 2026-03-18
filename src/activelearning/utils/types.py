@@ -112,14 +112,11 @@ def observations_to_tensors(
     Parameters
     ----------
     observations : Iterable[Observation]
-        Observations to convert. Materialized to a list if not already a list.
+        Observations to convert.
     fidelity_confidences : dict[int, float], optional
         Mapping from integer fidelity IDs to continuous confidence values.
         If None, observations must not include fidelity values. If a mapping is
-        provided, every non-None fidelity must be present in it. Raises
-        ``ValueError`` when fidelities are present but no mapping is supplied,
-        and ``KeyError`` if a fidelity ID in the observations is missing from
-        the mapping.
+        provided, every non-None fidelity must be present in it.
 
     Returns
     -------
@@ -129,27 +126,36 @@ def observations_to_tensors(
         Output labels tensor. Shape is determined by the input data.
     fidelities : list[float]
         Mapped fidelity confidence values; empty if single-fidelity.
+
+    Raises
+    ------
+    ValueError
+        If fidelity values are present in observations but ``fidelity_confidences``
+        is ``None``.
+    KeyError
+        If a fidelity ID in observations is missing from ``fidelity_confidences``.
     """
-    obs_list = observations if isinstance(observations, list) else list(observations)
+    xs: list = []
+    ys: list = []
+    fidelities: list[float] = []
+    any_fidelity = False
 
-    X = _to_tensor([obs.x for obs in obs_list], torch.float64)
-    y = _to_tensor([obs.y for obs in obs_list], torch.float64)
-    has_fidelity = [obs.fidelity is not None for obs in obs_list]
+    for obs in observations:
+        xs.append(obs.x)
+        ys.append(obs.y)
+        if obs.fidelity is not None:
+            any_fidelity = True
+            if fidelity_confidences is not None:
+                fidelities.append(fidelity_confidences[obs.fidelity])
 
-    if fidelity_confidences is None:
-        if any(has_fidelity):
-            raise ValueError(
-                "Observations include fidelity values, but no fidelity_confidences "
-                "mapping was provided."
-            )
-        fidelities = []
-    else:
-        fidelities = [
-            fidelity_confidences[obs.fidelity]
-            for obs in obs_list
-            if obs.fidelity is not None
-        ]
+    if fidelity_confidences is None and any_fidelity:
+        raise ValueError(
+            "Observations include fidelity values, but no fidelity_confidences "
+            "mapping was provided."
+        )
 
+    X = _to_tensor(xs, torch.float64)
+    y = _to_tensor(ys, torch.float64)
     return X, y, fidelities
 
 
@@ -166,14 +172,11 @@ def candidates_to_tensor(
     Parameters
     ----------
     candidates : Iterable[Candidate]
-        Candidates to convert. Materialized to a list internally.
+        Candidates to convert.
     fidelity_confidences : dict[int, float], optional
         Mapping from integer fidelity IDs to continuous confidence values.
         If None, candidates must not include fidelity values. If a mapping is
-        provided, every non-None fidelity must be present in it. Raises
-        ``ValueError`` when fidelities are present but no mapping is supplied,
-        and ``KeyError`` if a fidelity ID in the candidates is missing from the
-        mapping.
+        provided, every non-None fidelity must be present in it.
 
     Returns
     -------
@@ -181,23 +184,31 @@ def candidates_to_tensor(
         Input features tensor. Shape is determined by the input data.
     fidelities : list[float]
         Mapped fidelity confidence values; empty if single-fidelity.
+
+    Raises
+    ------
+    ValueError
+        If fidelity values are present in candidates but ``fidelity_confidences``
+        is ``None``.
+    KeyError
+        If a fidelity ID in candidates is missing from ``fidelity_confidences``.
     """
-    cand_list = candidates if isinstance(candidates, list) else list(candidates)
-    X = _to_tensor([cand.x for cand in cand_list], torch.float64)
-    has_fidelity = [cand.fidelity is not None for cand in cand_list]
+    xs: list = []
+    fidelities: list[float] = []
+    any_fidelity = False
 
-    if fidelity_confidences is None:
-        if any(has_fidelity):
-            raise ValueError(
-                "Candidates include fidelity values, but no fidelity_confidences "
-                "mapping was provided."
-            )
-        fidelities = []
-    else:
-        fidelities = [
-            fidelity_confidences[cand.fidelity]
-            for cand in cand_list
-            if cand.fidelity is not None
-        ]
+    for cand in candidates:
+        xs.append(cand.x)
+        if cand.fidelity is not None:
+            any_fidelity = True
+            if fidelity_confidences is not None:
+                fidelities.append(fidelity_confidences[cand.fidelity])
 
+    if fidelity_confidences is None and any_fidelity:
+        raise ValueError(
+            "Candidates include fidelity values, but no fidelity_confidences "
+            "mapping was provided."
+        )
+
+    X = _to_tensor(xs, torch.float64)
     return X, fidelities
