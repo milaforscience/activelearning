@@ -202,11 +202,7 @@ class BoTorchGPSurrogate(Surrogate):
                 "include fidelity values."
             )
 
-        new_X, new_Y, parsed_is_multi_fidelity = self._parse_observations(obs_list)
-        if parsed_is_multi_fidelity != self._is_multi_fidelity:
-            raise ValueError(
-                "Incoming observation structure is incompatible with the fitted surrogate."
-            )
+        new_X, new_Y, _ = self._parse_observations(obs_list)
 
         self._train_X = torch.cat([self._train_X, new_X], dim=0)
         self._train_Y = torch.cat([self._train_Y, new_Y], dim=0)
@@ -402,15 +398,28 @@ class BoTorchGPSurrogate(Surrogate):
         if not cand_list:
             raise ValueError("Cannot encode an empty candidate iterable.")
 
-        has_fidelity = [cand.fidelity is not None for cand in cand_list]
-        if any(has_fidelity) and not all(has_fidelity):
-            missing = [i for i, present in enumerate(has_fidelity) if not present]
+        n_with_fidelity = 0
+        missing: list[int] = []
+        unknown: list[int] = []
+
+        for i, cand in enumerate(cand_list):
+            if cand.fidelity is not None:
+                n_with_fidelity += 1
+                if (
+                    self._is_multi_fidelity
+                    and cand.fidelity not in self._fidelity_confidences
+                ):
+                    unknown.append(i)
+            else:
+                missing.append(i)
+
+        if 0 < n_with_fidelity < len(cand_list):
             raise ValueError(
                 "Mixed fidelity specification detected: either all candidates must "
                 f"provide a fidelity or none should. Missing indices: {missing}."
             )
 
-        incoming_is_multi_fidelity = all(has_fidelity)
+        incoming_is_multi_fidelity = n_with_fidelity == len(cand_list)
 
         if not self._is_multi_fidelity and incoming_is_multi_fidelity:
             raise ValueError(
@@ -424,17 +433,11 @@ class BoTorchGPSurrogate(Surrogate):
                 "All candidates must provide a fidelity."
             )
 
-        if self._is_multi_fidelity:
-            unknown = [
-                i
-                for i, cand in enumerate(cand_list)
-                if cand.fidelity not in self._fidelity_confidences
-            ]
-            if unknown:
-                raise ValueError(
-                    "Some candidate fidelities are not present in the fidelity-confidence "
-                    f"map. Invalid candidate indices: {unknown}."
-                )
+        if self._is_multi_fidelity and unknown:
+            raise ValueError(
+                "Some candidate fidelities are not present in the fidelity-confidence "
+                f"map. Invalid candidate indices: {unknown}."
+            )
 
         fidelity_confidences = self._fidelity_confidences or None
         test_X, fidelities = candidates_to_tensor(cand_list, fidelity_confidences)
@@ -705,14 +708,20 @@ class BoTorchGPSurrogate(Surrogate):
         ValueError
             If only some observations provide fidelity values.
         """
-        obs_list = list(observations)
-        has_fidelity = [obs.fidelity is not None for obs in obs_list]
+        n_with_fidelity = 0
+        missing: list[int] = []
 
-        if any(has_fidelity) and not all(has_fidelity):
-            missing = [i for i, present in enumerate(has_fidelity) if not present]
+        for i, obs in enumerate(observations):
+            if obs.fidelity is not None:
+                n_with_fidelity += 1
+            else:
+                missing.append(i)
+
+        n_total = n_with_fidelity + len(missing)
+        if 0 < n_with_fidelity < n_total:
             raise ValueError(
                 "Mixed fidelity specification detected: either all observations must "
                 f"provide a fidelity or none should. Missing indices: {missing}."
             )
 
-        return all(has_fidelity)
+        return n_with_fidelity == n_total
