@@ -323,4 +323,4 @@ scripts/
 # Ignore all local history of files
 .history
 .ionide
-src/activelearning/acquisition/botorch/botorch_qbatch.py
+
