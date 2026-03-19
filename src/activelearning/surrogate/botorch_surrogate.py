@@ -338,7 +338,7 @@ class BoTorchGPSurrogate(Surrogate):
             self._pending_state_dict = state_dict
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # BoTorch-specific public accessors
     # ------------------------------------------------------------------
     def get_model(self) -> SingleTaskGP | SingleTaskMultiFidelityGP:
         """Return the fitted BoTorch model.
