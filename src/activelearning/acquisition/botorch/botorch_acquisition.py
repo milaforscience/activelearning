@@ -433,18 +433,28 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
             values = botorch_acqf(X)
         return values.detach().cpu().reshape(-1).tolist()
 
-    def score(self, candidates: Iterable[Candidate]) -> list[float]:
+    def score(
+        self,
+        candidates: Iterable[Candidate],
+        cost_weighting: Optional[
+            Callable[[list[float], list[Candidate]], list[float]]
+        ] = None,
+    ) -> list[float]:
         """Score candidates independently by encoding each as a q=1 batch.
 
         Returns a constant score of ``1.0`` for every candidate when the
-        acquisition has not yet been coupled to a fitted surrogate (cold start).
-        This allows the active learning loop to sample candidates randomly
-        on the first round before any observations are available.
+        acquisition has not yet been coupled to a fitted surrogate. This
+        allows the active learning loop to sample candidates uniformly on
+        the first round before any observations are available.
 
         Parameters
         ----------
         candidates : Iterable[Candidate]
             Iterable of candidates to score independently.
+        cost_weighting : callable, optional
+            If provided, called as ``cost_weighting(raw_scores, candidates)``
+            after scoring and its return value is used in place of the raw
+            scores. Not applied before ``update()`` has been called.
 
         Returns
         -------
@@ -463,7 +473,10 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
             return [1.0] * len(cand_list)
         assert self._botorch_surrogate is not None
         X = self._botorch_surrogate.encode_candidates(cand_list).unsqueeze(1)
-        return self._score_encoded(X)
+        raw_scores = self._score_encoded(X)
+        if cost_weighting is None:
+            return raw_scores
+        return cost_weighting(raw_scores, cand_list)
 
 
 class AnalyticBoTorchAcquisition(BoTorchAcquisitionBase):
@@ -519,17 +532,26 @@ class BatchScoringMixin:
     def score_batches(
         self,
         candidate_batches: Iterable[Iterable[Candidate]],
+        cost_weighting: Optional[
+            Callable[[list[float], list[list[Candidate]]], list[float]]
+        ] = None,
     ) -> list[float]:
         """Score candidate batches jointly using q-batch semantics.
 
         Returns a constant score of ``1.0`` for every batch when the
-        acquisition has not yet been coupled to a fitted surrogate (cold start).
+        acquisition has not yet been coupled to a fitted surrogate. This
+        allows the active learning loop to sample batches uniformly on
+        the first round before any observations are available.
 
         Parameters
         ----------
         candidate_batches : Iterable[Iterable[Candidate]]
             Iterable of candidate batches. Each inner iterable represents one
             jointly scored batch.
+        cost_weighting : callable, optional
+            If provided, called as ``cost_weighting(raw_scores, batches)``
+            after scoring and its return value is used in place of the raw
+            scores. Not applied before ``update()`` has been called.
 
         Returns
         -------
@@ -547,7 +569,10 @@ class BatchScoringMixin:
             return [1.0] * len(batch_list)
         assert self._botorch_surrogate is not None  # type: ignore[attr-defined]
         X = self._botorch_surrogate.encode_candidate_batches(batch_list)  # (B, q, d)
-        return self._score_encoded(X)  # type: ignore[attr-defined]
+        raw_scores = self._score_encoded(X)  # type: ignore[attr-defined]
+        if cost_weighting is None:
+            return raw_scores
+        return cost_weighting(raw_scores, batch_list)
 
 
 class QBatchBoTorchAcquisition(BoTorchAcquisitionBase):

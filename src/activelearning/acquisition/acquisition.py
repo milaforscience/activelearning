@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Iterable, Optional
+from typing import Callable, Iterable, Optional
 
 from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import Candidate, Observation
@@ -84,7 +84,13 @@ class Acquisition(ABC):
         """
         self._surrogate = surrogate
 
-    def score(self, candidates: Iterable[Candidate]) -> list[float]:
+    def score(
+        self,
+        candidates: Iterable[Candidate],
+        cost_weighting: Optional[
+            Callable[[list[float], list[Candidate]], list[float]]
+        ] = None,
+    ) -> list[float]:
         """Score candidates independently.
 
         This method is intentionally optional. Subclasses that only support
@@ -96,6 +102,14 @@ class Acquisition(ABC):
         candidates : Iterable[Candidate]
             Iterable of candidates to score one-by-one. Implementations may
             materialize this iterable internally if multiple passes are needed.
+        cost_weighting : callable, optional
+            If provided, called as ``cost_weighting(raw_scores, candidates)``
+            after scoring and its return value is used in place of the raw
+            scores. The caller has full control over how cost is incorporated,
+            for example dividing by per-candidate cost for cost-efficiency:
+            ``lambda scores, cands: [s / cost(c) for s, c in
+            zip(scores, cands)]``. Has no effect before ``update()`` has been
+            called.
 
         Returns
         -------
@@ -116,6 +130,9 @@ class Acquisition(ABC):
     def score_batches(
         self,
         candidate_batches: Iterable[Iterable[Candidate]],
+        cost_weighting: Optional[
+            Callable[[list[float], list[list[Candidate]]], list[float]]
+        ] = None,
     ) -> list[float]:
         """Score candidate batches jointly.
 
@@ -129,6 +146,14 @@ class Acquisition(ABC):
             Iterable of candidate batches. Each inner iterable represents one
             jointly scored batch. Implementations may materialize these iterables
             internally if multiple passes or shape checks are needed.
+        cost_weighting : callable, optional
+            If provided, called as ``cost_weighting(raw_scores, batches)``
+            after scoring and its return value is used in place of the raw
+            scores. The caller has full control over how cost is incorporated,
+            for example dividing by total batch cost for cost-efficiency:
+            ``lambda scores, batches: [s / sum_cost(b) for s, b in
+            zip(scores, batches)]``. Has no effect before ``update()`` has
+            been called.
 
         Returns
         -------
