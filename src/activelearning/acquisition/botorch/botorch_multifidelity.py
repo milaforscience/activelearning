@@ -25,65 +25,6 @@ from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import Observation
 
 
-class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
-    """Multi-fidelity q-Knowledge Gradient (qMFKG).
-
-    Extends qKG with cost-aware utility, target-fidelity projection, and
-    trace-observation expansion. When cost-aware / projection helpers are
-    configured on the base class (via constructor kwargs or surrogate
-    metadata), they are wired in automatically.
-
-    Parameters
-    ----------
-    num_fantasies : int, default=64
-        Number of fantasy models used for inner optimization.
-    current_value : float, optional
-        Current best objective value.
-    expand : callable, optional
-        Callable for trace-observation expansion.
-    **kwargs
-        Forwarded to :class:`QBatchBoTorchAcquisition`.
-    """
-
-    def __init__(
-        self,
-        *,
-        num_fantasies: int = 64,
-        current_value: Optional[float] = None,
-        expand: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
-        **kwargs: Any,
-    ) -> None:
-        super().__init__(**kwargs)
-        self._num_fantasies = num_fantasies
-        self._current_value = current_value
-        self._expand = expand
-
-    def _build_botorch_acquisition(self) -> Any:
-        """Construct the BoTorch qMultiFidelityKnowledgeGradient object."""
-        assert self._botorch_surrogate is not None
-
-        current_value = (
-            torch.tensor(self._current_value)
-            if self._current_value is not None
-            else None
-        )
-
-        build_kwargs: dict[str, Any] = {
-            "model": self._botorch_surrogate.get_model(),
-            "num_fantasies": self._num_fantasies,
-            "current_value": current_value,
-        }
-
-        if self._resolved_cost_aware_utility is not None:
-            build_kwargs["cost_aware_utility"] = self._resolved_cost_aware_utility
-        if self._resolved_project_to_target_fidelity_fn is not None:
-            build_kwargs["project"] = self._resolved_project_to_target_fidelity_fn
-        if self._expand is not None:
-            build_kwargs["expand"] = self._expand
-
-        return _qMFKG(**build_kwargs)
-
-
 class QMultiFidelityMaxValueEntropy(QBatchBoTorchAcquisition):
     """Multi-fidelity q-Max-Value Entropy Search (qMFMES).
 
@@ -265,3 +206,62 @@ class QMultiFidelityLowerBoundMaxValueEntropy(QBatchBoTorchAcquisition):
             build_kwargs["expand"] = self._expand
 
         return _qMFLBMES(**build_kwargs)
+
+
+class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
+    """Multi-fidelity q-Knowledge Gradient (qMFKG).
+
+    Extends qKG with cost-aware utility, target-fidelity projection, and
+    trace-observation expansion. When cost-aware / projection helpers are
+    configured on the base class (via constructor kwargs or surrogate
+    metadata), they are wired in automatically.
+
+    Parameters
+    ----------
+    num_fantasies : int, default=64
+        Number of fantasy models used for inner optimization.
+    current_value : float, optional
+        Current best objective value.
+    expand : callable, optional
+        Callable for trace-observation expansion.
+    **kwargs
+        Forwarded to :class:`QBatchBoTorchAcquisition`.
+    """
+
+    def __init__(
+        self,
+        *,
+        num_fantasies: int = 64,
+        current_value: Optional[float] = None,
+        expand: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(**kwargs)
+        self._num_fantasies = num_fantasies
+        self._current_value = current_value
+        self._expand = expand
+
+    def _build_botorch_acquisition(self) -> Any:
+        """Construct the BoTorch qMultiFidelityKnowledgeGradient object."""
+        assert self._botorch_surrogate is not None
+
+        current_value = (
+            torch.tensor(self._current_value)
+            if self._current_value is not None
+            else None
+        )
+
+        build_kwargs: dict[str, Any] = {
+            "model": self._botorch_surrogate.get_model(),
+            "num_fantasies": self._num_fantasies,
+            "current_value": current_value,
+        }
+
+        if self._resolved_cost_aware_utility is not None:
+            build_kwargs["cost_aware_utility"] = self._resolved_cost_aware_utility
+        if self._resolved_project_to_target_fidelity_fn is not None:
+            build_kwargs["project"] = self._resolved_project_to_target_fidelity_fn
+        if self._expand is not None:
+            build_kwargs["expand"] = self._expand
+
+        return _qMFKG(**build_kwargs)
