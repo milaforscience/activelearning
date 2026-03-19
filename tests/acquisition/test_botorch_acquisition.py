@@ -457,8 +457,91 @@ class TestQBatchScore:
 
 
 # ===================================================================
-# Multi-fidelity resolution
+# cost_fn post-processing
 # ===================================================================
+
+
+class TestCostWeightingPostProcessing:
+    """Optional cost_weighting applies caller-defined post-processing to raw scores."""
+
+    def test_score_with_cost_weighting_divides_by_cost(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+        candidates: list[Candidate],
+    ) -> None:
+        acq = StubQBatch()
+        acq.update(fitted_surrogate, single_fidelity_observations)
+        raw_scores = acq.score(candidates)
+        cost_weighting = lambda scores, cands: [s / 2.0 for s in scores]  # noqa: E731
+        weighted_scores = acq.score(candidates, cost_weighting=cost_weighting)
+        assert len(weighted_scores) == len(raw_scores)
+        for raw, ws in zip(raw_scores, weighted_scores):
+            assert math.isclose(ws, raw / 2.0, rel_tol=1e-6)
+
+    def test_score_with_cost_weighting_subtractive(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+        candidates: list[Candidate],
+    ) -> None:
+        acq = StubQBatch()
+        acq.update(fitted_surrogate, single_fidelity_observations)
+        raw_scores = acq.score(candidates)
+        cost_weighting = lambda scores, cands: [s - 1.0 for s in scores]  # noqa: E731
+        weighted_scores = acq.score(candidates, cost_weighting=cost_weighting)
+        for raw, ws in zip(raw_scores, weighted_scores):
+            assert math.isclose(ws, raw - 1.0, rel_tol=1e-6)
+
+    def test_score_without_cost_weighting_unchanged(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+        candidates: list[Candidate],
+    ) -> None:
+        acq = StubQBatch()
+        acq.update(fitted_surrogate, single_fidelity_observations)
+        assert acq.score(candidates) == acq.score(candidates, cost_weighting=None)
+
+    def test_score_batches_with_cost_weighting(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+        candidate_batches: list[list[Candidate]],
+    ) -> None:
+        acq = StubQBatch()
+        acq.update(fitted_surrogate, single_fidelity_observations)
+        raw_scores = acq.score_batches(candidate_batches)
+        # Divide each batch score by its size as a stand-in for total cost
+        cost_weighting = lambda scores, batches: [  # noqa: E731
+            s / len(b) for s, b in zip(scores, batches)
+        ]
+        weighted_scores = acq.score_batches(
+            candidate_batches, cost_weighting=cost_weighting
+        )
+        for raw, ws, batch in zip(raw_scores, weighted_scores, candidate_batches):
+            assert math.isclose(ws, raw / len(batch), rel_tol=1e-6)
+
+    def test_score_batches_without_cost_weighting_unchanged(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+        candidate_batches: list[list[Candidate]],
+    ) -> None:
+        acq = StubQBatch()
+        acq.update(fitted_surrogate, single_fidelity_observations)
+        assert acq.score_batches(candidate_batches) == acq.score_batches(
+            candidate_batches, cost_weighting=None
+        )
+
+    def test_cost_weighting_not_applied_before_update(
+        self, candidates: list[Candidate]
+    ) -> None:
+        """cost_weighting has no effect before update() — all scores remain 1.0."""
+        acq = StubQBatch()
+        cost_weighting = lambda scores, cands: [s * 999 for s in scores]  # noqa: E731
+        scores = acq.score(candidates, cost_weighting=cost_weighting)
+        assert scores == [1.0] * len(candidates)
 
 
 class TestMultiFidelityResolution:
