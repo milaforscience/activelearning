@@ -1,5 +1,6 @@
 from unittest.mock import Mock
 
+import pulp
 import pytest
 
 from activelearning.acquisition.dummy_acquisition import DummyAcquisition
@@ -134,3 +135,64 @@ def test_knapsack_selector_uses_acquisition_callable_interface():
     )
 
     assert [candidate.x for candidate in selected] == [1]
+
+
+def test_knapsack_selector_raises_for_unusable_solver_status(monkeypatch):
+    """Test selector raises cleanly on infeasible solver outcomes."""
+    selector = KnapsackSelector()
+    acquisition = Mock(return_value=[3.0, 2.0])
+
+    def fake_solve(self, _solver):
+        return pulp.LpStatusInfeasible
+
+    monkeypatch.setattr(knapsack_selector_module.pulp.LpProblem, "solve", fake_solve)
+
+    with pytest.raises(ValueError, match="unusable status 'Infeasible'"):
+        selector(
+            [Candidate(x=0), Candidate(x=1)],
+            acquisition=acquisition,
+            cost_fn=lambda _candidates: [1.0, 1.0],
+            round_budget=1.0,
+        )
+
+
+def test_knapsack_selector_raises_when_not_solved_has_no_incumbent(monkeypatch):
+    """Test selector rejects time-limited runs without variable assignments."""
+    selector = KnapsackSelector()
+    acquisition = Mock(return_value=[3.0, 2.0])
+
+    def fake_solve(self, _solver):
+        return pulp.LpStatusNotSolved
+
+    monkeypatch.setattr(knapsack_selector_module.pulp.LpProblem, "solve", fake_solve)
+
+    with pytest.raises(ValueError, match="without a usable incumbent solution"):
+        selector(
+            [Candidate(x=0), Candidate(x=1)],
+            acquisition=acquisition,
+            cost_fn=lambda _candidates: [1.0, 1.0],
+            round_budget=1.0,
+        )
+
+
+def test_knapsack_selector_uses_incumbent_when_not_solved(monkeypatch, capsys):
+    """Test selector can use CBC incumbents from a non-optimal solve."""
+    selector = KnapsackSelector()
+    acquisition = Mock(return_value=[3.0, 2.0])
+
+    def fake_solve(self, _solver):
+        for variable, value in zip(self.variables(), [1.0, 0.0]):
+            variable.varValue = value
+        return pulp.LpStatusNotSolved
+
+    monkeypatch.setattr(knapsack_selector_module.pulp.LpProblem, "solve", fake_solve)
+
+    selected = selector(
+        [Candidate(x=0), Candidate(x=1)],
+        acquisition=acquisition,
+        cost_fn=lambda _candidates: [1.0, 1.0],
+        round_budget=1.0,
+    )
+
+    assert [candidate.x for candidate in selected] == [0]
+    assert "Using the best available solution found so far" in capsys.readouterr().out

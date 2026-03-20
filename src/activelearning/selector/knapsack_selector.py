@@ -112,22 +112,41 @@ class KnapsackSelector(Selector):
                 warmStart=self.warm_start,
             )
         )
-
-        # Extract results
-        max_value = pulp.value(prob.objective)
-        if max_value is None:
-            raise ValueError("No feasible solution found within time limit.")
-
-        if pulp.LpStatus[status] != "Optimal":
-            print(
-                f"Warning: Optimization ended with status '{pulp.LpStatus[status]}'. "
-                "The selected solution may not be optimal."
-            )
+        variable_values = self._extract_solution_values(x, status)
 
         selected_candidates = [
-            candidates[i] for i in range(n) if pulp.value(x[i]) > 0.5
+            candidate
+            for candidate, variable_value in zip(candidates, variable_values)
+            if variable_value > 0.5
         ]
         return selected_candidates
+
+    @staticmethod
+    def _extract_solution_values(
+        variables: Sequence[pulp.LpVariable],
+        status: int,
+    ) -> list[float]:
+        """Validate solver status and return usable decision variable values."""
+        status_name = pulp.LpStatus.get(status, f"Unknown ({status})")
+        if status not in {pulp.LpStatusOptimal, pulp.LpStatusNotSolved}:
+            raise ValueError(
+                f"Knapsack solver returned unusable status '{status_name}'."
+            )
+
+        variable_values = [pulp.value(variable) for variable in variables]
+        if any(value is None for value in variable_values):
+            raise ValueError(
+                f"Knapsack solver ended with status '{status_name}' without a usable "
+                "incumbent solution."
+            )
+
+        if status != pulp.LpStatusOptimal:
+            print(
+                f"Warning: Optimization ended with status '{status_name}'. "
+                "Using the best available solution found so far."
+            )
+
+        return variable_values
 
 
 def greedy_knapsack_indices(
