@@ -465,6 +465,10 @@ class BoTorchGPSurrogate(Surrogate):
     ) -> tuple[torch.Tensor, torch.Tensor, bool]:
         """Converts generic Observations into BoTorch-ready tensors.
 
+        In multi-fidelity mode, fidelity confidence values are appended as the
+        final column of the input tensor. In single-fidelity mode, inputs remain
+        unchanged.
+
         Parameters
         ----------
         observations : Iterable[Observation]
@@ -474,8 +478,8 @@ class BoTorchGPSurrogate(Surrogate):
         Returns
         -------
         train_X : torch.Tensor
-            A tensor of input features, with mapped fidelity confidences appended
-            as the final column if multi-fidelity.
+            A tensor of input features. In multi-fidelity mode, fidelity
+            confidences are appended as the final column.
         train_Y : torch.Tensor
             A tensor of observed labels reshaped for BoTorch.
         is_multi_fidelity : bool
