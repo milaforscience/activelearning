@@ -496,7 +496,7 @@ def test_state_dict_extraction_and_injection(single_fidelity_observations):
     # 1. Train a base model
     base_surrogate = BoTorchGPSurrogate()
     base_surrogate.fit(single_fidelity_observations)
-    saved_state = base_surrogate.state_dict()
+    saved_state = base_surrogate.get_state_dict()
 
     assert saved_state is not None
 
@@ -648,15 +648,15 @@ def test_scalar_multi_fidelity_candidate_encoding_uses_column_vector(
 def test_state_dict_before_fit_returns_none():
     """Test that state_dict returns None when the model has not been fitted."""
     surrogate = BoTorchGPSurrogate()
-    assert surrogate.state_dict() is None
+    assert surrogate.get_state_dict() is None
 
 
 def test_load_state_dict_after_fit(single_fidelity_observations):
     """Test that load_state_dict updates an already-fitted model in-place."""
     base = BoTorchGPSurrogate()
     base.fit(single_fidelity_observations)
-    saved_state = base.state_dict()
-    assert saved_state is not None  # state_dict() returns None only before fitting
+    saved_state = base.get_state_dict()
+    assert saved_state is not None  # get_state_dict() returns None only before fitting
 
     # Fit a second surrogate independently, then overwrite its state
     other = BoTorchGPSurrogate(optimize_hyperparameters=False)
