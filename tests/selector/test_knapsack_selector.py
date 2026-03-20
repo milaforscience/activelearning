@@ -2,6 +2,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from activelearning.acquisition.dummy_acquisition import DummyAcquisition
 from activelearning.selector import knapsack_selector as knapsack_selector_module
 from activelearning.selector.knapsack_selector import (
     KnapsackSelector,
@@ -41,7 +42,7 @@ def test_knapsack_selector_finds_exact_solution_when_greedy_misses(warm_start):
     """Test exact knapsack solve beats the greedy warm-start heuristic."""
     candidates = [Candidate(x=0), Candidate(x=1)]
     acquisition = Mock()
-    acquisition.score.return_value = [10.0, 9.0]
+    acquisition.return_value = [10.0, 9.0]
 
     def cost_fn(_candidates):
         return [6.0, 5.0]
@@ -55,6 +56,7 @@ def test_knapsack_selector_finds_exact_solution_when_greedy_misses(warm_start):
     )
 
     assert [candidate.x for candidate in selected] == [0]
+    acquisition.assert_called_once_with(candidates)
 
 
 @pytest.mark.parametrize(("warm_start", "expected_calls"), [(False, 0), (True, 1)])
@@ -76,7 +78,7 @@ def test_knapsack_selector_uses_greedy_helper_only_for_warm_start(
     )
 
     acquisition = Mock()
-    acquisition.score.return_value = [8.0, 5.0]
+    acquisition.return_value = [8.0, 5.0]
 
     selector = KnapsackSelector(warm_start=warm_start)
     selector(
@@ -92,7 +94,7 @@ def test_knapsack_selector_uses_greedy_helper_only_for_warm_start(
 def test_knapsack_selector_returns_empty_for_empty_candidates():
     """Test selector returns an empty list when the candidate pool is empty."""
     acquisition = Mock()
-    acquisition.score.return_value = []
+    acquisition.return_value = []
     selector = KnapsackSelector()
 
     selected = selector(
@@ -103,3 +105,32 @@ def test_knapsack_selector_returns_empty_for_empty_candidates():
     )
 
     assert selected == []
+
+
+def test_knapsack_selector_rejects_negative_costs():
+    """Test selector rejects negative per-candidate costs."""
+    selector = KnapsackSelector()
+    acquisition = Mock(return_value=[3.0, 2.0])
+
+    with pytest.raises(ValueError, match="negative cost"):
+        selector(
+            [Candidate(x=0), Candidate(x=1)],
+            acquisition=acquisition,
+            cost_fn=lambda _candidates: [1.0, -1.0],
+            round_budget=2.0,
+        )
+
+
+def test_knapsack_selector_uses_acquisition_callable_interface():
+    """Test selector works with a real Acquisition implementation."""
+    selector = KnapsackSelector()
+    acquisition = DummyAcquisition()
+
+    selected = selector(
+        [Candidate(x=0), Candidate(x=1)],
+        acquisition=acquisition,
+        cost_fn=lambda _candidates: [2.0, 1.0],
+        round_budget=1.0,
+    )
+
+    assert [candidate.x for candidate in selected] == [1]
