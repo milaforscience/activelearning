@@ -1,4 +1,5 @@
 import json
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -39,6 +40,9 @@ class TestConsoleLogger:
         out = capsys.readouterr().out
         assert "proj" in out
         assert logger.run_name is not None
+        assert re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_\d{6}", logger.run_name
+        )
 
     def test_log_config(self, logger, capsys):
         logger.log_config({"lr": 0.01, "epochs": 10})

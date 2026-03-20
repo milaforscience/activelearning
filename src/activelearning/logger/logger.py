@@ -18,7 +18,8 @@ class Logger(ABC):
     project_name : str
         Name of the project or experiment group.
     run_name : str, optional
-        Name of this specific run. Defaults to a timestamp if not provided.
+        Name of this specific run. Defaults to a timestamp with microseconds
+        if not provided.
     """
 
     def __init__(
@@ -26,7 +27,7 @@ class Logger(ABC):
     ) -> None:
         self.project_name = project_name
         if run_name is None:
-            run_name = datetime.today().strftime("%d/%m-%H:%M:%S")
+            run_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")
         self.run_name = run_name
 
     @abstractmethod
