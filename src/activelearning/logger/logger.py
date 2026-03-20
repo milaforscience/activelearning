@@ -99,7 +99,7 @@ class ConsoleLogger(Logger):
     ) -> None:
         super().__init__(project_name, run_name, **kwargs)
         self._buffer: dict[str, Any] = {}
-        print(f"[Logger] Project: {project_name!r} | Run: {self.run_name!r}")
+        print(f"[Logger] Project: {self.project_name!r} | Run: {self.run_name!r}")
 
     def log_config(self, config: dict[str, Any]) -> None:
         """Log experiment configuration to the console as formatted JSON.
@@ -177,7 +177,7 @@ class WandbLogger(Logger):
         import wandb  # type: ignore[import-not-found]  # optional dependency
 
         self._wandb = wandb
-        self.run = wandb.init(project=project_name, name=self.run_name)
+        self.run = wandb.init(project=self.project_name, name=self.run_name)
         self._buffer: dict[str, Any] = {}
 
     def log_config(self, config: dict[str, Any]) -> None:
@@ -262,7 +262,7 @@ class CometLogger(Logger):
 
         self._comet_ml = comet_ml
         self.experiment = comet_ml.Experiment(
-            project_name=project_name,
+            project_name=self.project_name,
             workspace=workspace,
             api_key=api_key,
         )
@@ -358,7 +358,7 @@ class AimLogger(Logger):
         import aim  # type: ignore[import-not-found]  # optional dependency
 
         self._aim = aim
-        self.run = aim.Run(repo=repo, experiment=project_name)
+        self.run = aim.Run(repo=repo, experiment=self.project_name)
         self.run.name = self.run_name
         self._buffer: dict[str, Any] = {}
         self._current_step: int = 0
