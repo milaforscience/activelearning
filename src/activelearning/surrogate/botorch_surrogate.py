@@ -140,12 +140,9 @@ class BoTorchGPSurrogate(Surrogate):
             # is_fitted() and will use random candidate selection for this round.
             return
 
-        train_X, train_Y, is_multi_fidelity = self._parse_observations(obs_list)
-        self._is_multi_fidelity = is_multi_fidelity
-        self._train_X = train_X
-        self._train_Y = train_Y
+        self._train_X, self._train_Y, self._is_multi_fidelity = self._parse_observations(obs_list)
 
-        self._build_model(train_X, train_Y)
+        self._build_model(self._train_X, self._train_Y)
 
         assert self.model is not None
         assert self.mll is not None
