@@ -105,13 +105,8 @@ class KnapsackSelector(Selector):
         prob += pulp.lpSum([costs[i] * x[i] for i in range(n)]) <= round_budget
 
         # Solve using the default CBC solver (included with PuLP)
-        status = prob.solve(
-            pulp.PULP_CBC_CMD(
-                timeLimit=self.time_limit,
-                msg=self.verbose,
-                warmStart=self.warm_start,
-            )
-        )
+        solver = self._build_solver()
+        status = prob.solve(solver)
         variable_values = self._extract_solution_values(x, status)
 
         selected_candidates = [
@@ -120,6 +115,21 @@ class KnapsackSelector(Selector):
             if variable_value > 0.5
         ]
         return selected_candidates
+
+    def _build_solver(self) -> pulp.PULP_CBC_CMD:
+        """Create a CBC solver instance and verify it is executable."""
+        solver = pulp.PULP_CBC_CMD(
+            timeLimit=self.time_limit,
+            msg=self.verbose,
+            warmStart=self.warm_start,
+        )
+        if not solver.available():
+            raise ValueError(
+                "PuLP CBC solver is not available. Install or enable a working CBC "
+                "binary so PULP_CBC_CMD can run."
+            )
+
+        return solver
 
     @staticmethod
     def _extract_solution_values(

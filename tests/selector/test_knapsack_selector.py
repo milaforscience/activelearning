@@ -196,3 +196,23 @@ def test_knapsack_selector_uses_incumbent_when_not_solved(monkeypatch, capsys):
 
     assert [candidate.x for candidate in selected] == [0]
     assert "Using the best available solution found so far" in capsys.readouterr().out
+
+
+def test_knapsack_selector_raises_when_cbc_is_unavailable(monkeypatch):
+    """Test selector fails early with a clear CBC availability error."""
+    selector = KnapsackSelector()
+    acquisition = Mock(return_value=[3.0, 2.0])
+
+    monkeypatch.setattr(
+        knapsack_selector_module.pulp.PULP_CBC_CMD,
+        "available",
+        lambda self: False,
+    )
+
+    with pytest.raises(ValueError, match="CBC solver is not available"):
+        selector(
+            [Candidate(x=0), Candidate(x=1)],
+            acquisition=acquisition,
+            cost_fn=lambda _candidates: [1.0, 1.0],
+            round_budget=1.0,
+        )
