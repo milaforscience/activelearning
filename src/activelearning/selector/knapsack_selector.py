@@ -75,7 +75,7 @@ class KnapsackSelector(Selector):
             return []
 
         # Acquisition scores should be non-negative
-        acq_values = [max(0, v) for v in acquisition.score(candidates)]
+        acq_values = [max(0, v) for v in acquisition(candidates)]
         costs = cost_fn(candidates)
 
         # If acquisition scores are all zero, set constant score to pick cheapest items
