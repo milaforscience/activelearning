@@ -314,7 +314,7 @@ class BoTorchGPSurrogate(Surrogate):
             "posterior": posterior,
         }
 
-    def state_dict(self) -> Optional[dict[str, torch.Tensor]]:
+    def get_state_dict(self) -> Optional[dict[str, torch.Tensor]]:
         """Return the fitted model state dictionary, if available.
 
         Returns
