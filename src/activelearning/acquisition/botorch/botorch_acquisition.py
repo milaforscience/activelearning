@@ -461,9 +461,14 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
             missing surrogate or observation data.
         """
         cand_list = list(candidates)
+        if not cand_list:
+            return []
         if self._botorch_acqf is None:
             return [1.0] * len(cand_list)
-        assert self._botorch_surrogate is not None
+        if self._botorch_surrogate is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__} not updated with surrogate before scoring."
+            )
         X = self._botorch_surrogate.encode_candidates(cand_list).unsqueeze(1)
         raw_scores = self._score_encoded(X)
         if cost_weighting is None:
