@@ -9,6 +9,7 @@ from activelearning.oracle.multi_fidelity_oracle import MultiFidelityOracle
 from activelearning.sampler.pool_score_sampler import PoolScoreSampler
 from activelearning.selector.score_selector import TopKAcquisitionSelector
 from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
+from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
 from activelearning.active_learning import active_learning
 from activelearning.utils.types import Candidate, Observation
 from activelearning.logger.logger import ConsoleLogger
@@ -34,8 +35,8 @@ def dataset():
 
 @pytest.fixture
 def surrogate():
-    """Create a dummy surrogate model for testing."""
-    return DummyMeanSurrogate()
+    """Create a BoTorch surrogate for testing the full AL loop end-to-end."""
+    return BoTorchGPSurrogate()
 
 
 @pytest.fixture
@@ -183,6 +184,44 @@ def test_active_learning_stops_when_selector_returns_empty(
     assert dataset_out.get_observations_iterable() == []
     assert cost == 0.0
     assert num_iter == 0
+
+
+def test_active_learning_cold_start_with_botorch_surrogate(
+    acquisition, sampler, selector, oracle, budget
+):
+    """End-to-end test: BoTorchGPSurrogate starts from an empty dataset.
+
+    The first round must use random selection (surrogate unfitted); subsequent
+    rounds must use acquisition-driven selection (surrogate fitted on round-1 data).
+    """
+    dataset = ListDataset()
+    surrogate = BoTorchGPSurrogate()
+
+    assert not surrogate.is_fitted(), "Surrogate must be unfitted before any data."
+
+    dataset_out, cost, num_iter = active_learning(
+        dataset=dataset,
+        surrogate=surrogate,
+        acquisition=acquisition,
+        sampler=sampler,
+        selector=selector,
+        oracle=oracle,
+        budget=budget,
+    )
+
+    assert surrogate.is_fitted(), "Surrogate must be fitted after at least one round."
+    assert num_iter >= 1, "Loop must complete at least one round."
+    assert cost > 0.0, "At least one oracle query must have been made."
+    observations = list(dataset_out.get_observations_iterable())
+    assert len(observations) > 0, "Dataset must contain observations after the loop."
+
+
+def test_botorch_surrogate_fit_empty_is_noop():
+    """fit([]) must not raise and must leave the surrogate in an unfitted state."""
+    surrogate = BoTorchGPSurrogate()
+    surrogate.fit([])  # Must not raise
+    assert not surrogate.is_fitted()
+    assert surrogate.model is None
 
 
 # ---------------------------------------------------------------------------
