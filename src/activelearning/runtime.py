@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Iterable, Literal
+from typing import Iterable
 
 import torch
 
@@ -13,7 +13,6 @@ class RuntimeContext:
     logger: Logger | None = None
     device: torch.device = torch.device("cpu")
     dtype: torch.dtype = torch.float64
-    precision: Literal[32, 64] = 64
 
 
 DEFAULT_RUNTIME_CONTEXT = RuntimeContext()
@@ -47,11 +46,6 @@ class ALRuntimeMixin:
     def dtype(self) -> torch.dtype:
         """Return the shared floating-point torch dtype."""
         return self.runtime_context.dtype
-
-    @property
-    def precision(self) -> Literal[32, 64]:
-        """Return the shared floating-point precision in bits."""
-        return self.runtime_context.precision
 
 
 def bind_runtime_context(

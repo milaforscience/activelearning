@@ -88,7 +88,6 @@ def test_runtime_context_updates_sampling_weight_dtype(candidate_pool):
         RuntimeContext(
             device=torch.device("cpu"),
             dtype=torch.float32,
-            precision=32,
         )
     )
 
