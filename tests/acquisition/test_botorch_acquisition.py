@@ -9,7 +9,6 @@ import torch
 
 from activelearning.acquisition.botorch.botorch_acquisition import (
     AnalyticBoTorchAcquisition,
-    BatchScoringMixin,
     QBatchBoTorchAcquisition,
 )
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
@@ -36,7 +35,7 @@ class StubAnalytic(AnalyticBoTorchAcquisition):
         return lambda X: X.squeeze(-2).sum(dim=-1)
 
 
-class StubQBatch(BatchScoringMixin, QBatchBoTorchAcquisition):
+class StubQBatch(QBatchBoTorchAcquisition):
     """Q-batch stub that wraps a callable as the BoTorch acquisition function."""
 
     def __init__(self, acqf_fn: Optional[Any] = None, **kwargs: Any) -> None:
@@ -122,7 +121,7 @@ class TestCapabilityFlags:
     def test_qbatch_flags(self) -> None:
         acq = StubQBatch()
         assert acq.supports_singleton_scoring is True
-        assert acq.supports_batch_scoring is True
+        assert acq.supports_batch_scoring is False
 
     def test_maximize_default(self) -> None:
         assert StubAnalytic().maximize is True
@@ -390,7 +389,7 @@ class TestAnalyticScore:
 
 
 class TestQBatchScore:
-    """QBatchBoTorchAcquisition supports both scoring modes."""
+    """QBatchBoTorchAcquisition supports singleton scoring."""
 
     def test_singleton_returns_ones_before_update(
         self, candidates: list[Candidate]
@@ -399,14 +398,6 @@ class TestQBatchScore:
         acq = StubQBatch()
         scores = acq.score(candidates)
         assert scores == [1.0] * len(candidates)
-
-    def test_batch_returns_ones_before_update(
-        self, candidate_batches: list[list[Candidate]]
-    ) -> None:
-        """Before update(), score_batches() returns constant 1.0 for every batch."""
-        acq = StubQBatch()
-        scores = acq.score_batches(candidate_batches)
-        assert scores == [1.0] * len(candidate_batches)
 
     def test_singleton_returns_correct_length(
         self,
@@ -419,41 +410,16 @@ class TestQBatchScore:
         scores = acq.score(candidates)
         assert len(scores) == len(candidates)
 
-    def test_batch_returns_correct_length(
-        self,
-        fitted_surrogate: BoTorchGPSurrogate,
-        single_fidelity_observations: list[Observation],
-        candidate_batches: list[list[Candidate]],
-    ) -> None:
-        acq = StubQBatch()
-        acq.update(fitted_surrogate, single_fidelity_observations)
-        scores = acq.score_batches(candidate_batches)
-        assert len(scores) == len(candidate_batches)
-
     def test_all_scores_are_floats(
         self,
         fitted_surrogate: BoTorchGPSurrogate,
         single_fidelity_observations: list[Observation],
         candidates: list[Candidate],
-        candidate_batches: list[list[Candidate]],
     ) -> None:
         acq = StubQBatch()
         acq.update(fitted_surrogate, single_fidelity_observations)
         for s in acq.score(candidates):
             assert isinstance(s, float)
-        for s in acq.score_batches(candidate_batches):
-            assert isinstance(s, float)
-
-    def test_batch_scores_are_finite(
-        self,
-        fitted_surrogate: BoTorchGPSurrogate,
-        single_fidelity_observations: list[Observation],
-        candidate_batches: list[list[Candidate]],
-    ) -> None:
-        acq = StubQBatch()
-        acq.update(fitted_surrogate, single_fidelity_observations)
-        scores = acq.score_batches(candidate_batches)
-        assert all(math.isfinite(s) for s in scores)
 
 
 # ===================================================================
@@ -502,37 +468,6 @@ class TestCostWeightingPostProcessing:
         acq = StubQBatch()
         acq.update(fitted_surrogate, single_fidelity_observations)
         assert acq.score(candidates) == acq.score(candidates, cost_weighting=None)
-
-    def test_score_batches_with_cost_weighting(
-        self,
-        fitted_surrogate: BoTorchGPSurrogate,
-        single_fidelity_observations: list[Observation],
-        candidate_batches: list[list[Candidate]],
-    ) -> None:
-        acq = StubQBatch()
-        acq.update(fitted_surrogate, single_fidelity_observations)
-        raw_scores = acq.score_batches(candidate_batches)
-        # Divide each batch score by its size as a stand-in for total cost
-        cost_weighting = lambda scores, batches: [  # noqa: E731
-            s / len(b) for s, b in zip(scores, batches)
-        ]
-        weighted_scores = acq.score_batches(
-            candidate_batches, cost_weighting=cost_weighting
-        )
-        for raw, ws, batch in zip(raw_scores, weighted_scores, candidate_batches):
-            assert math.isclose(ws, raw / len(batch), rel_tol=1e-6)
-
-    def test_score_batches_without_cost_weighting_unchanged(
-        self,
-        fitted_surrogate: BoTorchGPSurrogate,
-        single_fidelity_observations: list[Observation],
-        candidate_batches: list[list[Candidate]],
-    ) -> None:
-        acq = StubQBatch()
-        acq.update(fitted_surrogate, single_fidelity_observations)
-        assert acq.score_batches(candidate_batches) == acq.score_batches(
-            candidate_batches, cost_weighting=None
-        )
 
     def test_cost_weighting_not_applied_before_update(
         self, candidates: list[Candidate]
@@ -737,12 +672,12 @@ class TestScoreEncoded:
 class TestMultiFidelityScoring:
     """Scoring with a multi-fidelity surrogate should work correctly."""
 
-    def test_analytic_score_mf(
+    def test_qbatch_singleton_score_mf(
         self,
         fitted_mf_surrogate: BoTorchGPSurrogate,
         multi_fidelity_observations: list[Observation],
     ) -> None:
-        acq = StubAnalytic()
+        acq = StubQBatch()
         acq.update(fitted_mf_surrogate, multi_fidelity_observations)
         candidates = [
             Candidate(x=[2.0, 3.0], fidelity=1),
@@ -751,17 +686,3 @@ class TestMultiFidelityScoring:
         scores = acq.score(candidates)
         assert len(scores) == 2
         assert all(isinstance(s, float) for s in scores)
-
-    def test_qbatch_score_mf(
-        self,
-        fitted_mf_surrogate: BoTorchGPSurrogate,
-        multi_fidelity_observations: list[Observation],
-    ) -> None:
-        acq = StubQBatch()
-        acq.update(fitted_mf_surrogate, multi_fidelity_observations)
-        batches = [
-            [Candidate(x=[2.0, 3.0], fidelity=1), Candidate(x=[4.0, 5.0], fidelity=0)],
-        ]
-        scores = acq.score_batches(batches)
-        assert len(scores) == 1
-        assert isinstance(scores[0], float)
