@@ -70,3 +70,13 @@ class DummyMeanSurrogate(Surrogate):
                 means.append(self._mean_score)
                 stds.append(self._UNKNOWN_STD)
         return {"mean": means, "std": stds}
+
+    def updates_from_latest(self) -> bool:
+        """Return False — DummyMeanSurrogate always performs full retraining.
+
+        Returns
+        -------
+        bool
+            Always ``False``.
+        """
+        return False
