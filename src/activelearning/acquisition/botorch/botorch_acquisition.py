@@ -396,6 +396,11 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
 
         if self._botorch_surrogate is not None:
             _, train_Y = self._botorch_surrogate.get_train_data()
+            if train_Y.dim() > 1 and train_Y.shape[-1] > 1:
+                raise RuntimeError(
+                    "Cannot auto-resolve best_f for a multi-output surrogate. "
+                    "Pass best_f explicitly."
+                )
             return train_Y.max().item() if self.maximize else train_Y.min().item()
 
         raise RuntimeError(
