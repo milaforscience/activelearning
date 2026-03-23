@@ -41,7 +41,10 @@ class UpperConfidenceBound(AnalyticBoTorchAcquisition):
 
     def _build_botorch_acquisition(self) -> Any:
         """Construct the BoTorch UpperConfidenceBound object."""
-        assert self._botorch_surrogate is not None
+        if self._botorch_surrogate is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__} not updated with surrogate before building acquisition."
+            )
         return _UCB(
             model=self._botorch_surrogate.get_model(),
             beta=self._beta,
@@ -67,7 +70,10 @@ class ExpectedImprovement(AnalyticBoTorchAcquisition):
 
     def _build_botorch_acquisition(self) -> Any:
         """Construct the BoTorch ExpectedImprovement object."""
-        assert self._botorch_surrogate is not None
+        if self._botorch_surrogate is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__} not updated with surrogate before building acquisition."
+            )
         return _EI(
             model=self._botorch_surrogate.get_model(),
             best_f=self._resolve_best_f(self._best_f_override),
@@ -92,7 +98,10 @@ class LogExpectedImprovement(AnalyticBoTorchAcquisition):
 
     def _build_botorch_acquisition(self) -> Any:
         """Construct the BoTorch LogExpectedImprovement object."""
-        assert self._botorch_surrogate is not None
+        if self._botorch_surrogate is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__} not updated with surrogate before building acquisition."
+            )
         return _LogEI(
             model=self._botorch_surrogate.get_model(),
             best_f=self._resolve_best_f(self._best_f_override),
@@ -117,7 +126,10 @@ class ProbabilityOfImprovement(AnalyticBoTorchAcquisition):
 
     def _build_botorch_acquisition(self) -> Any:
         """Construct the BoTorch ProbabilityOfImprovement object."""
-        assert self._botorch_surrogate is not None
+        if self._botorch_surrogate is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__} not updated with surrogate before building acquisition."
+            )
         return _PI(
             model=self._botorch_surrogate.get_model(),
             best_f=self._resolve_best_f(self._best_f_override),
@@ -142,7 +154,10 @@ class LogProbabilityOfImprovement(AnalyticBoTorchAcquisition):
 
     def _build_botorch_acquisition(self) -> Any:
         """Construct the BoTorch LogProbabilityOfImprovement object."""
-        assert self._botorch_surrogate is not None
+        if self._botorch_surrogate is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__} not updated with surrogate before building acquisition."
+            )
         return _LogPI(
             model=self._botorch_surrogate.get_model(),
             best_f=self._resolve_best_f(self._best_f_override),
@@ -164,7 +179,10 @@ class PosteriorMean(AnalyticBoTorchAcquisition):
 
     def _build_botorch_acquisition(self) -> Any:
         """Construct the BoTorch PosteriorMean object."""
-        assert self._botorch_surrogate is not None
+        if self._botorch_surrogate is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__} not updated with surrogate before building acquisition."
+            )
         return _PosteriorMean(
             model=self._botorch_surrogate.get_model(),
             maximize=self.maximize,

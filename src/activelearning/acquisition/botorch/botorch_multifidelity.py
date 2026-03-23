@@ -62,6 +62,13 @@ class QMultiFidelityMaxValueEntropy(QBatchBoTorchAcquisition):
         expand: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
         **kwargs: Any,
     ) -> None:
+        if num_fantasies <= 0:
+            raise ValueError(f"num_fantasies must be > 0, got {num_fantasies}")
+        if num_mv_samples <= 0:
+            raise ValueError(f"num_mv_samples must be > 0, got {num_mv_samples}")
+        if num_y_samples <= 0:
+            raise ValueError(f"num_y_samples must be > 0, got {num_y_samples}")
+        
         super().__init__(**kwargs)
         self._candidate_set_spec = candidate_set_spec
         self._num_fantasies = num_fantasies
@@ -91,7 +98,10 @@ class QMultiFidelityMaxValueEntropy(QBatchBoTorchAcquisition):
             super().update(surrogate, observations)
 
     def _build_botorch_acquisition(self) -> Any:
-        assert self._botorch_surrogate is not None
+        if self._botorch_surrogate is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__} not updated with surrogate before building acquisition."
+            )
 
         build_kwargs: dict[str, Any] = {
             "model": self._botorch_surrogate.get_model(),
@@ -154,6 +164,13 @@ class QMultiFidelityLowerBoundMaxValueEntropy(QBatchBoTorchAcquisition):
         expand: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
         **kwargs: Any,
     ) -> None:
+        if num_fantasies <= 0:
+            raise ValueError(f"num_fantasies must be > 0, got {num_fantasies}")
+        if num_mv_samples <= 0:
+            raise ValueError(f"num_mv_samples must be > 0, got {num_mv_samples}")
+        if num_y_samples <= 0:
+            raise ValueError(f"num_y_samples must be > 0, got {num_y_samples}")
+        
         super().__init__(**kwargs)
         self._candidate_set_spec = candidate_set_spec
         self._num_fantasies = num_fantasies
@@ -184,7 +201,10 @@ class QMultiFidelityLowerBoundMaxValueEntropy(QBatchBoTorchAcquisition):
 
     def _build_botorch_acquisition(self) -> Any:
         """Construct the BoTorch qMultiFidelityLowerBoundMaxValueEntropy object."""
-        assert self._botorch_surrogate is not None
+        if self._botorch_surrogate is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__} not updated with surrogate before building acquisition."
+            )
 
         build_kwargs: dict[str, Any] = {
             "model": self._botorch_surrogate.get_model(),
@@ -236,6 +256,9 @@ class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
         expand: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
         **kwargs: Any,
     ) -> None:
+        if num_fantasies <= 0:
+            raise ValueError(f"num_fantasies must be > 0, got {num_fantasies}")
+        
         super().__init__(**kwargs)
         self._num_fantasies = num_fantasies
         self._current_value = current_value
@@ -243,7 +266,10 @@ class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
 
     def _build_botorch_acquisition(self) -> Any:
         """Construct the BoTorch qMultiFidelityKnowledgeGradient object."""
-        assert self._botorch_surrogate is not None
+        if self._botorch_surrogate is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__} not updated with surrogate before building acquisition."
+            )
 
         current_value = (
             torch.tensor(self._current_value)

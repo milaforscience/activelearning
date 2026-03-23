@@ -145,6 +145,72 @@ class TestCapabilityFlags:
 
 
 # ===================================================================
+# Parameter validation
+# ===================================================================
+
+
+class TestParameterValidation:
+    """Verify that invalid parameters raise appropriate errors."""
+
+    def test_num_fantasies_must_be_positive(self) -> None:
+        """num_fantasies must be > 0."""
+        from activelearning.acquisition.botorch.botorch_multifidelity import (
+            QMultiFidelityMaxValueEntropy,
+        )
+        from activelearning.acquisition.candidate_set import (
+            HypercubeCandidateSetSpec,
+        )
+
+        spec = HypercubeCandidateSetSpec(
+            bounds=[(0.0, 5.0), (0.0, 5.0)],
+            n_points=10,
+        )
+        with pytest.raises(ValueError, match="num_fantasies must be > 0"):
+            QMultiFidelityMaxValueEntropy(
+                candidate_set_spec=spec,
+                num_fantasies=0,
+            )
+
+    def test_num_mv_samples_must_be_positive(self) -> None:
+        """num_mv_samples must be > 0."""
+        from activelearning.acquisition.botorch.botorch_multifidelity import (
+            QMultiFidelityMaxValueEntropy,
+        )
+        from activelearning.acquisition.candidate_set import (
+            HypercubeCandidateSetSpec,
+        )
+
+        spec = HypercubeCandidateSetSpec(
+            bounds=[(0.0, 5.0), (0.0, 5.0)],
+            n_points=10,
+        )
+        with pytest.raises(ValueError, match="num_mv_samples must be > 0"):
+            QMultiFidelityMaxValueEntropy(
+                candidate_set_spec=spec,
+                num_mv_samples=0,
+            )
+
+    def test_num_y_samples_must_be_positive(self) -> None:
+        """num_y_samples must be > 0."""
+        from activelearning.acquisition.botorch.botorch_multifidelity import (
+            QMultiFidelityMaxValueEntropy,
+        )
+        from activelearning.acquisition.candidate_set import (
+            HypercubeCandidateSetSpec,
+        )
+
+        spec = HypercubeCandidateSetSpec(
+            bounds=[(0.0, 5.0), (0.0, 5.0)],
+            n_points=10,
+        )
+        with pytest.raises(ValueError, match="num_y_samples must be > 0"):
+            QMultiFidelityMaxValueEntropy(
+                candidate_set_spec=spec,
+                num_y_samples=0,
+            )
+
+
+# ===================================================================
 # Properties — default state before update()
 # ===================================================================
 
@@ -454,6 +520,17 @@ class TestQBatchScore:
         acq.update(fitted_surrogate, single_fidelity_observations)
         scores = acq.score_batches(candidate_batches)
         assert all(math.isfinite(s) for s in scores)
+
+    def test_empty_candidate_list_returns_empty(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+    ) -> None:
+        """score([]) should return [] instead of crashing."""
+        acq = StubQBatch()
+        acq.update(fitted_surrogate, single_fidelity_observations)
+        scores = acq.score([])
+        assert scores == []
 
 
 # ===================================================================
