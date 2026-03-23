@@ -270,6 +270,15 @@ class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
                 f"{self.__class__.__name__} not updated with surrogate before building acquisition."
             )
 
+        # qMFKG internally uses fantasy models, which require GPyTorch's
+        # prediction_strategy to be initialized. This happens on the first
+        # posterior evaluation in eval mode.
+        model = self._botorch_surrogate.get_model()
+        train_X, _ = self._botorch_surrogate.get_train_data()
+        model.eval()
+        with torch.no_grad():
+            model.posterior(train_X)
+
         current_value = (
             torch.tensor(self._current_value, dtype=torch.float64)
             if self._current_value is not None
@@ -277,7 +286,7 @@ class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
         )
 
         build_kwargs: dict[str, Any] = {
-            "model": self._botorch_surrogate.get_model(),
+            "model": model,
             "num_fantasies": self._num_fantasies,
             "current_value": current_value,
         }

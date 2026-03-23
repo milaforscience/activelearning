@@ -11,6 +11,7 @@ from activelearning.acquisition.botorch.botorch_acquisition import (
     AnalyticBoTorchAcquisition,
     QBatchBoTorchAcquisition,
 )
+from activelearning.acquisition.candidate_set import TrainDataCandidateSetSpec
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
 from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
 from activelearning.utils.types import Candidate, Observation
@@ -778,3 +779,305 @@ class TestMultiFidelityScoring:
         scores = acq.score(candidates)
         assert len(scores) == 2
         assert all(isinstance(s, float) for s in scores)
+
+
+# ===================================================================
+# Concrete analytic acquisition integration tests
+# ===================================================================
+
+
+class TestAnalyticAcquisitionIntegration:
+    """Integration tests for concrete analytic acquisition wrappers.
+
+    Verifies that each class can be updated with a fitted surrogate and
+    produces valid float scores, and that constructor parameters are
+    correctly forwarded to BoTorch.
+    """
+
+    @pytest.fixture()
+    def sf_obs(self) -> list[Observation]:
+        return [
+            Observation(x=[1.0, 2.0], y=5.0),
+            Observation(x=[3.0, 4.0], y=7.0),
+            Observation(x=[5.0, 6.0], y=9.0),
+        ]
+
+    @pytest.fixture()
+    def sf_surrogate(self, sf_obs: list[Observation]) -> BoTorchGPSurrogate:
+        s = BoTorchGPSurrogate()
+        s.fit(sf_obs)
+        return s
+
+    @pytest.fixture()
+    def cands(self) -> list[Candidate]:
+        return [Candidate(x=[2.0, 3.0]), Candidate(x=[4.0, 5.0])]
+
+    def _scores_valid(self, scores: list[float]) -> None:
+        assert len(scores) == 2
+        assert all(isinstance(s, float) for s in scores)
+        assert all(math.isfinite(s) for s in scores)
+
+    def test_ucb_scores(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_analytic import (
+            UpperConfidenceBound,
+        )
+
+        acq = UpperConfidenceBound(beta=2.0)
+        acq.update(sf_surrogate, sf_obs)
+        self._scores_valid(acq.score(cands))
+
+    def test_ei_scores(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_analytic import (
+            ExpectedImprovement,
+        )
+
+        acq = ExpectedImprovement()
+        acq.update(sf_surrogate, sf_obs)
+        self._scores_valid(acq.score(cands))
+
+    def test_log_ei_scores(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_analytic import (
+            LogExpectedImprovement,
+        )
+
+        acq = LogExpectedImprovement()
+        acq.update(sf_surrogate, sf_obs)
+        self._scores_valid(acq.score(cands))
+
+    def test_pi_scores(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_analytic import (
+            ProbabilityOfImprovement,
+        )
+
+        acq = ProbabilityOfImprovement()
+        acq.update(sf_surrogate, sf_obs)
+        self._scores_valid(acq.score(cands))
+
+    def test_log_pi_scores(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_analytic import (
+            LogProbabilityOfImprovement,
+        )
+
+        acq = LogProbabilityOfImprovement()
+        acq.update(sf_surrogate, sf_obs)
+        self._scores_valid(acq.score(cands))
+
+    def test_posterior_mean_scores(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_analytic import PosteriorMean
+
+        acq = PosteriorMean()
+        acq.update(sf_surrogate, sf_obs)
+        self._scores_valid(acq.score(cands))
+
+    def test_ucb_maximize_false_differs_from_maximize_true(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        """maximize=False should produce different scores than maximize=True."""
+        from activelearning.acquisition.botorch.botorch_analytic import (
+            UpperConfidenceBound,
+        )
+
+        acq_max = UpperConfidenceBound(beta=2.0, maximize=True)
+        acq_max.update(sf_surrogate, sf_obs)
+        scores_max = acq_max.score(cands)
+
+        acq_min = UpperConfidenceBound(beta=2.0, maximize=False)
+        acq_min.update(sf_surrogate, sf_obs)
+        scores_min = acq_min.score(cands)
+
+        assert scores_max != scores_min
+
+    def test_ei_best_f_override(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        """Explicit best_f should produce different scores than auto-resolved."""
+        from activelearning.acquisition.botorch.botorch_analytic import (
+            ExpectedImprovement,
+        )
+
+        acq_auto = ExpectedImprovement()
+        acq_auto.update(sf_surrogate, sf_obs)
+        scores_auto = acq_auto.score(cands)
+
+        acq_override = ExpectedImprovement(best_f=0.0)
+        acq_override.update(sf_surrogate, sf_obs)
+        scores_override = acq_override.score(cands)
+
+        assert scores_auto != scores_override
+
+
+# ===================================================================
+# Concrete multi-fidelity acquisition integration tests
+# ===================================================================
+
+
+class TestMultiFidelityAcquisitionIntegration:
+    """Integration tests for concrete multi-fidelity acquisition wrappers."""
+
+    @pytest.fixture()
+    def mf_obs(self) -> list[Observation]:
+        return [
+            Observation(x=[1.0, 2.0], y=5.0, fidelity=0),
+            Observation(x=[3.0, 4.0], y=7.0, fidelity=1),
+            Observation(x=[5.0, 6.0], y=9.0, fidelity=1),
+            Observation(x=[1.0, 2.0], y=4.5, fidelity=0),
+        ]
+
+    @pytest.fixture()
+    def mf_surrogate(self, mf_obs: list[Observation]) -> BoTorchGPSurrogate:
+        s = BoTorchGPSurrogate()
+        s.set_fidelity_confidences({0: 0.5, 1: 1.0})
+        s.fit(mf_obs)
+        return s
+
+    @pytest.fixture()
+    def mf_cands(self) -> list[Candidate]:
+        return [
+            Candidate(x=[2.0, 3.0], fidelity=1),
+            Candidate(x=[4.0, 5.0], fidelity=0),
+        ]
+
+    @pytest.fixture()
+    def train_data_spec(self) -> TrainDataCandidateSetSpec:
+        return TrainDataCandidateSetSpec()
+
+    def _scores_valid(self, scores: list[float], n: int = 2) -> None:
+        assert len(scores) == n
+        assert all(isinstance(s, float) for s in scores)
+        assert all(math.isfinite(s) for s in scores)
+
+    def test_qmfmes_scores(
+        self,
+        mf_surrogate: BoTorchGPSurrogate,
+        mf_obs: list[Observation],
+        mf_cands: list[Candidate],
+        train_data_spec: TrainDataCandidateSetSpec,
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_multifidelity import (
+            QMultiFidelityMaxValueEntropy,
+        )
+
+        acq = QMultiFidelityMaxValueEntropy(
+            candidate_set_spec=train_data_spec,
+            num_fantasies=2,
+            num_mv_samples=5,
+            num_y_samples=16,
+        )
+        acq.update(mf_surrogate, mf_obs)
+        self._scores_valid(acq.score(mf_cands))
+
+    def test_qmflbmes_scores(
+        self,
+        mf_surrogate: BoTorchGPSurrogate,
+        mf_obs: list[Observation],
+        mf_cands: list[Candidate],
+        train_data_spec: TrainDataCandidateSetSpec,
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_multifidelity import (
+            QMultiFidelityLowerBoundMaxValueEntropy,
+        )
+
+        acq = QMultiFidelityLowerBoundMaxValueEntropy(
+            candidate_set_spec=train_data_spec,
+            num_fantasies=2,
+            num_mv_samples=5,
+            num_y_samples=16,
+        )
+        acq.update(mf_surrogate, mf_obs)
+        self._scores_valid(acq.score(mf_cands))
+
+    def test_qmfkg_scores(
+        self,
+        mf_surrogate: BoTorchGPSurrogate,
+        mf_obs: list[Observation],
+        mf_cands: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_multifidelity import (
+            QMultiFidelityKnowledgeGradient,
+        )
+
+        # num_fantasies must be < q-batch size; singleton scoring uses q=1
+        acq = QMultiFidelityKnowledgeGradient(num_fantasies=1)
+        acq.update(mf_surrogate, mf_obs)
+        self._scores_valid(acq.score(mf_cands))
+
+    def test_qmfkg_current_value(
+        self,
+        mf_surrogate: BoTorchGPSurrogate,
+        mf_obs: list[Observation],
+        mf_cands: list[Candidate],
+    ) -> None:
+        """current_value should be accepted and forwarded without error."""
+        from activelearning.acquisition.botorch.botorch_multifidelity import (
+            QMultiFidelityKnowledgeGradient,
+        )
+
+        acq = QMultiFidelityKnowledgeGradient(num_fantasies=1, current_value=5.0)
+        acq.update(mf_surrogate, mf_obs)
+        scores_cv = acq.score(mf_cands)
+
+        acq_no_cv = QMultiFidelityKnowledgeGradient(num_fantasies=1)
+        acq_no_cv.update(mf_surrogate, mf_obs)
+        scores_no_cv = acq_no_cv.score(mf_cands)
+
+        # Both should produce valid scores; current_value affects the result
+        self._scores_valid(scores_cv)
+        self._scores_valid(scores_no_cv)
+        assert scores_cv != scores_no_cv
+
+    def test_qmfkg_maximize_false(
+        self,
+        mf_surrogate: BoTorchGPSurrogate,
+        mf_obs: list[Observation],
+        mf_cands: list[Candidate],
+    ) -> None:
+        """maximize=False should produce different scores than maximize=True."""
+        from activelearning.acquisition.botorch.botorch_multifidelity import (
+            QMultiFidelityKnowledgeGradient,
+        )
+
+        acq_max = QMultiFidelityKnowledgeGradient(num_fantasies=1, maximize=True)
+        acq_max.update(mf_surrogate, mf_obs)
+        scores_max = acq_max.score(mf_cands)
+
+        acq_min = QMultiFidelityKnowledgeGradient(num_fantasies=1, maximize=False)
+        acq_min.update(mf_surrogate, mf_obs)
+        scores_min = acq_min.score(mf_cands)
+
+        assert scores_max != scores_min
