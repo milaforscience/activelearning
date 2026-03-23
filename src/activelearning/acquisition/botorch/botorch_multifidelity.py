@@ -32,8 +32,7 @@ class QMultiFidelityMaxValueEntropy(QBatchBoTorchAcquisition):
     ----------
     candidate_set_spec : CandidateSetSpec
         Specification describing how to build the discrete candidate set used
-        to approximate the max-value distribution.  The tensor is materialized
-        at acquisition-build time when the fitted surrogate is available.
+        to approximate the max-value distribution.
         Use :class:`~activelearning.acquisition.candidate_set.HypercubeCandidateSetSpec`
         for continuous domains,
         :class:`~activelearning.acquisition.candidate_set.TrainDataCandidateSetSpec`
@@ -47,7 +46,7 @@ class QMultiFidelityMaxValueEntropy(QBatchBoTorchAcquisition):
     num_y_samples : int, default=128
         Number of outcome samples per max-value sample.
     expand : callable, optional
-        Callable for trace-observation expansion.
+        Optional callable to expand q-batches with trace observations.
     **kwargs
         Forwarded to :class:`QBatchBoTorchAcquisition`.
     """
@@ -124,8 +123,7 @@ class QMultiFidelityLowerBoundMaxValueEntropy(QBatchBoTorchAcquisition):
     ----------
     candidate_set_spec : CandidateSetSpec
         Specification describing how to build the discrete candidate set for
-        max-value approximation.  The tensor is materialized at
-        acquisition-build time when the fitted surrogate is available.
+        max-value approximation.
         Use :class:`~activelearning.acquisition.candidate_set.HypercubeCandidateSetSpec`
         for continuous domains,
         :class:`~activelearning.acquisition.candidate_set.TrainDataCandidateSetSpec`
@@ -139,7 +137,7 @@ class QMultiFidelityLowerBoundMaxValueEntropy(QBatchBoTorchAcquisition):
     num_y_samples : int, default=128
         Number of outcome samples per max-value sample.
     expand : callable, optional
-        Callable for trace-observation expansion.
+        Optional callable to expand q-batches with trace observations.
     **kwargs
         Forwarded to :class:`QBatchBoTorchAcquisition`.
     """

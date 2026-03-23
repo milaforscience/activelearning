@@ -17,7 +17,6 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
 
     - validation and storage of a typed ``BoTorchGPSurrogate``,
     - lifecycle management of the internal BoTorch acquisition object,
-    - materialization of one-pass observation iterables,
     - multi-fidelity metadata resolution,
     - optional target-fidelity projection plumbing,
     - optional cost-aware utility plumbing.
@@ -127,7 +126,7 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
     ) -> None:
         """Refresh the acquisition state after the surrogate has been updated.
 
-        This method validates and stores a typed BoTorch surrogate, materializes
+        This method validates and stores a typed BoTorch surrogate, processes
         observations when provided, resolves shared multi-fidelity helpers, and
         rebuilds the internal BoTorch acquisition object.
 
@@ -137,8 +136,7 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
             Surrogate model to use for subsequent acquisition scoring. Must be a
             ``BoTorchGPSurrogate``.
         observations : Optional[Iterable[Observation]]
-            Optional iterable of current observations. May be one-pass and is
-            therefore materialized internally when provided.
+            Optional iterable of current observations.
 
         Raises
         ------
@@ -279,12 +277,6 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         -------
         result : Optional[Any]
             Resolved cost model object, or ``None`` if not used.
-
-        Notes
-        -----
-        The default fidelity-cost-based construction is intentionally left as a
-        placeholder for the concrete BoTorch-compatible implementation chosen by
-        the library.
         """
         if self._cost_model_override is not None:
             return self._cost_model_override
@@ -440,7 +432,7 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
             Callable[[list[float], list[Candidate]], list[float]]
         ] = None,
     ) -> list[float]:
-        """Score candidates independently by encoding each as a q=1 batch.
+        """Score candidates by evaluating them against the acquisition function.
 
         Returns a constant score of ``1.0`` for every candidate when the
         acquisition has not yet been coupled to a fitted surrogate. This
@@ -450,7 +442,7 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         Parameters
         ----------
         candidates : Iterable[Candidate]
-            Iterable of candidates to score independently.
+            Iterable of candidates to score.
         cost_weighting : callable, optional
             If provided, called as ``cost_weighting(raw_scores, candidates)``
             after scoring and its return value is used in place of the raw
@@ -465,8 +457,8 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         Raises
         ------
         RuntimeError
-            If the internal BoTorch acquisition object has not yet been built
-            and the candidate list cannot be materialised.
+            If the internal BoTorch acquisition object cannot be built due to
+            missing surrogate or observation data.
         """
         cand_list = list(candidates)
         if self._botorch_acqf is None:
@@ -482,20 +474,14 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
 class AnalyticBoTorchAcquisition(BoTorchAcquisitionBase):
     """Intermediate base class for analytic BoTorch acquisition functions.
 
-    This class implements singleton scoring for analytic BoTorch acquisition
-    functions that operate on independently scored candidates.
-
-    Examples include:
-    - analytic UCB
-    - analytic EI
-    - analytic PI
-    - posterior mean-based scoring
+    Analytic acquisition functions support singleton scoring where each candidate
+    is evaluated independently. Examples include UCB, EI, PI, and posterior mean.
 
     Notes
     -----
-    Analytic BoTorch acquisition functions generally do not support true joint
-    q-batch scoring. Accordingly, this class implements ``score()`` only and
-    leaves ``score_batches()`` unsupported.
+    Analytic BoTorch acquisition functions operate on independently scored
+    candidates. This class implements ``score()`` and does not support batch
+    joint scoring (see ``QBatchBoTorchAcquisition`` for batch support).
     """
 
     def __init__(self, **kwargs: Any) -> None:

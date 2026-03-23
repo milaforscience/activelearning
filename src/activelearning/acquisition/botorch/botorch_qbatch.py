@@ -69,7 +69,7 @@ class QExpectedImprovement(BatchScoringMixin, QBatchBoTorchAcquisition):
 
 
 class QLogExpectedImprovement(BatchScoringMixin, QBatchBoTorchAcquisition):
-    """Monte Carlo q-Expected Improvement in log-space for improved numerics.
+    """Monte Carlo q-Expected Improvement in log-space.
 
     Parameters
     ----------

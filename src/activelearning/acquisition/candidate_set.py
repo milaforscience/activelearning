@@ -60,8 +60,7 @@ class CandidateSetSpec(ABC):
         Parameters
         ----------
         observations : Iterable[Observation]
-            The current set of observations. May be a one-pass iterable;
-            implementations should materialise it if multiple passes are needed.
+            The current set of observations.
         """
 
     @abstractmethod
@@ -71,7 +70,7 @@ class CandidateSetSpec(ABC):
         *,
         target_fidelity_value: Optional[float] = None,
     ) -> torch.Tensor:
-        """Materialize the candidate set tensor.
+        """Build the candidate set tensor.
 
         Parameters
         ----------
@@ -200,13 +199,11 @@ class TrainDataCandidateSetSpec(CandidateSetSpec):
     :meth:`build`.  In the library, acquisitions that hold a
     :class:`TrainDataCandidateSetSpec` do this automatically.
 
-    .. note::
-       In discrete settings the f* samples drawn from this candidate set will
-       be anchored to the observed data points, which can introduce bias —
-       particularly when the observed set is small or unrepresentative of the
-       full domain.  This is an acceptable library default, but users with
-       large or structured discrete spaces should consider
-       :class:`TensorCandidateSetSpec` or a custom subclass.
+    Notes
+    -----
+    For discrete domains, consider providing a custom candidate set via
+    :class:`TensorCandidateSetSpec` if the observed data is small, sparse,
+    or unrepresentative of the full search space.
     """
 
     def __init__(self) -> None:
