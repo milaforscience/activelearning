@@ -16,6 +16,7 @@ from botorch.acquisition.max_value_entropy_search import (
     qMultiFidelityLowerBoundMaxValueEntropy as _qMFLBMES,
     qMultiFidelityMaxValueEntropy as _qMFMES,
 )
+from botorch.acquisition.objective import ScalarizedPosteriorTransform
 
 from activelearning.acquisition.botorch.botorch_acquisition import (
     QBatchBoTorchAcquisition,
@@ -270,7 +271,7 @@ class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
             )
 
         current_value = (
-            torch.tensor(self._current_value)
+            torch.tensor(self._current_value, dtype=torch.float64)
             if self._current_value is not None
             else None
         )
@@ -280,6 +281,11 @@ class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
             "num_fantasies": self._num_fantasies,
             "current_value": current_value,
         }
+
+        if not self.maximize:
+            build_kwargs["posterior_transform"] = ScalarizedPosteriorTransform(
+                weights=torch.tensor([-1.0], dtype=torch.float64)
+            )
 
         if self._resolved_cost_aware_utility is not None:
             build_kwargs["cost_aware_utility"] = self._resolved_cost_aware_utility
