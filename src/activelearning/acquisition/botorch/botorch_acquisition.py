@@ -525,7 +525,7 @@ class BatchScoringMixin:
 
     Omit it for acquisitions that only support singleton scoring::
 
-        class QKnowledgeGradient(QBatchBoTorchAcquisition):
+        class QMultiFidelityMaxValueEntropy(QBatchBoTorchAcquisition):
             ...
     """
 
