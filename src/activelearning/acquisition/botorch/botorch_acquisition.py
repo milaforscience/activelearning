@@ -12,19 +12,15 @@ from activelearning.utils.types import Candidate, Observation
 class BoTorchAcquisitionBase(Acquisition, ABC):
     """Base class for BoTorch-backed acquisition functions.
 
-    This class provides the shared infrastructure needed by BoTorch-based
-    acquisition functions in the library, including:
+    Provides shared infrastructure for all BoTorch-based acquisitions:
+    - Surrogate management and validation
+    - Candidate encoding and scoring
+    - Multi-fidelity and cost-aware support
+    - BoTorch acquisition object lifecycle
 
-    - validation and storage of a typed ``BoTorchGPSurrogate``,
-    - lifecycle management of the internal BoTorch acquisition object,
-    - multi-fidelity metadata resolution,
-    - optional target-fidelity projection plumbing,
-    - optional cost-aware utility plumbing.
-
-    Concrete subclasses are responsible for constructing the actual BoTorch
-    acquisition function by implementing ``_build_botorch_acquisition()``.
-    Scoring mechanics are intentionally left to intermediate subclasses such as
-    analytic or q-batch acquisition families.
+    Subclasses implement specific acquisition logic by defining
+    ``_build_botorch_acquisition()`` to construct the BoTorch acquisition
+    and optionally ``_score_encoded()`` to customize how scores are computed.
     """
 
     def __init__(
