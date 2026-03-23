@@ -133,6 +133,11 @@ class BoTorchGPSurrogate(Surrogate):
         ------
         ValueError
             If observations is empty or structurally incompatible.
+
+        Notes
+        -----
+        This method updates the internal state: ``self._train_X``, ``self._train_Y``,
+        and ``self._is_multi_fidelity`` are set based on the observations.
         """
         obs_list = list(observations)
         if not obs_list:
@@ -140,12 +145,11 @@ class BoTorchGPSurrogate(Surrogate):
             # is_fitted() and will use random candidate selection for this round.
             return
 
-        train_X, train_Y, is_multi_fidelity = self._parse_observations(obs_list)
-        self._is_multi_fidelity = is_multi_fidelity
-        self._train_X = train_X
-        self._train_Y = train_Y
+        self._train_X, self._train_Y, self._is_multi_fidelity = (
+            self._parse_observations(obs_list)
+        )
 
-        self._build_model(train_X, train_Y)
+        self._build_model(self._train_X, self._train_Y)
 
         assert self.model is not None
         assert self.mll is not None
@@ -310,7 +314,7 @@ class BoTorchGPSurrogate(Surrogate):
             "posterior": posterior,
         }
 
-    def state_dict(self) -> Optional[dict[str, torch.Tensor]]:
+    def get_state_dict(self) -> Optional[dict[str, torch.Tensor]]:
         """Return the fitted model state dictionary, if available.
 
         Returns
@@ -338,7 +342,7 @@ class BoTorchGPSurrogate(Surrogate):
             self._pending_state_dict = state_dict
 
     # ------------------------------------------------------------------
-    # Internal helpers
+    # BoTorch-specific public interface for acquisition modules
     # ------------------------------------------------------------------
     def get_model(self) -> SingleTaskGP | SingleTaskMultiFidelityGP:
         """Return the fitted BoTorch model.
@@ -356,6 +360,25 @@ class BoTorchGPSurrogate(Surrogate):
         if self.model is None:
             raise RuntimeError("BoTorch surrogate model has not been fitted yet.")
         return self.model
+
+    def get_train_data(self) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return training tensors used by the fitted model.
+
+        Returns
+        -------
+        train_X : torch.Tensor
+            Encoded training inputs
+        train_Y : torch.Tensor
+            Encoded training targets
+
+        Raises
+        ------
+        RuntimeError
+            If called before the surrogate has been fitted.
+        """
+        if self._train_X is None or self._train_Y is None:
+            raise RuntimeError("BoTorch surrogate training data is not available yet.")
+        return self._train_X, self._train_Y
 
     def encode_candidates(self, candidates: Iterable[Candidate]) -> torch.Tensor:
         """Encode singleton candidates into model-space input tensors.
@@ -430,6 +453,105 @@ class BoTorchGPSurrogate(Surrogate):
 
         return test_X
 
+    def encode_candidate_batches(
+        self,
+        candidate_batches: Iterable[Iterable[Candidate]],
+    ) -> torch.Tensor:
+        """Encode candidate batches into q-batch model-space tensors.
+
+        Parameters
+        ----------
+        candidate_batches : Iterable[Iterable[Candidate]]
+            Iterable of candidate batches. Each inner iterable represents one
+            batch to be jointly scored.
+
+        Returns
+        -------
+        batch_X : torch.Tensor
+            Encoded tensor of shape ``(B, q, d)``, where:
+            - ``B`` is the number of batches,
+            - ``q`` is the common batch size.
+
+        Raises
+        ------
+        ValueError
+            If no batches are provided, if batch sizes are ragged, or if any
+            batch is incompatible with the fitted model.
+        """
+        batch_list = [list(batch) for batch in candidate_batches]
+        if not batch_list:
+            raise ValueError("Cannot encode an empty batch iterable.")
+        if any(len(batch) == 0 for batch in batch_list):
+            raise ValueError("Candidate batches must not be empty.")
+
+        q = len(batch_list[0])
+        ragged_indices = [i for i, batch in enumerate(batch_list) if len(batch) != q]
+        if ragged_indices:
+            raise ValueError(
+                "All candidate batches must have the same size. "
+                f"Ragged batch indices: {ragged_indices}."
+            )
+
+        encoded_batches = [self.encode_candidates(batch) for batch in batch_list]
+        return torch.stack(encoded_batches, dim=0)
+
+    def is_multi_fidelity(self) -> bool:
+        """Return whether the fitted surrogate is operating in multi-fidelity mode.
+
+        Returns
+        -------
+        result : bool
+            ``True`` if the model input includes an appended fidelity dimension,
+            ``False`` otherwise.
+        """
+        return self._is_multi_fidelity
+
+    def get_fidelity_confidences(self) -> dict[int, float]:
+        """Return the configured fidelity-confidence mapping.
+
+        Returns
+        -------
+        result : dict[int, float]
+            Mapping from integer fidelity ids to encoded confidence values.
+        """
+        return dict(self._fidelity_confidences)
+
+    def get_fidelity_dimension(self) -> Optional[int]:
+        """Return the model-space fidelity dimension index, if any.
+
+        Returns
+        -------
+        result : Optional[int]
+            Index of the appended fidelity column in encoded model-space inputs,
+            or ``None`` in single-fidelity mode.
+
+        Raises
+        ------
+        RuntimeError
+            If called before the surrogate has been fitted.
+        """
+        train_X, _ = self.get_train_data()
+        if not self._is_multi_fidelity:
+            return None
+        return train_X.shape[-1] - 1
+
+    def get_target_fidelity_value(self) -> Optional[float]:
+        """Return the encoded target fidelity value used in model space.
+
+        Returns
+        -------
+        result : Optional[float]
+            Encoded target fidelity value, typically the maximum confidence,
+            or ``None`` in single-fidelity mode.
+        """
+        if not self._is_multi_fidelity:
+            return None
+        if not self._fidelity_confidences:
+            raise RuntimeError(
+                "Multi-fidelity mode is active but no fidelity confidences are set."
+            )
+        return max(self._fidelity_confidences.values())
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -461,6 +583,10 @@ class BoTorchGPSurrogate(Surrogate):
     ) -> tuple[torch.Tensor, torch.Tensor, bool]:
         """Converts generic Observations into BoTorch-ready tensors.
 
+        In multi-fidelity mode, fidelity confidence values are appended as the
+        final column of the input tensor. In single-fidelity mode, inputs remain
+        unchanged.
+
         Parameters
         ----------
         observations : Iterable[Observation]
@@ -470,8 +596,8 @@ class BoTorchGPSurrogate(Surrogate):
         Returns
         -------
         train_X : torch.Tensor
-            A tensor of input features, with mapped fidelity confidences appended
-            as the final column if multi-fidelity.
+            A tensor of input features. In multi-fidelity mode, fidelity
+            confidences are appended as the final column.
         train_Y : torch.Tensor
             A tensor of observed labels reshaped for BoTorch.
         is_multi_fidelity : bool
