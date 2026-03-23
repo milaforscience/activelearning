@@ -284,7 +284,9 @@ class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
             # When maximize=False the posterior_transform negates the objective,
             # so current_value must also be negated to stay in the same space.
             raw = -self._current_value if not self.maximize else self._current_value
-            current_value = torch.tensor(raw, dtype=torch.float64)
+            current_value = torch.tensor(
+                raw, dtype=train_X.dtype, device=train_X.device
+            )
 
         build_kwargs: dict[str, Any] = {
             "model": model,
@@ -294,7 +296,7 @@ class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
 
         if not self.maximize:
             build_kwargs["posterior_transform"] = ScalarizedPosteriorTransform(
-                weights=torch.tensor([-1.0], dtype=torch.float64)
+                weights=torch.tensor([-1.0], dtype=train_X.dtype, device=train_X.device)
             )
 
         if self._resolved_cost_aware_utility is not None:
