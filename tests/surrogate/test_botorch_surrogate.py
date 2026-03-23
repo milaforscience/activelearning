@@ -58,34 +58,6 @@ def multi_output_observations():
 
 
 @pytest.fixture
-def scalar_single_fidelity_observations():
-    return [
-        Observation(x=1.0, y=5.0),
-        Observation(x=2.0, y=6.0),
-        Observation(x=3.0, y=7.0),
-    ]
-
-
-@pytest.fixture
-def scalar_multi_fidelity_observations():
-    return [
-        Observation(x=1.0, y=4.5, fidelity=0),
-        Observation(x=1.0, y=5.0, fidelity=1),
-        Observation(x=2.0, y=5.5, fidelity=0),
-        Observation(x=2.0, y=6.0, fidelity=1),
-    ]
-
-
-@pytest.fixture
-def multi_output_observations():
-    return [
-        Observation(x=[1.0, 2.0], y=[5.0, 50.0]),
-        Observation(x=[2.0, 3.0], y=[6.0, 60.0]),
-        Observation(x=[3.0, 4.0], y=[7.0, 70.0]),
-    ]
-
-
-@pytest.fixture
 def dataset_with_observations(single_fidelity_observations):
     """Create a dataset with observations."""
     dataset = ListDataset()

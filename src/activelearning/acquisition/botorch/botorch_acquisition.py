@@ -486,6 +486,72 @@ class AnalyticBoTorchAcquisition(BoTorchAcquisitionBase):
         super().__init__(**kwargs)
 
 
+class BatchScoringMixin:
+    """Adds joint batch scoring to a q-batch acquisition.
+
+    BoTorch q-batch acquisitions naturally operate on batches of candidates
+    evaluated jointly. However, not all of them support this mode — some
+    (e.g. MES, Knowledge Gradient) are constrained to evaluating one candidate
+    at a time despite using Monte Carlo internals.
+
+    Add this class as a base to enable ``score_batches()`` for acquisitions
+    that do support joint evaluation::
+
+        class QExpectedImprovement(BatchScoringMixin, QBatchBoTorchAcquisition):
+            ...
+
+    Omit it for acquisitions that only support singleton scoring::
+
+        class QKnowledgeGradient(QBatchBoTorchAcquisition):
+            ...
+    """
+
+    def score_batches(
+        self,
+        candidate_batches: Iterable[Iterable[Candidate]],
+        cost_weighting: Optional[
+            Callable[[list[float], list[list[Candidate]]], list[float]]
+        ] = None,
+    ) -> list[float]:
+        """Score candidate batches jointly using q-batch semantics.
+
+        Returns a constant score of ``1.0`` for every batch when the
+        acquisition has not yet been coupled to a fitted surrogate. This
+        allows the active learning loop to sample batches uniformly on
+        the first round before any observations are available.
+
+        Parameters
+        ----------
+        candidate_batches : Iterable[Iterable[Candidate]]
+            Iterable of candidate batches. Each inner iterable represents one
+            jointly scored batch.
+        cost_weighting : callable, optional
+            If provided, called as ``cost_weighting(raw_scores, batches)``
+            after scoring and its return value is used in place of the raw
+            scores. Not applied before ``update()`` has been called.
+
+        Returns
+        -------
+        result : list[float]
+            Acquisition scores in the same order as the input batches.
+            All ``1.0`` when called before ``update()``.
+
+        Raises
+        ------
+        RuntimeError
+            If the internal BoTorch acquisition object has not yet been built.
+        """
+        batch_list = [list(b) for b in candidate_batches]
+        if self._botorch_acqf is None:  # type: ignore[attr-defined]
+            return [1.0] * len(batch_list)
+        assert self._botorch_surrogate is not None  # type: ignore[attr-defined]
+        X = self._botorch_surrogate.encode_candidate_batches(batch_list)  # (B, q, d)
+        raw_scores = self._score_encoded(X)  # type: ignore[attr-defined]
+        if cost_weighting is None:
+            return raw_scores
+        return cost_weighting(raw_scores, batch_list)
+
+
 class QBatchBoTorchAcquisition(BoTorchAcquisitionBase):
     """Intermediate base class for q-batch / Monte Carlo BoTorch acquisitions.
 
