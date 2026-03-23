@@ -1043,11 +1043,12 @@ class TestMultiFidelityAcquisitionIntegration:
         mf_obs: list[Observation],
         mf_cands: list[Candidate],
     ) -> None:
-        """current_value should be accepted and forwarded without error."""
+        """current_value is forwarded correctly for both maximize=True and False."""
         from activelearning.acquisition.botorch.botorch_multifidelity import (
             QMultiFidelityKnowledgeGradient,
         )
 
+        # maximize=True: current_value passed as-is
         acq = QMultiFidelityKnowledgeGradient(num_fantasies=1, current_value=5.0)
         acq.update(mf_surrogate, mf_obs)
         scores_cv = acq.score(mf_cands)
@@ -1056,10 +1057,17 @@ class TestMultiFidelityAcquisitionIntegration:
         acq_no_cv.update(mf_surrogate, mf_obs)
         scores_no_cv = acq_no_cv.score(mf_cands)
 
-        # Both should produce valid scores; current_value affects the result
         self._scores_valid(scores_cv)
         self._scores_valid(scores_no_cv)
         assert scores_cv != scores_no_cv
+
+        # maximize=False: current_value must be negated to stay in same space
+        # as the sign-flipped posterior_transform; verify it runs without error
+        acq_min_cv = QMultiFidelityKnowledgeGradient(
+            num_fantasies=1, current_value=5.0, maximize=False
+        )
+        acq_min_cv.update(mf_surrogate, mf_obs)
+        self._scores_valid(acq_min_cv.score(mf_cands))
 
     def test_qmfkg_maximize_false(
         self,

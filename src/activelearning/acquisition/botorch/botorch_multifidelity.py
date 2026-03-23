@@ -279,11 +279,12 @@ class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
         with torch.no_grad():
             model.posterior(train_X)
 
-        current_value = (
-            torch.tensor(self._current_value, dtype=torch.float64)
-            if self._current_value is not None
-            else None
-        )
+        current_value = None
+        if self._current_value is not None:
+            # When maximize=False the posterior_transform negates the objective,
+            # so current_value must also be negated to stay in the same space.
+            raw = -self._current_value if not self.maximize else self._current_value
+            current_value = torch.tensor(raw, dtype=torch.float64)
 
         build_kwargs: dict[str, Any] = {
             "model": model,
