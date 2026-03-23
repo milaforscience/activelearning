@@ -359,7 +359,8 @@ class TestRepeatedUpdate:
         first_acqf = acq.botorch_acqf
 
         acq.update(fitted_surrogate, single_fidelity_observations)
-        assert acq.botorch_acqf is not first_acqf or first_acqf is not None
+        assert first_acqf is not None
+        assert acq.botorch_acqf is not first_acqf
 
     def test_observations_replaced(
         self,
