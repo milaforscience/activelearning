@@ -449,23 +449,13 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         result : list[float]
             Acquisition scores in the same order as the input candidates.
             All ``1.0`` when called before ``update()``.
-
-        Raises
-        ------
-        RuntimeError
-            If the internal BoTorch acquisition object cannot be built due to
-            missing surrogate or observation data.
         """
         cand_list = list(candidates)
         if not cand_list:
             return []
         if self._botorch_acqf is None:
             return [1.0] * len(cand_list)
-        if self._botorch_surrogate is None:
-            raise RuntimeError(
-                f"{self.__class__.__name__} not updated with surrogate before scoring."
-            )
-        X = self._botorch_surrogate.encode_candidates(cand_list).unsqueeze(1)
+        X = self._botorch_surrogate.encode_candidates(cand_list).unsqueeze(1)  # type: ignore[union-attr]
         raw_scores = self._score_encoded(X)
         if cost_weighting is None:
             return raw_scores
