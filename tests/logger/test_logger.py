@@ -335,11 +335,6 @@ class TestAimLogger:
         aim_logger.log_step(2)
         mock_run.track.assert_not_called()
 
-    def test_log_step_updates_current_step(self, logger):
-        aim_logger, mock, mock_run = logger
-        aim_logger.log_step(7)
-        assert aim_logger._current_step == 7
-
     def test_log_figure_buffers_aim_figure(self, logger):
         aim_logger, mock, mock_run = logger
         mock_fig = MagicMock()

@@ -361,7 +361,6 @@ class AimLogger(Logger):
         self.run = aim.Run(repo=repo, experiment=self.project_name)
         self.run.name = self.run_name
         self._buffer: dict[str, Any] = {}
-        self._current_step: int = 0
 
     def log_config(self, config: dict[str, Any]) -> None:
         """Log experiment configuration as Aim hyperparameters.
@@ -419,7 +418,6 @@ class AimLogger(Logger):
         step : int
             The current step or iteration number.
         """
-        self._current_step = step
         for key, value in self._buffer.items():
             self.run.track(value, name=key, step=step)
         self._buffer = {}
