@@ -500,7 +500,6 @@ class AnalyticBoTorchAcquisition(BoTorchAcquisitionBase):
         super().__init__(**kwargs)
 
 
-
 class QBatchBoTorchAcquisition(BoTorchAcquisitionBase):
     """Intermediate base class for q-batch / Monte Carlo BoTorch acquisitions.
 
