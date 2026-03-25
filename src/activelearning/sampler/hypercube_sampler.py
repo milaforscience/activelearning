@@ -108,7 +108,7 @@ class HypercubeSampler(Sampler):
         """
         n_dims = len(self.bounds)
         if self.point_strategy == "lhs":
-            return latin_hypercube(self.num_samples, n_dims)
+            return latin_hypercube(self.num_samples, n_dims, dtype=self.dtype)
         # Default: uniform
         return torch.rand(self.num_samples, n_dims, dtype=self.dtype)
 
@@ -136,17 +136,11 @@ class HypercubeSampler(Sampler):
             )
             weights = costs.reciprocal()
             indices = torch.multinomial(
-                weights,
-                num_samples=self.num_samples,
-                replacement=True,
+                weights, num_samples=self.num_samples, replacement=True
             )
         else:
             # Uniform sampling across fidelity levels
-            indices = torch.randint(
-                0,
-                len(self._fidelity_levels),
-                (self.num_samples,),
-            )
+            indices = torch.randint(0, len(self._fidelity_levels), (self.num_samples,))
 
         selected = fidelity_tensor[indices]
         return selected.tolist()

@@ -1,7 +1,7 @@
-from dataclasses import dataclass
-from typing import Iterable
-
 import torch
+from pydantic import BaseModel
+from dataclasses import dataclass
+from typing import Iterable, Literal
 
 from activelearning.logger.logger import Logger
 
@@ -16,6 +16,30 @@ class RuntimeContext:
 
 
 DEFAULT_RUNTIME_CONTEXT = RuntimeContext()
+
+
+def resolve_torch_dtype(precision: int) -> torch.dtype:
+    """Map a floating-point precision setting to a torch dtype."""
+    if precision == 32:
+        return torch.float32
+    if precision == 64:
+        return torch.float64
+    raise ValueError(f"Unsupported precision {precision}. Expected 32 or 64.")
+
+
+class RuntimeConfig(BaseModel):
+    """Configuration for global torch runtime defaults."""
+
+    device: str = "cpu"
+    precision: Literal[32, 64] = 64
+
+    def build_context(self, logger: Logger | None = None) -> RuntimeContext:
+        """Materialize the configured runtime context."""
+        return RuntimeContext(
+            logger=logger,
+            device=torch.device(self.device),
+            dtype=resolve_torch_dtype(self.precision),
+        )
 
 
 class ALRuntimeMixin:
