@@ -60,8 +60,12 @@ class PoolScoreSampler(Sampler):
 
         if acquisition is None:
             raise ValueError("Acquisition function is required for PoolScoreSampler.")
+        if not acquisition.supports_singleton_scoring:
+            raise ValueError(
+                "PoolScoreSampler requires an acquisition that supports singleton scoring."
+            )
 
-        acq_values = acquisition(self.candidate_pool)
+        acq_values = acquisition.score(self.candidate_pool)
 
         # Apply softmax to convert acquisition values to valid probabilities
         weights = self._get_sampling_weights(acq_values)

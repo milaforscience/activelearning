@@ -56,9 +56,14 @@ class CostAwareSelector(Selector):
 
         if not candidates:
             return []
+        if not acquisition.supports_singleton_scoring:
+            raise ValueError(
+                "CostAwareSelector requires an acquisition that supports singleton "
+                "scoring."
+            )
 
         # Get acquisition values and costs for all candidates
-        acq_values = acquisition(candidates)
+        acq_values = acquisition.score(candidates)
         costs = cost_fn(candidates)
 
         # Reject negative costs and calculate bang-for-buck ratios

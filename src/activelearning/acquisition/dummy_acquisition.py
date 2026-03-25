@@ -1,4 +1,4 @@
-from typing import Sequence
+from typing import Iterable
 
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.utils.types import Candidate
@@ -24,13 +24,13 @@ class DummyAcquisition(Acquisition):
         super().__init__()
         self._beta = float(beta)
 
-    def __call__(self, candidates: Sequence[Candidate]) -> list[float]:
+    def score(self, candidates: Iterable[Candidate]) -> list[float]:
         """Compute UCB acquisition values for candidates.
 
         Parameters
         ----------
-        candidates : Sequence[Candidate]
-            Sequence of candidates to evaluate.
+        candidates : Iterable[Candidate]
+            Candidates to evaluate independently.
 
         Returns
         -------
@@ -44,11 +44,12 @@ class DummyAcquisition(Acquisition):
         ValueError
             If predict() does not return required "mean" key.
         """
+        candidate_list = list(candidates)
         if self.surrogate is None:
-            return [0.0 for _ in candidates]
+            return [0.0 for _ in candidate_list]
 
         try:
-            pred = self.surrogate.predict(candidates)
+            pred = self.surrogate.predict(candidate_list)
         except NotImplementedError as e:
             raise ValueError(
                 f"DummyAcquisition requires surrogate.predict() but "
