@@ -64,7 +64,6 @@ class TestUniformPointStrategy:
             RuntimeContext(
                 device=torch.device("cpu"),
                 dtype=torch.float32,
-                precision=32,
             )
         )
 
@@ -170,7 +169,6 @@ class TestLatinHypercubePointStrategy:
             RuntimeContext(
                 device=torch.device("cpu"),
                 dtype=torch.float32,
-                precision=32,
             )
         )
 

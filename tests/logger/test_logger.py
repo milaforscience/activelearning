@@ -1,4 +1,5 @@
 import json
+import re
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -8,9 +9,20 @@ from activelearning.logger.logger import (
     CometLogger,
     MultiLogger,
     ConsoleLogger,
+    Logger,
     WandbLogger,
 )
 from activelearning.runtime import RuntimeContext
+
+
+def _override_parent_names(
+    self: Logger, project_name: str, run_name: str | None = None, **kwargs: object
+) -> None:
+    """Simulate a parent initializer that normalizes the stored names."""
+
+    del kwargs
+    self.project_name = f"{project_name}_normalized"
+    self.run_name = run_name or "normalized_run"
 
 
 # ---------------------------------------------------------------------------
@@ -39,6 +51,16 @@ class TestConsoleLogger:
         out = capsys.readouterr().out
         assert "proj" in out
         assert logger.run_name is not None
+        assert re.fullmatch(
+            r"\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_\d{6}", logger.run_name
+        )
+
+    def test_init_uses_stored_project_name(self, capsys):
+        with patch.object(Logger, "__init__", new=_override_parent_names):
+            ConsoleLogger(project_name="proj", run_name="run_x")
+        out = capsys.readouterr().out
+        assert "proj_normalized" in out
+        assert "proj'" not in out
 
     def test_log_config(self, logger, capsys):
         logger.log_config({"lr": 0.01, "epochs": 10})
@@ -118,6 +140,13 @@ class TestWandbLogger:
             WandbLogger(project_name="proj", run_name="run_x")
         mock.init.assert_called_once_with(project="proj", name="run_x")
 
+    def test_init_uses_stored_project_name(self, mock_wandb):
+        mock, mock_run = mock_wandb
+        with patch.dict("sys.modules", {"wandb": mock}):
+            with patch.object(Logger, "__init__", new=_override_parent_names):
+                WandbLogger(project_name="proj", run_name="run_x")
+        mock.init.assert_called_once_with(project="proj_normalized", name="run_x")
+
     def test_log_config_updates_run_config(self, logger):
         wandb_logger, mock, mock_run = logger
         config = {"lr": 0.01}
@@ -194,6 +223,15 @@ class TestCometLogger:
         )
         mock_experiment.set_name.assert_called_once_with("run_x")
 
+    def test_init_uses_stored_project_name(self, mock_comet):
+        mock, mock_experiment = mock_comet
+        with patch.dict("sys.modules", {"comet_ml": mock}):
+            with patch.object(Logger, "__init__", new=_override_parent_names):
+                CometLogger(project_name="proj", run_name="run_x", workspace="ws")
+        mock.Experiment.assert_called_once_with(
+            project_name="proj_normalized", workspace="ws", api_key=None
+        )
+
     def test_log_config_calls_log_parameters(self, logger):
         comet_logger, mock, mock_experiment = logger
         config = {"lr": 0.01}
@@ -256,6 +294,13 @@ class TestAimLogger:
         mock.Run.assert_called_once_with(repo=None, experiment="proj")
         assert mock_run.name == "run_x"
 
+    def test_init_uses_stored_project_name(self, mock_aim):
+        mock, mock_run = mock_aim
+        with patch.dict("sys.modules", {"aim": mock}):
+            with patch.object(Logger, "__init__", new=_override_parent_names):
+                AimLogger(project_name="proj", run_name="run_x")
+        mock.Run.assert_called_once_with(repo=None, experiment="proj_normalized")
+
     def test_init_with_repo(self, mock_aim):
         mock, mock_run = mock_aim
         with patch.dict("sys.modules", {"aim": mock}):
@@ -289,11 +334,6 @@ class TestAimLogger:
         mock_run.track.reset_mock()
         aim_logger.log_step(2)
         mock_run.track.assert_not_called()
-
-    def test_log_step_updates_current_step(self, logger):
-        aim_logger, mock, mock_run = logger
-        aim_logger.log_step(7)
-        assert aim_logger._current_step == 7
 
     def test_log_figure_buffers_aim_figure(self, logger):
         aim_logger, mock, mock_run = logger

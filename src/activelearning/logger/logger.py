@@ -18,7 +18,8 @@ class Logger(ABC):
     project_name : str
         Name of the project or experiment group.
     run_name : str, optional
-        Name of this specific run. Defaults to a timestamp if not provided.
+        Name of this specific run. Defaults to a timestamp with microseconds
+        if not provided.
     """
 
     def __init__(
@@ -26,7 +27,7 @@ class Logger(ABC):
     ) -> None:
         self.project_name = project_name
         if run_name is None:
-            run_name = datetime.today().strftime("%d/%m-%H:%M:%S")
+            run_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")
         self.run_name = run_name
 
     @abstractmethod
@@ -98,7 +99,7 @@ class ConsoleLogger(Logger):
     ) -> None:
         super().__init__(project_name, run_name, **kwargs)
         self._buffer: dict[str, Any] = {}
-        print(f"[Logger] Project: {project_name!r} | Run: {self.run_name!r}")
+        print(f"[Logger] Project: {self.project_name!r} | Run: {self.run_name!r}")
 
     def log_config(self, config: dict[str, Any]) -> None:
         """Log experiment configuration to the console as formatted JSON.
@@ -176,7 +177,7 @@ class WandbLogger(Logger):
         import wandb  # type: ignore[import-not-found]  # optional dependency
 
         self._wandb = wandb
-        self.run = wandb.init(project=project_name, name=self.run_name)
+        self.run = wandb.init(project=self.project_name, name=self.run_name)
         self._buffer: dict[str, Any] = {}
 
     def log_config(self, config: dict[str, Any]) -> None:
@@ -261,7 +262,7 @@ class CometLogger(Logger):
 
         self._comet_ml = comet_ml
         self.experiment = comet_ml.Experiment(
-            project_name=project_name,
+            project_name=self.project_name,
             workspace=workspace,
             api_key=api_key,
         )
@@ -357,10 +358,9 @@ class AimLogger(Logger):
         import aim  # type: ignore[import-not-found]  # optional dependency
 
         self._aim = aim
-        self.run = aim.Run(repo=repo, experiment=project_name)
+        self.run = aim.Run(repo=repo, experiment=self.project_name)
         self.run.name = self.run_name
         self._buffer: dict[str, Any] = {}
-        self._current_step: int = 0
 
     def log_config(self, config: dict[str, Any]) -> None:
         """Log experiment configuration as Aim hyperparameters.
@@ -418,7 +418,6 @@ class AimLogger(Logger):
         step : int
             The current step or iteration number.
         """
-        self._current_step = step
         for key, value in self._buffer.items():
             self.run.track(value, name=key, step=step)
         self._buffer = {}

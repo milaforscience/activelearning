@@ -307,6 +307,9 @@ poetry.toml
 # LSP config files
 pyrightconfig.json
 
+# Local experiment scripts
+scripts/
+
 ### VisualStudioCode ###
 .vscode/*
 
