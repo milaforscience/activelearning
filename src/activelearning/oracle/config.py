@@ -14,9 +14,12 @@ class BraninOracleConfig(BaseModel):
     type: Literal["BraninOracle"] = "BraninOracle"
     fidelity_costs: dict[int, float]
     fidelity_confidences: dict[int, float] | None = None
+    log_landscape: bool = False
 
     def build(self) -> Oracle:
-        return BraninOracle(self.fidelity_costs, self.fidelity_confidences)
+        return BraninOracle(
+            self.fidelity_costs, self.fidelity_confidences, self.log_landscape
+        )
 
 
 class Hartmann6DOracleConfig(BaseModel):
