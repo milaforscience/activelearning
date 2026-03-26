@@ -28,7 +28,7 @@ sampler:
   bounds:
     - [-5.0, 10.0]
     - [0.0, 15.0]
-  num_samples: 100000
+  num_samples: 10000
   fidelities: [1, 2, 3]
   point_strategy: lhs
 

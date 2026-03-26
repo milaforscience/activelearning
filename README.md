@@ -58,6 +58,82 @@ make test
 - Package code: `src/activelearning/`
 - Tests: `tests/`
 
+## Running an Experiment
+
+### Quick Start
+
+Run the Branin toy example:
+
+```sh
+uv run activelearning config/branin_toy_example.yaml
+```
+
+### What the Example Does
+
+`config/branin_toy_example.yaml` runs a multi-fidelity active learning loop on the 2D Augmented Branin benchmark. Key components:
+
+| Component | Details |
+|-----------|---------|
+| **Oracle** | Negated Augmented Branin with 3 fidelity levels (costs: 0.01 / 0.1 / 1.0) |
+| **Surrogate** | BoTorch GP (`SingleTaskMultiFidelityGP`) |
+| **Acquisition** | qMFLBMES (lower-bound multi-fidelity max-value entropy search) |
+| **Sampler** | Latin Hypercube Sampling over the 2D domain (10 000 candidates) |
+| **Selector** | Cost-aware greedy (bang-per-buck within round budget) |
+| **Budget** | 20.0 total, 1.0 allocated per round (constant schedule) |
+
+### Config Structure
+
+Every experiment is defined by a single YAML file with these top-level sections:
+
+| Section | Description |
+|---------|-------------|
+| `runtime` | Device (`cpu`/`cuda`) and floating-point precision (`32`/`64`) |
+| `dataset` | Dataset backend (e.g. `ListDataset`) |
+| `surrogate` | Probabilistic model (e.g. `BoTorchGPSurrogate`) |
+| `acquisition` | Acquisition function (e.g. `QMultiFidelityLowerBoundMaxValueEntropy`) |
+| `sampler` | Candidate generator (e.g. `HypercubeSampler`) |
+| `selector` | Candidate selector (e.g. `CostAwareSelector`) |
+| `oracle` | True objective / query function (e.g. `BraninOracle`) |
+| `budget` | Total budget and per-round schedule |
+| `logger` | *(Optional)* Experiment tracker (see [Loggers](#loggers) below) |
+
+### Overriding Config Values
+
+Append [OmegaConf dotlist](https://omegaconf.readthedocs.io/en/latest/usage.html#from-a-dot-list) overrides directly to the command:
+
+```sh
+uv run activelearning config/branin_toy_example.yaml \
+  budget.available_budget=50.0 \
+  acquisition.num_mv_samples=20
+```
+
+### Loggers
+
+Set `logger.type` to choose a logging backend:
+
+| Type | Description | Extra |
+|------|-------------|-------|
+| `ConsoleLogger` | Prints metrics to stdout | *(none)* |
+| `WandbLogger` | Logs to Weights & Biases | `wandb` |
+| `CometLogger` | Logs to Comet ML | `comet` |
+| `AimLogger` | Logs to Aim | `aim` |
+
+Install a backend's optional dependency with:
+
+```sh
+uv sync --extra wandb   # Weights & Biases
+uv sync --extra comet   # Comet ML
+uv sync --extra aim     # Aim
+```
+
+Example — switch to Weights & Biases:
+
+```sh
+uv run activelearning config/branin_toy_example.yaml \
+  logger.type=WandbLogger \
+  logger.project_name=my_project
+```
+
 ## Development & Tooling Notes
 
 - Pre-commit hooks are installed by `make setup`.

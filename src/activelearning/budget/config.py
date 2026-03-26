@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from activelearning.budget.budget import Budget
 from activelearning.budget.schedule_config import (
@@ -11,7 +11,7 @@ from activelearning.budget.schedule_config import (
 
 
 class BudgetConfig(BaseModel):
-    available_budget: float
+    available_budget: float = Field(ge=0.0)
     schedule: ScheduleConfig
 
     def build(self) -> Budget:

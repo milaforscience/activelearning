@@ -9,7 +9,7 @@ from activelearning.selector.selector import Selector
 
 class TopKAcquisitionSelectorConfig(BaseModel):
     type: Literal["TopKAcquisitionSelector"] = "TopKAcquisitionSelector"
-    num_samples: int
+    num_samples: int = Field(gt=0)
 
     def build(self) -> Selector:
         return TopKAcquisitionSelector(num_samples=self.num_samples)

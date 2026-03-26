@@ -56,7 +56,7 @@ def main() -> None:
     dataset = cfg.dataset.build()
     surrogate = cfg.surrogate.build()
     acquisition = cfg.acquisition.build()
-    sampler = cfg.sampler.build(runtime=cfg.runtime)
+    sampler = cfg.sampler.build()
     selector = cfg.selector.build()
     oracle = cfg.oracle.build()
     budget = cfg.budget.build()
