@@ -2,9 +2,10 @@ from abc import ABC, abstractmethod
 from typing import Iterable, Mapping, Sequence, Any
 
 from activelearning.utils.types import Candidate, Observation
+from activelearning.runtime import ALRuntimeMixin
 
 
-class Surrogate(ABC):
+class Surrogate(ABC, ALRuntimeMixin):
     """Abstract surrogate interface for approximating the objective function.
 
     Surrogate models approximate the objective based on observed data, enabling

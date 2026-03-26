@@ -1,5 +1,7 @@
 import pytest
+import torch
 
+from activelearning.runtime import RuntimeContext
 from activelearning.acquisition.dummy_acquisition import DummyAcquisition
 from activelearning.sampler.pool_score_sampler import PoolScoreSampler
 from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
@@ -78,3 +80,17 @@ def test_samples_are_unique(candidate_pool, acquisition_with_surrogate, num_samp
     samples = sampler.sample(acquisition=acquisition_with_surrogate)
 
     assert len(samples) == len(set(samples))
+
+
+def test_runtime_context_updates_sampling_weight_dtype(candidate_pool):
+    sampler = PoolScoreSampler(candidate_pool=candidate_pool, num_samples=5)
+    sampler.bind_runtime_context(
+        RuntimeContext(
+            device=torch.device("cpu"),
+            dtype=torch.float32,
+        )
+    )
+
+    weights = sampler._get_sampling_weights([0.1, 0.3, 0.6])
+
+    assert weights.dtype == torch.float32

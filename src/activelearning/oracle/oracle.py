@@ -3,9 +3,10 @@ from collections.abc import Collection
 from typing import Optional, Sequence, overload
 
 from activelearning.utils.types import Candidate, Observation
+from activelearning.runtime import ALRuntimeMixin
 
 
-class Oracle(ABC):
+class Oracle(ABC, ALRuntimeMixin):
     """Abstract oracle interface used to obtain labels and costs.
 
     Oracles represent the ground truth evaluation mechanism, which may

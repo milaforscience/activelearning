@@ -1,6 +1,7 @@
 import pytest
 import torch
 
+from activelearning.runtime import RuntimeContext
 from activelearning.sampler.hypercube_sampler import HypercubeSampler
 from activelearning.utils.types import Candidate
 
@@ -56,6 +57,22 @@ class TestUniformPointStrategy:
         torch.manual_seed(42)
         second = sampler.sample()
         assert [c.x for c in first] == [c.x for c in second]
+
+    def test_runtime_context_updates_tensor_dtype_after_construction(self):
+        sampler = HypercubeSampler(bounds=BRANIN_BOUNDS, num_samples=8)
+        sampler.bind_runtime_context(
+            RuntimeContext(
+                device=torch.device("cpu"),
+                dtype=torch.float32,
+            )
+        )
+
+        lower, ranges = sampler._get_bounds_tensors()
+        unit_points = sampler._generate_points()
+
+        assert lower.dtype == torch.float32
+        assert ranges.dtype == torch.float32
+        assert unit_points.dtype == torch.float32
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +158,23 @@ class TestLatinHypercubePointStrategy:
         torch.manual_seed(42)
         second = sampler.sample()
         assert [c.x for c in first] == [c.x for c in second]
+
+    def test_lhs_runtime_context_updates_tensor_dtype_after_construction(self):
+        sampler = HypercubeSampler(
+            bounds=BRANIN_BOUNDS,
+            num_samples=8,
+            point_strategy="lhs",
+        )
+        sampler.bind_runtime_context(
+            RuntimeContext(
+                device=torch.device("cpu"),
+                dtype=torch.float32,
+            )
+        )
+
+        unit_points = sampler._generate_points()
+
+        assert unit_points.dtype == torch.float32
 
 
 # ---------------------------------------------------------------------------
