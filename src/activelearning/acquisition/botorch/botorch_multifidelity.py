@@ -116,8 +116,8 @@ class QMultiFidelityMaxValueEntropy(QBatchBoTorchAcquisition):
             "maximize": self.maximize,
         }
 
-        if self._resolved_cost_aware_utility is not None:
-            build_kwargs["cost_aware_utility"] = self._resolved_cost_aware_utility
+        if self._cost_aware_utility_override is not None:
+            build_kwargs["cost_aware_utility"] = self._cost_aware_utility_override
         if self._resolved_project_to_target_fidelity_fn is not None:
             build_kwargs["project"] = self._resolved_project_to_target_fidelity_fn
         if self._expand is not None:
@@ -219,8 +219,8 @@ class QMultiFidelityLowerBoundMaxValueEntropy(QBatchBoTorchAcquisition):
             "maximize": self.maximize,
         }
 
-        if self._resolved_cost_aware_utility is not None:
-            build_kwargs["cost_aware_utility"] = self._resolved_cost_aware_utility
+        if self._cost_aware_utility_override is not None:
+            build_kwargs["cost_aware_utility"] = self._cost_aware_utility_override
         if self._resolved_project_to_target_fidelity_fn is not None:
             build_kwargs["project"] = self._resolved_project_to_target_fidelity_fn
         if self._expand is not None:
@@ -301,8 +301,8 @@ class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
                 weights=torch.tensor([-1.0], dtype=train_X.dtype, device=train_X.device)
             )
 
-        if self._resolved_cost_aware_utility is not None:
-            build_kwargs["cost_aware_utility"] = self._resolved_cost_aware_utility
+        if self._cost_aware_utility_override is not None:
+            build_kwargs["cost_aware_utility"] = self._cost_aware_utility_override
         if self._resolved_project_to_target_fidelity_fn is not None:
             build_kwargs["project"] = self._resolved_project_to_target_fidelity_fn
         if self._expand is not None:

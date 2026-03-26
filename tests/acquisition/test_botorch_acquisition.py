@@ -138,11 +138,9 @@ class TestCapabilityFlags:
         acq = StubAnalytic(
             maximize=False,
             target_fidelity_value=0.8,
-            fidelity_costs={0: 1.0, 1: 5.0},
         )
         assert acq.maximize is False
         assert acq._target_fidelity_value_override == 0.8
-        assert acq._fidelity_costs == {0: 1.0, 1: 5.0}
 
 
 # ===================================================================
@@ -239,10 +237,10 @@ class TestPropertiesBeforeUpdate:
         assert acq._resolved_project_to_target_fidelity_fn is None
 
     def test_resolved_cost_model_is_none(self, acq: StubAnalytic) -> None:
-        assert acq._resolved_cost_model is None
+        assert acq._cost_model_override is None
 
     def test_resolved_cost_aware_utility_is_none(self, acq: StubAnalytic) -> None:
-        assert acq._resolved_cost_aware_utility is None
+        assert acq._cost_aware_utility_override is None
 
 
 # ===================================================================
@@ -704,8 +702,8 @@ class TestCostAwareResolution:
     ) -> None:
         acq = StubAnalytic()
         acq.update(fitted_surrogate, single_fidelity_observations)
-        assert acq._resolved_cost_model is None
-        assert acq._resolved_cost_aware_utility is None
+        assert acq._cost_model_override is None
+        assert acq._cost_aware_utility_override is None
 
     def test_custom_cost_model_override(
         self,
@@ -717,8 +715,8 @@ class TestCostAwareResolution:
         # Both must be provided since default utility builder is not implemented.
         acq = StubAnalytic(cost_model=cost_model, cost_aware_utility=cost_utility)
         acq.update(fitted_surrogate, single_fidelity_observations)
-        assert acq._resolved_cost_model is cost_model
-        assert acq._resolved_cost_aware_utility is cost_utility
+        assert acq._cost_model_override is cost_model
+        assert acq._cost_aware_utility_override is cost_utility
 
     def test_custom_cost_aware_utility_override(
         self,
@@ -728,17 +726,7 @@ class TestCostAwareResolution:
         sentinel = object()
         acq = StubAnalytic(cost_aware_utility=sentinel)
         acq.update(fitted_surrogate, single_fidelity_observations)
-        assert acq._resolved_cost_aware_utility is sentinel
-
-    def test_fidelity_costs_without_implementation_raises(
-        self,
-        fitted_surrogate: BoTorchGPSurrogate,
-        single_fidelity_observations: list[Observation],
-    ) -> None:
-        """Default cost-model builder is not implemented yet — should raise."""
-        acq = StubAnalytic(fidelity_costs={0: 1.0, 1: 5.0})
-        with pytest.raises(NotImplementedError, match="cost-model construction"):
-            acq.update(fitted_surrogate, single_fidelity_observations)
+        assert acq._cost_aware_utility_override is sentinel
 
 
 # ===================================================================
