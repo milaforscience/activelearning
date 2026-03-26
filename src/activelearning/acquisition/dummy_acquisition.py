@@ -1,4 +1,4 @@
-from typing import Iterable
+from typing import Callable, Iterable, Optional
 
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.utils.types import Candidate
@@ -24,7 +24,13 @@ class DummyAcquisition(Acquisition):
         super().__init__()
         self._beta = float(beta)
 
-    def score(self, candidates: Iterable[Candidate]) -> list[float]:
+    def score(
+        self,
+        candidates: Iterable[Candidate],
+        cost_weighting: Optional[
+            Callable[[list[float], list[Candidate]], list[float]]
+        ] = None,
+    ) -> list[float]:
         """Compute UCB acquisition values for candidates.
 
         Parameters
@@ -61,5 +67,9 @@ class DummyAcquisition(Acquisition):
             raise ValueError("DummyAcquisition expects prediction payload key 'mean'.")
         stds = pred.get("std")
         if stds is None:
-            return list(means)
-        return [mean + self._beta * std for mean, std in zip(means, stds)]
+            scores = list(means)
+        else:
+            scores = [mean + self._beta * std for mean, std in zip(means, stds)]
+        if cost_weighting is not None:
+            return cost_weighting(scores, candidate_list)
+        return scores

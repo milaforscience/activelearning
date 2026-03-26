@@ -108,10 +108,9 @@ class HypercubeSampler(Sampler):
         """
         n_dims = len(self.bounds)
         if self.point_strategy == "lhs":
-            return latin_hypercube(self.num_samples, n_dims)
+            return latin_hypercube(self.num_samples, n_dims, dtype=self.dtype)
         # Default: uniform
         return torch.rand(self.num_samples, n_dims, dtype=self.dtype)
-
 
     def _assign_fidelities(self) -> list[Optional[int]]:
         """Assign fidelity levels to ``num_samples`` candidates.
