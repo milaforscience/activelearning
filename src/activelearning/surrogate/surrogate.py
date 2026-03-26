@@ -2,9 +2,10 @@ from abc import ABC, abstractmethod
 from typing import Iterable, Mapping, Sequence, Any
 
 from activelearning.utils.types import Candidate, Observation
+from activelearning.runtime import ALRuntimeMixin
 
 
-class Surrogate(ABC):
+class Surrogate(ABC, ALRuntimeMixin):
     """Abstract surrogate interface for approximating the objective function.
 
     Surrogate models approximate the objective based on observed data, enabling
@@ -54,6 +55,7 @@ class Surrogate(ABC):
         observations : Iterable[Observation]
             The most recent observations to incorporate into the model.
 
+
         Raises
         ------
         NotImplementedError
@@ -84,6 +86,7 @@ class Surrogate(ABC):
 
     def is_fitted(self) -> bool:
         """Return whether the surrogate is ready to make predictions.
+
 
         The default implementation returns ``True``, which is correct for surrogates
         that are always ready to predict regardless of whether they have seen data

@@ -2,9 +2,10 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, Optional, Sequence
 
 from activelearning.utils.types import Candidate
+from activelearning.runtime import ALRuntimeMixin
 
 
-class Selector(ABC):
+class Selector(ABC, ALRuntimeMixin):
     """Abstract selector interface used to choose candidates.
 
     Selectors implement strategies for choosing the final subset of
