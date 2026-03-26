@@ -238,24 +238,43 @@ class TestCometLogger:
         comet_logger.log_config(config)
         mock_experiment.log_parameters.assert_called_once_with(config)
 
-    def test_log_metric_calls_log_metric(self, logger):
+    def test_log_metric_buffered(self, logger):
         comet_logger, mock, mock_experiment = logger
-        comet_logger._current_step = 5
         comet_logger.log_metric("loss", 0.5)
-        mock_experiment.log_metric.assert_called_once_with("loss", 0.5, step=5)
+        mock_experiment.log_metric.assert_not_called()
+        assert "loss" in comet_logger._buffer
 
-    def test_log_figure_calls_log_figure(self, logger):
+    def test_log_figure_buffered(self, logger):
         comet_logger, mock, mock_experiment = logger
         mock_fig = MagicMock()
         comet_logger.log_figure("my_plot", mock_fig)
+        mock_experiment.log_figure.assert_not_called()
+        assert "my_plot" in comet_logger._figure_buffer
+
+    def test_log_step_flushes_metrics(self, logger):
+        comet_logger, mock, mock_experiment = logger
+        comet_logger.log_metric("loss", 0.5)
+        comet_logger.log_metric("acc", 0.9)
+        comet_logger.log_step(3)
+        mock_experiment.log_metric.assert_any_call("loss", 0.5, step=3)
+        mock_experiment.log_metric.assert_any_call("acc", 0.9, step=3)
+
+    def test_log_step_flushes_figures(self, logger):
+        comet_logger, mock, mock_experiment = logger
+        mock_fig = MagicMock()
+        comet_logger.log_figure("my_plot", mock_fig)
+        comet_logger.log_step(3)
         mock_experiment.log_figure.assert_called_once_with(
             figure_name="my_plot", figure=mock_fig
         )
 
-    def test_log_step_updates_current_step(self, logger):
+    def test_log_step_clears_buffer(self, logger):
         comet_logger, mock, mock_experiment = logger
-        comet_logger.log_step(7)
-        assert comet_logger._current_step == 7
+        comet_logger.log_metric("loss", 0.5)
+        comet_logger.log_step(1)
+        mock_experiment.reset_mock()
+        comet_logger.log_step(2)
+        mock_experiment.log_metric.assert_not_called()
 
     def test_end_calls_experiment_end(self, logger):
         comet_logger, mock, mock_experiment = logger

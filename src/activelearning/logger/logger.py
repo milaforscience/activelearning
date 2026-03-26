@@ -267,7 +267,8 @@ class CometLogger(Logger):
             api_key=api_key,
         )
         self.experiment.set_name(self.run_name)
-        self._current_step: int = 0
+        self._buffer: dict[str, Any] = {}
+        self._figure_buffer: dict[str, Any] = {}
 
     def log_config(self, config: dict[str, Any]) -> None:
         """Log experiment configuration as Comet ML hyperparameters.
@@ -280,11 +281,10 @@ class CometLogger(Logger):
         self.experiment.log_parameters(config)
 
     def log_metric(self, key: str, value: Any) -> None:
-        """Log a metric-like value to Comet ML at the current step.
+        """Buffer a metric-like value to be logged at the next log_step call.
 
-        Numeric values are sent to Comet as metrics. Non-numeric values are
-        recorded as step-tagged text entries instead, which avoids Comet's
-        warning about string metrics while preserving the information.
+        Numeric values are stored as-is. Non-numeric values are wrapped as
+        text entries to avoid Comet's warning about string metrics.
 
         Parameters
         ----------
@@ -293,18 +293,10 @@ class CometLogger(Logger):
         value : Any
             Value of the metric.
         """
-        if isinstance(value, Real) and not isinstance(value, bool):
-            self.experiment.log_metric(key, value, step=self._current_step)
-            return
-
-        self.experiment.log_text(
-            str(value),
-            step=self._current_step,
-            metadata={"key": key},
-        )
+        self._buffer[key] = value
 
     def log_figure(self, key: str, figure: Any) -> None:
-        """Log a figure to Comet ML.
+        """Buffer a figure to be logged at the next log_step call.
 
         Parameters
         ----------
@@ -313,17 +305,30 @@ class CometLogger(Logger):
         figure : Any
             The figure object (e.g., matplotlib Figure).
         """
-        self.experiment.log_figure(figure_name=key, figure=figure)
+        self._figure_buffer[key] = figure
 
     def log_step(self, step: int) -> None:
-        """Update the current step context for subsequent metric logging.
+        """Flush all buffered metrics and figures to Comet ML for this step.
 
         Parameters
         ----------
         step : int
             The current step or iteration number.
         """
-        self._current_step = step
+        for key, value in self._buffer.items():
+            if isinstance(value, Real) and not isinstance(value, bool):
+                self.experiment.log_metric(key, value, step=step)
+            else:
+                self.experiment.log_text(
+                    str(value),
+                    step=step,
+                    metadata={"key": key},
+                )
+        self._buffer = {}
+
+        for key, figure in self._figure_buffer.items():
+            self.experiment.log_figure(figure_name=key, figure=figure)
+        self._figure_buffer = {}
 
     def end(self) -> None:
         """End the Comet ML experiment."""
