@@ -165,6 +165,7 @@ class BraninOracle(AugmentedFunctionOracle):
             dtype=self.dtype,
             device=self.device,
             title="Branin landscape with queried candidates",
+            minima=[(-3.14159, 12.275), (3.14159, 2.275), (9.42478, 2.475)],
         )
         try:
             self.logger.log_figure("branin_landscape_query", figure)
