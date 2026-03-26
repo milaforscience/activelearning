@@ -78,43 +78,6 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         self._resolved_cost_model: Optional[Any] = None
         self._resolved_cost_aware_utility: Optional[Any] = None
 
-    @property
-    def botorch_surrogate(self) -> Optional[BoTorchGPSurrogate]:
-        """The typed BoTorch surrogate, or ``None`` before ``update()``."""
-        return self._botorch_surrogate
-
-    @property
-    def botorch_acqf(self) -> Optional[Any]:
-        """The internal BoTorch acquisition object, or ``None`` before ``update()``."""
-        return self._botorch_acqf
-
-    @property
-    def observations_cache(self) -> Optional[list[Observation]]:
-        """Materialized observations from the current update cycle, or ``None``."""
-        return self._observations_cache
-
-    @property
-    def resolved_target_fidelity_value(self) -> Optional[float]:
-        """Encoded target fidelity value, or ``None`` when not applicable."""
-        return self._resolved_target_fidelity_value
-
-    @property
-    def resolved_project_to_target_fidelity_fn(
-        self,
-    ) -> Optional[Callable[[torch.Tensor], torch.Tensor]]:
-        """Target-fidelity projection callable, or ``None`` if not applicable."""
-        return self._resolved_project_to_target_fidelity_fn
-
-    @property
-    def resolved_cost_model(self) -> Optional[Any]:
-        """Resolved cost model, or ``None`` if not used."""
-        return self._resolved_cost_model
-
-    @property
-    def resolved_cost_aware_utility(self) -> Optional[Any]:
-        """Resolved cost-aware utility, or ``None`` if not used."""
-        return self._resolved_cost_aware_utility
-
     def update(
         self,
         surrogate: Surrogate,
