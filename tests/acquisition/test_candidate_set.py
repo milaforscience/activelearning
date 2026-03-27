@@ -284,3 +284,13 @@ class TestTensorCandidateSetSpec:
         tensor = torch.zeros(5, 2, dtype=torch.float64)
         spec = TensorCandidateSetSpec(tensor)
         spec.update(single_fidelity_observations)  # should not raise
+
+    def test_1d_tensor_raises(self) -> None:
+        """A 1-D tensor is rejected at construction time."""
+        with pytest.raises(ValueError, match="2-D"):
+            TensorCandidateSetSpec(torch.rand(10))
+
+    def test_3d_tensor_raises(self) -> None:
+        """A 3-D tensor is rejected at construction time."""
+        with pytest.raises(ValueError, match="2-D"):
+            TensorCandidateSetSpec(torch.rand(4, 10, 2))

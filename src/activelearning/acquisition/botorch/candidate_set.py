@@ -286,6 +286,11 @@ class TensorCandidateSetSpec(CandidateSetSpec):
     """
 
     def __init__(self, tensor: torch.Tensor) -> None:
+        if tensor.ndim != 2:
+            raise ValueError(
+                f"candidate_set tensor must be 2-D with shape (N, d), "
+                f"got shape {tuple(tensor.shape)}"
+            )
         self.tensor = tensor
 
     def build(
