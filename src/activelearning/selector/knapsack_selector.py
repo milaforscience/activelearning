@@ -66,11 +66,13 @@ class KnapsackSelector(Selector):
             solver fails to find any feasible solution.
         """
         if acquisition is None:
-            raise ValueError("Acquisition function is required for KnapsackSelector.")
+            raise ValueError(
+                f"Acquisition function is required for {type(self).__name__}."
+            )
         if cost_fn is None:
-            raise ValueError("Cost function is required for KnapsackSelector.")
+            raise ValueError(f"Cost function is required for {type(self).__name__}.")
         if round_budget is None:
-            raise ValueError("Budget is required for KnapsackSelector.")
+            raise ValueError(f"Budget is required for {type(self).__name__}.")
         if not candidates:
             return []
 
@@ -91,6 +93,7 @@ class KnapsackSelector(Selector):
         n = len(costs)
         x = [pulp.LpVariable(f"item_{i}", cat="Binary") for i in range(n)]
 
+        # Optional warm start with greedy solution
         if self.warm_start:
             warm_start_indices = set(
                 greedy_knapsack_indices(acq_values, costs, round_budget)
@@ -104,6 +107,9 @@ class KnapsackSelector(Selector):
         # Constraint: Total cost must be <= budget
         prob += pulp.lpSum([costs[i] * x[i] for i in range(n)]) <= round_budget
 
+        # Allow subclasses to add extra constraints
+        self._add_extra_constraints(prob, x, candidates)
+
         # Solve using the default CBC solver (included with PuLP)
         solver = self._build_solver()
         status = prob.solve(solver)
@@ -115,6 +121,28 @@ class KnapsackSelector(Selector):
             if variable_value > 0.5
         ]
         return selected_candidates
+
+    def _add_extra_constraints(
+        self,
+        prob: pulp.LpProblem,
+        x: list[pulp.LpVariable],
+        candidates: Sequence[Candidate],
+    ) -> None:
+        """Hook for subclasses to inject extra constraints into the MIP.
+
+        Called after the budget constraint is added and before the solver
+        runs.  The default implementation is a no-op.
+
+        Parameters
+        ----------
+        prob : pulp.LpProblem
+            The in-progress maximisation problem.
+        x : list[pulp.LpVariable]
+            Binary decision variables aligned with *candidates*.
+        candidates : Sequence[Candidate]
+            The same candidate pool passed to ``__call__``.
+        """
+        pass
 
     def _build_solver(self) -> pulp.PULP_CBC_CMD:
         """Create a CBC solver instance and verify it is executable."""

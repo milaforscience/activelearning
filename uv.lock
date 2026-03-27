@@ -17,6 +17,8 @@ dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.4.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "pulp" },
+    { name = "scikit-learn", version = "1.7.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scikit-learn", version = "1.8.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "torch" },
 ]
 
@@ -31,6 +33,7 @@ requires-dist = [
     { name = "botorch", specifier = ">=0.16.1" },
     { name = "numpy", specifier = ">=1.26.0,<3.0.0" },
     { name = "pulp", specifier = ">=3.3.0" },
+    { name = "scikit-learn", specifier = ">=1.0" },
     { name = "torch", specifier = ">=2.5.1" },
 ]
 
