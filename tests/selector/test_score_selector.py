@@ -54,7 +54,7 @@ def test_correct_ordering_highest_first(acquisition_with_surrogate):
     selected = selector(candidates, acquisition=acquisition_with_surrogate)
 
     # Get acquisition values to verify ordering
-    acq_values = acquisition_with_surrogate(selected)
+    acq_values = acquisition_with_surrogate.score(selected)
 
     assert len(selected) == 3
     # Acquisition values should be in descending order

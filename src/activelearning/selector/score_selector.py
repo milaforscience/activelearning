@@ -43,7 +43,9 @@ class TopKAcquisitionSelector(Selector):
         """
         if acquisition is None:
             raise ValueError("Acquisition function is required for ScoreSelector.")
+        if not candidates:
+            return []
 
-        acq_values = acquisition(candidates)
+        acq_values = acquisition.score(candidates)
         ranked = sorted(zip(candidates, acq_values), key=lambda cv: cv[1], reverse=True)
         return [candidate for candidate, _ in ranked[: self.num_samples]]

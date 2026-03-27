@@ -58,7 +58,7 @@ class CostAwareSelector(Selector):
             return []
 
         # Get acquisition values and costs for all candidates
-        acq_values = acquisition(candidates)
+        acq_values = acquisition.score(candidates)
         costs = cost_fn(candidates)
 
         # Reject negative costs and calculate bang-for-buck ratios
