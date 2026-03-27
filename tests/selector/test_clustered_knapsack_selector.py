@@ -147,6 +147,26 @@ def test_raises_when_round_budget_missing():
         )
 
 
+def test_kmeans_raises_when_fewer_candidates_than_clusters():
+    """K-means clustering raises when len(candidates) < n_clusters.
+
+    Providing only 2 candidates to a selector configured with n_clusters=3
+    is impossible to cluster; the selector must raise a descriptive ValueError
+    before invoking KMeans.
+    """
+    selector = ClusteredKnapsackSelector(
+        max_per_cluster=2, clustering="kmeans", n_clusters=3
+    )
+    candidates = [Candidate(x=np.array([float(i)])) for i in range(2)]
+    with pytest.raises(ValueError, match="Cannot cluster 2 candidates into 3"):
+        selector(
+            candidates,
+            acquisition=_mock_acquisition([1.0, 2.0]),
+            cost_fn=_cost_fn([1.0, 1.0]),
+            round_budget=10.0,
+        )
+
+
 def test_raises_for_negative_costs():
     """Selector rejects negative per-candidate costs."""
     selector = ClusteredKnapsackSelector(max_per_cluster=2, n_clusters=2)

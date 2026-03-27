@@ -162,6 +162,12 @@ class ClusteredKnapsackSelector(KnapsackSelector):
         if self.clustering == "kmeans":
             from sklearn.cluster import KMeans  # noqa: PLC0415
 
+            if len(candidates) < self.n_clusters:
+                raise ValueError(
+                    f"Cannot cluster {len(candidates)} candidates into {self.n_clusters} clusters."
+                    f"Provide at least {self.n_clusters} candidates or reduce n_clusters."
+                )
+
             labels: np.ndarray = KMeans(
                 n_clusters=self.n_clusters, n_init="auto"
             ).fit_predict(features)
