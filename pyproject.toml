@@ -12,6 +12,8 @@ dependencies = [
     "botorch>=0.16.1",
     "matplotlib>=3.10.8",
     "numpy>=1.26.0,<3.0.0",
+    "pulp>=3.3.0",
+    "scikit-learn>=1.0",
     "torch>=2.5.1",
 ]
 
