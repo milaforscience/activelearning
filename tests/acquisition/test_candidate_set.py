@@ -8,7 +8,7 @@ fitted surrogates.
 import pytest
 import torch
 
-from activelearning.acquisition.candidate_set import (
+from activelearning.acquisition.botorch.candidate_set import (
     HypercubeCandidateSetSpec,
     TensorCandidateSetSpec,
     TrainDataCandidateSetSpec,
