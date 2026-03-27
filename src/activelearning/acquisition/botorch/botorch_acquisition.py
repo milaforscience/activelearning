@@ -41,10 +41,20 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         maximize : bool, default=True
             If True, the acquisition assumes a maximization objective.
         target_fidelity_value : float, optional
-            Override for the encoded target fidelity value. If None, inferred
-            from the surrogate.
+            Encoded fidelity level at which the objective is ultimately
+            evaluated. In multi-fidelity settings, acquisition functions
+            measure the value of lower-fidelity queries in terms of their
+            impact on a designated *target fidelity* — typically the highest
+            fidelity, but not restricted to it. If ``None``, the target
+            fidelity is inferred from the surrogate.
         project_to_target_fidelity_fn : callable, optional
-            Callable that projects encoded inputs to the target fidelity.
+            Callable that maps encoded inputs to the target fidelity level.
+            Given an encoded input tensor, returns a version where the
+            fidelity dimension has been set or transformed to the target
+            fidelity. In the common case this corresponds to setting the
+            fidelity coordinate to a fixed value (e.g. the highest fidelity),
+            but more general transformations are supported. If ``None``, a
+            default projection is constructed from the surrogate.
         cost_model : object, optional
             Custom BoTorch-compatible cost model.
         cost_aware_utility : object, optional
