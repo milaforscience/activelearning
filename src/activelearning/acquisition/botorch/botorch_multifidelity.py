@@ -26,8 +26,121 @@ from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import Observation
 
 
-class QMultiFidelityMaxValueEntropy(QBatchBoTorchAcquisition):
+class _QMultiFidelityEntropyBase(QBatchBoTorchAcquisition):
+    """Shared base for multi-fidelity max-value entropy acquisition functions.
+
+    Implements the common constructor, ``update()``, and
+    ``_build_botorch_acquisition()`` shared by
+    :class:`QMultiFidelityMaxValueEntropy` and
+    :class:`QMultiFidelityLowerBoundMaxValueEntropy`. Subclasses set
+    ``_botorch_acqf_class`` to select the underlying BoTorch implementation.
+
+    This class is not intended to be instantiated directly.
+
+    Parameters
+    ----------
+    candidate_set_spec : CandidateSetSpec
+        Specification describing how to build the discrete candidate set used
+        to approximate the max-value distribution.
+    num_fantasies : int, default=16
+        Number of fantasy models used to approximate the joint entropy.
+    num_mv_samples : int, default=10
+        Number of samples drawn to approximate the max-value distribution.
+    num_y_samples : int, default=128
+        Number of outcome samples drawn per max-value sample.
+    expand : callable, optional
+        Optional callable to expand q-batches with trace observations,
+        used for multi-fidelity information gain calculations.
+    **kwargs
+        Forwarded to :class:`QBatchBoTorchAcquisition`.
+    """
+
+    _botorch_acqf_class: type
+
+    def __init__(
+        self,
+        *,
+        candidate_set_spec: CandidateSetSpec,
+        num_fantasies: int = 16,
+        num_mv_samples: int = 10,
+        num_y_samples: int = 128,
+        expand: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
+        **kwargs: Any,
+    ) -> None:
+        if num_fantasies <= 0:
+            raise ValueError(f"num_fantasies must be > 0, got {num_fantasies}")
+        if num_mv_samples <= 0:
+            raise ValueError(f"num_mv_samples must be > 0, got {num_mv_samples}")
+        if num_y_samples <= 0:
+            raise ValueError(f"num_y_samples must be > 0, got {num_y_samples}")
+
+        super().__init__(**kwargs)
+        self._candidate_set_spec = candidate_set_spec
+        self._num_fantasies = num_fantasies
+        self._num_mv_samples = num_mv_samples
+        self._num_y_samples = num_y_samples
+        self._expand = expand
+
+    def update(
+        self,
+        surrogate: Surrogate,
+        observations: Optional[Iterable[Observation]] = None,
+    ) -> None:
+        """Update the candidate set spec with current observations, then update the base.
+
+        The candidate set (used to approximate the max-value distribution) is
+        refreshed each round from the latest observations before the BoTorch
+        acquisition object is rebuilt.
+
+        Parameters
+        ----------
+        surrogate : Surrogate
+            The fitted surrogate model for the current round.
+        observations : Iterable[Observation], optional
+            Current observations forwarded to the candidate set spec and base.
+        """
+        if observations is not None:
+            obs_list = list(observations)
+            self._candidate_set_spec.update(obs_list)
+            super().update(surrogate, obs_list)
+        else:
+            super().update(surrogate, observations)
+
+    def _build_botorch_acquisition(self) -> Any:
+        if self._botorch_surrogate is None:
+            raise RuntimeError(
+                f"{self.__class__.__name__} not updated with surrogate before building acquisition."
+            )
+
+        build_kwargs: dict[str, Any] = {
+            "model": self._botorch_surrogate.get_model(),
+            "candidate_set": self._candidate_set_spec.build(
+                self._botorch_surrogate,
+                target_fidelity_value=self._resolved_target_fidelity_value,
+            ),
+            "num_fantasies": self._num_fantasies,
+            "num_mv_samples": self._num_mv_samples,
+            "num_y_samples": self._num_y_samples,
+            "maximize": self.maximize,
+        }
+
+        if self._cost_aware_utility_override is not None:
+            build_kwargs["cost_aware_utility"] = self._cost_aware_utility_override
+        if self._resolved_project_to_target_fidelity_fn is not None:
+            build_kwargs["project"] = self._resolved_project_to_target_fidelity_fn
+        if self._expand is not None:
+            build_kwargs["expand"] = self._expand
+
+        return self._botorch_acqf_class(**build_kwargs)
+
+
+class QMultiFidelityMaxValueEntropy(_QMultiFidelityEntropyBase):
     """Multi-fidelity q-Max-Value Entropy Search (qMFMES).
+
+    Estimates the information gain about the maximum objective value at the
+    target fidelity from a batch of candidates queried at possibly lower
+    fidelities, using fantasy models to account for multi-fidelity
+    correlations.
 
     Parameters
     ----------
@@ -52,83 +165,16 @@ class QMultiFidelityMaxValueEntropy(QBatchBoTorchAcquisition):
         Forwarded to :class:`QBatchBoTorchAcquisition`.
     """
 
-    def __init__(
-        self,
-        *,
-        candidate_set_spec: CandidateSetSpec,
-        num_fantasies: int = 16,
-        num_mv_samples: int = 10,
-        num_y_samples: int = 128,
-        expand: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
-        **kwargs: Any,
-    ) -> None:
-        if num_fantasies <= 0:
-            raise ValueError(f"num_fantasies must be > 0, got {num_fantasies}")
-        if num_mv_samples <= 0:
-            raise ValueError(f"num_mv_samples must be > 0, got {num_mv_samples}")
-        if num_y_samples <= 0:
-            raise ValueError(f"num_y_samples must be > 0, got {num_y_samples}")
-
-        super().__init__(**kwargs)
-        self._candidate_set_spec = candidate_set_spec
-        self._num_fantasies = num_fantasies
-        self._num_mv_samples = num_mv_samples
-        self._num_y_samples = num_y_samples
-        self._expand = expand
-
-    def update(
-        self,
-        surrogate: Surrogate,
-        observations: Optional[Iterable[Observation]] = None,
-    ) -> None:
-        """Update candidate set spec with current observations, then update base.
-
-        Parameters
-        ----------
-        surrogate : Surrogate
-            The fitted surrogate.
-        observations : Iterable[Observation], optional
-            Current observations forwarded to the candidate set spec and base.
-        """
-        if observations is not None:
-            obs_list = list(observations)
-            self._candidate_set_spec.update(obs_list)
-            super().update(surrogate, obs_list)
-        else:
-            super().update(surrogate, observations)
-
-    def _build_botorch_acquisition(self) -> Any:
-        if self._botorch_surrogate is None:
-            raise RuntimeError(
-                f"{self.__class__.__name__} not updated with surrogate before building acquisition."
-            )
-
-        build_kwargs: dict[str, Any] = {
-            "model": self._botorch_surrogate.get_model(),
-            "candidate_set": self._candidate_set_spec.build(
-                self._botorch_surrogate,
-                target_fidelity_value=self._resolved_target_fidelity_value,
-            ),
-            "num_fantasies": self._num_fantasies,
-            "num_mv_samples": self._num_mv_samples,
-            "num_y_samples": self._num_y_samples,
-            "maximize": self.maximize,
-        }
-
-        if self._cost_aware_utility_override is not None:
-            build_kwargs["cost_aware_utility"] = self._cost_aware_utility_override
-        if self._resolved_project_to_target_fidelity_fn is not None:
-            build_kwargs["project"] = self._resolved_project_to_target_fidelity_fn
-        if self._expand is not None:
-            build_kwargs["expand"] = self._expand
-
-        return _qMFMES(**build_kwargs)
+    _botorch_acqf_class = _qMFMES
 
 
-class QMultiFidelityLowerBoundMaxValueEntropy(QBatchBoTorchAcquisition):
+class QMultiFidelityLowerBoundMaxValueEntropy(_QMultiFidelityEntropyBase):
     """Multi-fidelity lower-bound q-Max-Value Entropy Search (qMFLBMES).
 
-    A cheaper approximation of :class:`QMultiFidelityMaxValueEntropy`.
+    A computationally cheaper approximation of
+    :class:`QMultiFidelityMaxValueEntropy` that uses a lower bound on the
+    entropy rather than a Monte Carlo estimate, reducing the number of model
+    evaluations required per acquisition step.
 
     Parameters
     ----------
@@ -153,78 +199,7 @@ class QMultiFidelityLowerBoundMaxValueEntropy(QBatchBoTorchAcquisition):
         Forwarded to :class:`QBatchBoTorchAcquisition`.
     """
 
-    def __init__(
-        self,
-        *,
-        candidate_set_spec: CandidateSetSpec,
-        num_fantasies: int = 16,
-        num_mv_samples: int = 10,
-        num_y_samples: int = 128,
-        expand: Optional[Callable[[torch.Tensor], torch.Tensor]] = None,
-        **kwargs: Any,
-    ) -> None:
-        if num_fantasies <= 0:
-            raise ValueError(f"num_fantasies must be > 0, got {num_fantasies}")
-        if num_mv_samples <= 0:
-            raise ValueError(f"num_mv_samples must be > 0, got {num_mv_samples}")
-        if num_y_samples <= 0:
-            raise ValueError(f"num_y_samples must be > 0, got {num_y_samples}")
-
-        super().__init__(**kwargs)
-        self._candidate_set_spec = candidate_set_spec
-        self._num_fantasies = num_fantasies
-        self._num_mv_samples = num_mv_samples
-        self._num_y_samples = num_y_samples
-        self._expand = expand
-
-    def update(
-        self,
-        surrogate: Surrogate,
-        observations: Optional[Iterable[Observation]] = None,
-    ) -> None:
-        """Update candidate set spec with current observations, then update base.
-
-        Parameters
-        ----------
-        surrogate : Surrogate
-            The fitted surrogate.
-        observations : Iterable[Observation], optional
-            Current observations forwarded to the candidate set spec and base.
-        """
-        if observations is not None:
-            obs_list = list(observations)
-            self._candidate_set_spec.update(obs_list)
-            super().update(surrogate, obs_list)
-        else:
-            super().update(surrogate, observations)
-
-    def _build_botorch_acquisition(self) -> Any:
-        """Construct the BoTorch qMultiFidelityLowerBoundMaxValueEntropy object."""
-        if self._botorch_surrogate is None:
-            raise RuntimeError(
-                f"{self.__class__.__name__} not updated with surrogate before building acquisition."
-            )
-
-        build_kwargs: dict[str, Any] = {
-            "model": self._botorch_surrogate.get_model(),
-            "candidate_set": self._candidate_set_spec.build(
-                self._botorch_surrogate,
-                target_fidelity_value=self._resolved_target_fidelity_value,
-            ),
-            "num_fantasies": self._num_fantasies,
-            "num_mv_samples": self._num_mv_samples,
-            "num_y_samples": self._num_y_samples,
-            "maximize": self.maximize,
-        }
-
-        if self._cost_aware_utility_override is not None:
-            build_kwargs["cost_aware_utility"] = self._cost_aware_utility_override
-        if self._resolved_project_to_target_fidelity_fn is not None:
-            build_kwargs["project"] = self._resolved_project_to_target_fidelity_fn
-        if self._expand is not None:
-            build_kwargs["expand"] = self._expand
-
-        return _qMFLBMES(**build_kwargs)
+    _botorch_acqf_class = _qMFLBMES
 
 
 class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
