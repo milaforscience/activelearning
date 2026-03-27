@@ -31,7 +31,6 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         project_to_target_fidelity_fn: Optional[
             Callable[[torch.Tensor], torch.Tensor]
         ] = None,
-        cost_model: Optional[Any] = None,
         cost_aware_utility: Optional[Any] = None,
     ) -> None:
         """Initialize the BoTorch acquisition base.
@@ -55,10 +54,14 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
             fidelity coordinate to a fixed value (e.g. the highest fidelity),
             but more general transformations are supported. If ``None``, a
             default projection is constructed from the surrogate.
-        cost_model : object, optional
-            Custom BoTorch-compatible cost model.
         cost_aware_utility : object, optional
-            Custom BoTorch-compatible cost-aware utility.
+            A BoTorch-compatible cost-aware utility that adjusts acquisition
+            values to account for the cost of querying at different fidelity
+            levels. This encapsulates both the cost model and the utility
+            transformation (e.g. dividing information gain by query cost).
+            If ``None``, acquisition values are not cost-adjusted.
+            See :class:`botorch.acquisition.cost_aware.CostAwareUtility`
+            for the expected interface.
         """
         super().__init__()
         self.maximize = maximize
@@ -66,7 +69,6 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         # User-specified multi-fidelity / cost-aware configuration
         self._target_fidelity_value_override = target_fidelity_value
         self._project_to_target_fidelity_fn_override = project_to_target_fidelity_fn
-        self._cost_model_override = cost_model
         self._cost_aware_utility_override = cost_aware_utility
 
         # Typed runtime state populated during update()

@@ -236,10 +236,7 @@ class TestPropertiesBeforeUpdate:
     def test_resolved_project_fn_is_none(self, acq: StubAnalytic) -> None:
         assert acq._resolved_project_to_target_fidelity_fn is None
 
-    def test_resolved_cost_model_is_none(self, acq: StubAnalytic) -> None:
-        assert acq._cost_model_override is None
-
-    def test_resolved_cost_aware_utility_is_none(self, acq: StubAnalytic) -> None:
+    def test_cost_aware_utility_is_none_by_default(self, acq: StubAnalytic) -> None:
         assert acq._cost_aware_utility_override is None
 
 
@@ -702,27 +699,14 @@ class TestCostAwareResolution:
     ) -> None:
         acq = StubAnalytic()
         acq.update(fitted_surrogate, single_fidelity_observations)
-        assert acq._cost_model_override is None
         assert acq._cost_aware_utility_override is None
-
-    def test_custom_cost_model_override(
-        self,
-        fitted_surrogate: BoTorchGPSurrogate,
-        single_fidelity_observations: list[Observation],
-    ) -> None:
-        cost_model = object()
-        cost_utility = object()
-        # Both must be provided since default utility builder is not implemented.
-        acq = StubAnalytic(cost_model=cost_model, cost_aware_utility=cost_utility)
-        acq.update(fitted_surrogate, single_fidelity_observations)
-        assert acq._cost_model_override is cost_model
-        assert acq._cost_aware_utility_override is cost_utility
 
     def test_custom_cost_aware_utility_override(
         self,
         fitted_surrogate: BoTorchGPSurrogate,
         single_fidelity_observations: list[Observation],
     ) -> None:
+        """A user-provided cost-aware utility is stored and accessible."""
         sentinel = object()
         acq = StubAnalytic(cost_aware_utility=sentinel)
         acq.update(fitted_surrogate, single_fidelity_observations)
