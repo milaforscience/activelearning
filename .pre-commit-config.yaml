@@ -6,6 +6,11 @@ repos:
       - id: end-of-file-fixer
       - id: check-merge-conflict
       - id: check-yaml
+        exclude: ^mkdocs\.yml$
+      - id: check-yaml
+        name: check yaml (mkdocs)
+        args: [--unsafe]
+        files: ^mkdocs\.yml$
       - id: check-toml
       - id: check-json
       - id: check-added-large-files

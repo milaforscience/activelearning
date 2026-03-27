@@ -1,0 +1,25 @@
+/* Prevent the repository link in the top navigation bar from being clipped */
+.md-header__source {
+  width: auto;
+  max-width: none;
+  min-width: 12rem;
+}
+
+/* Replace abbreviated mkdocstrings symbol labels with full words */
+code.doc-symbol-method::after,
+a code.doc-symbol-method::after {
+  content: "method";
+}
+
+code.doc-symbol-attribute::after,
+a code.doc-symbol-attribute::after {
+  content: "attr";
+}
+
+/* Widen the first and second columns of the runtime config schema table */
+.schema-table th,
+.schema-table td,
+.schema-table th,
+.schema-table td {
+  min-width: 6rem;
+}

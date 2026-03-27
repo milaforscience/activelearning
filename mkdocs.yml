@@ -1,0 +1,92 @@
+site_name: Multi-Fidelity Active Learning
+site_description: Documentation for the activelearning framework
+site_url: https://milaforscience.github.io/activelearning
+repo_url: https://github.com/milaforscience/activelearning
+repo_name: milaforscience/activelearning
+docs_dir: docs
+strict: true
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+
+markdown_extensions:
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - md_in_html
+  - attr_list
+
+extra_css:
+  - css/custom.css
+
+extra_javascript:
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+  - https://unpkg.com/mermaid@11/dist/mermaid.min.js
+  - js/mermaid-init.js
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            docstring_style: numpy
+            merge_init_into_class: true
+            inherited_members: false
+            members_order: source
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quickstart: getting-started/quickstart.md
+  - Introduction:
+      - Framework Overview: concepts/overview.md
+      - Active Learning Loop: concepts/active_learning_loop.md
+      - Multi-Fidelity Active Learning: concepts/multi_fidelity.md
+      - Runtime and Configuration: concepts/runtime_and_configuration.md
+      - Related Work and Positioning: concepts/related-work.md
+  - Tutorials:
+      - Available Baselines and Configs: examples/configs.md
+      - Running Experiments: guides/experiments.md
+      - Branin Benchmark: examples/branin_toy.md
+      - Hartmann6D Benchmark: examples/hartmann6d_toy.md
+      - GFlowNet Sampler Setup: examples/gflownet_sampler.md
+  - Extension Guide:
+      - Overview: extension-guide/index.md
+      - Adding an Oracle: extension-guide/oracle.md
+      - Adding a Sampler: extension-guide/sampler.md
+      - Adding a Surrogate: extension-guide/surrogate.md
+      - Adding a Selector: extension-guide/selector.md
+      - Adding an Acquisition: extension-guide/acquisition.md
+  - API Reference:
+      - Overview: api/index.md
+      - Configuration Model: api/config.md
+      - Runtime and Types: api/runtime_and_types.md
+      - Dataset: api/dataset.md
+      - Surrogate: api/surrogate.md
+      - Acquisition: api/acquisition.md
+      - Sampler: api/sampler.md
+      - Selector: api/selector.md
+      - Oracle: api/oracle.md
+      - Budget: api/budget.md
+      - Logger: api/logger.md
+  - Resources:
+      - FAQ: resources/faq.md
+      - References and Citation: resources/references.md
+      - Contributing: contributing.md
