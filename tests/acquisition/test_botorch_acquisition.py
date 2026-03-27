@@ -12,7 +12,7 @@ from activelearning.acquisition.botorch.botorch_acquisition import (
     BatchScoringMixin,
     QBatchBoTorchAcquisition,
 )
-from activelearning.acquisition.candidate_set import TrainDataCandidateSetSpec
+from activelearning.acquisition.botorch.candidate_set import TrainDataCandidateSetSpec
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
 from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
 from activelearning.utils.types import Candidate, Observation
@@ -156,7 +156,7 @@ class TestParameterValidation:
         from activelearning.acquisition.botorch.botorch_multifidelity import (
             QMultiFidelityMaxValueEntropy,
         )
-        from activelearning.acquisition.candidate_set import (
+        from activelearning.acquisition.botorch.candidate_set import (
             HypercubeCandidateSetSpec,
         )
 
@@ -175,7 +175,7 @@ class TestParameterValidation:
         from activelearning.acquisition.botorch.botorch_multifidelity import (
             QMultiFidelityMaxValueEntropy,
         )
-        from activelearning.acquisition.candidate_set import (
+        from activelearning.acquisition.botorch.candidate_set import (
             HypercubeCandidateSetSpec,
         )
 
@@ -194,7 +194,7 @@ class TestParameterValidation:
         from activelearning.acquisition.botorch.botorch_multifidelity import (
             QMultiFidelityMaxValueEntropy,
         )
-        from activelearning.acquisition.candidate_set import (
+        from activelearning.acquisition.botorch.candidate_set import (
             HypercubeCandidateSetSpec,
         )
 

@@ -30,7 +30,7 @@ from typing import Iterable, Literal, Optional
 
 import torch
 
-from activelearning.surrogate.surrogate import Surrogate
+from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
 from activelearning.utils.sampling import latin_hypercube
 from activelearning.utils.types import Candidate, Observation
 
@@ -67,25 +67,31 @@ class CandidateSetSpec(ABC):
     @abstractmethod
     def build(
         self,
-        surrogate: Surrogate,
+        surrogate: BoTorchGPSurrogate,
         *,
         target_fidelity_value: Optional[float] = None,
     ) -> torch.Tensor:
-        """Materialize the candidate set tensor.
+        """Build the candidate set tensor in BoTorch model space.
+
+        The returned tensor is encoded by the surrogate and ready to be passed
+        directly to a BoTorch acquisition function. It has shape ``(N, d)``,
+        where ``d`` is the full input dimensionality of the surrogate's model,
+        including the fidelity column when operating in multi-fidelity mode.
 
         Parameters
         ----------
-        surrogate : Surrogate
-            A fitted surrogate.
+        surrogate : BoTorchGPSurrogate
+            A fitted BoTorch surrogate used to encode candidates into model
+            space.
         target_fidelity_value : float, optional
             The encoded fidelity value to append as the last column of the
             candidate set in multi-fidelity mode (e.g. ``1.0`` for the
-            highest-confidence fidelity).  ``None`` in single-fidelity mode.
+            highest-confidence fidelity). ``None`` in single-fidelity mode.
 
         Returns
         -------
         candidate_set : torch.Tensor
-            Model-space candidate tensor of shape ``(N, d)``.
+            BoTorch-ready candidate tensor of shape ``(N, d)``.
         """
 
 
@@ -155,7 +161,7 @@ class HypercubeCandidateSetSpec(CandidateSetSpec):
 
     def build(
         self,
-        surrogate: Surrogate,
+        surrogate: BoTorchGPSurrogate,
         *,
         target_fidelity_value: Optional[float] = None,
     ) -> torch.Tensor:
@@ -227,7 +233,7 @@ class TrainDataCandidateSetSpec(CandidateSetSpec):
 
     def build(
         self,
-        surrogate: Surrogate,
+        surrogate: BoTorchGPSurrogate,
         *,
         target_fidelity_value: Optional[float] = None,
     ) -> torch.Tensor:
@@ -284,7 +290,7 @@ class TensorCandidateSetSpec(CandidateSetSpec):
 
     def build(
         self,
-        surrogate: Surrogate,
+        surrogate: BoTorchGPSurrogate,
         *,
         target_fidelity_value: Optional[float] = None,
     ) -> torch.Tensor:

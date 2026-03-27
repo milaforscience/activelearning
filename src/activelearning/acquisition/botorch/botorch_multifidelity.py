@@ -22,7 +22,7 @@ from botorch.acquisition.objective import ScalarizedPosteriorTransform
 from activelearning.acquisition.botorch.botorch_acquisition import (
     QBatchBoTorchAcquisition,
 )
-from activelearning.acquisition.candidate_set import CandidateSetSpec
+from activelearning.acquisition.botorch.candidate_set import CandidateSetSpec
 from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import Observation
 
@@ -147,13 +147,12 @@ class QMultiFidelityMaxValueEntropy(_QMultiFidelityEntropyBase):
     ----------
     candidate_set_spec : CandidateSetSpec
         Specification describing how to build the discrete candidate set used
-        to approximate the max-value distribution.  The tensor is materialized
-        at acquisition-build time when the fitted surrogate is available.
-        Use :class:`~activelearning.acquisition.candidate_set.HypercubeCandidateSetSpec`
+        to approximate the max-value distribution.
+        Use :class:`~activelearning.acquisition.botorch.candidate_set.HypercubeCandidateSetSpec`
         for continuous domains,
-        :class:`~activelearning.acquisition.candidate_set.TrainDataCandidateSetSpec`
+        :class:`~activelearning.acquisition.botorch.candidate_set.TrainDataCandidateSetSpec`
         as a discrete default, or
-        :class:`~activelearning.acquisition.candidate_set.TensorCandidateSetSpec`
+        :class:`~activelearning.acquisition.botorch.candidate_set.TensorCandidateSetSpec`
         to pass a precomputed tensor directly.
     num_fantasies : int, default=16
         Number of fantasy models.
@@ -182,13 +181,12 @@ class QMultiFidelityLowerBoundMaxValueEntropy(_QMultiFidelityEntropyBase):
     ----------
     candidate_set_spec : CandidateSetSpec
         Specification describing how to build the discrete candidate set for
-        max-value approximation.  The tensor is materialized at
-        acquisition-build time when the fitted surrogate is available.
-        Use :class:`~activelearning.acquisition.candidate_set.HypercubeCandidateSetSpec`
+        max-value approximation.
+        Use :class:`~activelearning.acquisition.botorch.candidate_set.HypercubeCandidateSetSpec`
         for continuous domains,
-        :class:`~activelearning.acquisition.candidate_set.TrainDataCandidateSetSpec`
+        :class:`~activelearning.acquisition.botorch.candidate_set.TrainDataCandidateSetSpec`
         as a discrete default, or
-        :class:`~activelearning.acquisition.candidate_set.TensorCandidateSetSpec`
+        :class:`~activelearning.acquisition.botorch.candidate_set.TensorCandidateSetSpec`
         to pass a precomputed tensor directly.
     num_fantasies : int, default=16
         Number of fantasy models.
