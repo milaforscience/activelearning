@@ -6,9 +6,10 @@ Each class subclasses :class:`QBatchBoTorchAcquisition` and implements
 and target-fidelity projection from the base class into the BoTorch object.
 """
 
-from typing import Any, Callable, Iterable, Optional
+from typing import Any, Callable, ClassVar, Iterable, Optional
 
 import torch
+from botorch.acquisition.acquisition import AcquisitionFunction
 from botorch.acquisition.knowledge_gradient import (
     qMultiFidelityKnowledgeGradient as _qMFKG,
 )
@@ -55,7 +56,7 @@ class _QMultiFidelityEntropyBase(QBatchBoTorchAcquisition):
         Forwarded to :class:`QBatchBoTorchAcquisition`.
     """
 
-    _botorch_acqf_class: type
+    _botorch_acqf_class: ClassVar[type[AcquisitionFunction]]
 
     def __init__(
         self,
