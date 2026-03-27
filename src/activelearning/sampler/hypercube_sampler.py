@@ -84,10 +84,18 @@ class HypercubeSampler(Sampler):
                 raise ValueError("fidelities must not be empty when specified")
             self._fidelity_levels = fidelities
 
-        # Precompute lower bounds and ranges to avoid re-iterating on each call
+        # Store scalar values and materialize tensors lazily so a later-bound
+        # runtime context can still control dtype.
         lowers, diffs = zip(*[(lower, upper - lower) for lower, upper in bounds])
-        self._lower = torch.tensor(lowers, dtype=torch.float64)
-        self._range = torch.tensor(diffs, dtype=torch.float64)
+        self._lower_values = tuple(lowers)
+        self._range_values = tuple(diffs)
+
+    def _get_bounds_tensors(self) -> tuple[torch.Tensor, torch.Tensor]:
+        """Materialize lower/range tensors using the currently bound runtime dtype."""
+        return (
+            torch.tensor(self._lower_values, dtype=self.dtype),
+            torch.tensor(self._range_values, dtype=self.dtype),
+        )
 
     def _generate_points(self) -> torch.Tensor:
         """Generate raw points in the unit hypercube ``[0, 1]^d``.
@@ -101,19 +109,17 @@ class HypercubeSampler(Sampler):
         if self.point_strategy == "lhs":
             return self._latin_hypercube(self.num_samples, n_dims)
         # Default: uniform
-        return torch.rand(self.num_samples, n_dims, dtype=torch.float64)
+        return torch.rand(self.num_samples, n_dims, dtype=self.dtype)
 
-    @staticmethod
-    def _latin_hypercube(num_samples: int, n_dims: int) -> torch.Tensor:
-        """
-        Generates a Latin Hypercube Sample (LHS) of points in the unit hypercube [0, 1]^d.
+    def _latin_hypercube(self, num_samples: int, n_dims: int) -> torch.Tensor:
+        """Generate a Latin Hypercube Sample in the unit hypercube ``[0, 1]^d``.
 
         LHS ensures that each dimension is divided into 'num_samples' equal-width bins,
         and each bin contains exactly one sample. This provides better space-filling
         properties than simple random sampling.
         """
         # 1. Generate jitter/offsets: rand(0, 1) for each sample's position within its bin.
-        offsets = torch.rand(num_samples, n_dims, dtype=torch.float64)
+        offsets = torch.rand(num_samples, n_dims, dtype=self.dtype)
 
         # 2. Create a unique permutation for each dimension.
         # This 'shuffles' the bin indices [0, 1, ..., n-1] independently across dimensions,
@@ -123,7 +129,7 @@ class HypercubeSampler(Sampler):
         # 3. Combine permutations and offsets, then normalize.
         # (perms + offsets) results in values in the range [0, num_samples].
         # Dividing by num_samples scales the final output to the [0, 1] unit range.
-        samples = (perms.to(torch.float64) + offsets) / num_samples
+        samples = (perms.to(dtype=self.dtype) + offsets) / num_samples
 
         return samples
 
@@ -138,21 +144,30 @@ class HypercubeSampler(Sampler):
         if self._fidelity_levels is None:
             return [None] * self.num_samples
 
-        fidelity_tensor = torch.tensor(self._fidelity_levels, dtype=torch.long)
+        fidelity_tensor = torch.tensor(
+            self._fidelity_levels,
+            dtype=torch.long,
+        )
 
         if self._fidelity_costs is not None:
             # Weights ∝ 1/cost; cheaper fidelities are sampled more often
             costs = torch.tensor(
                 [self._fidelity_costs[f] for f in self._fidelity_levels],
-                dtype=torch.float64,
+                dtype=self.dtype,
             )
-            weights = 1.0 / costs
+            weights = costs.reciprocal()
             indices = torch.multinomial(
-                weights.float(), num_samples=self.num_samples, replacement=True
+                weights,
+                num_samples=self.num_samples,
+                replacement=True,
             )
         else:
             # Uniform sampling across fidelity levels
-            indices = torch.randint(0, len(self._fidelity_levels), (self.num_samples,))
+            indices = torch.randint(
+                0,
+                len(self._fidelity_levels),
+                (self.num_samples,),
+            )
 
         selected = fidelity_tensor[indices]
         return selected.tolist()
@@ -178,8 +193,9 @@ class HypercubeSampler(Sampler):
             floats and ``fidelity`` drawn from the configured fidelity strategy.
         """
         # Generate points in [0,1]^d then scale to bounds
+        lower, ranges = self._get_bounds_tensors()
         unit_points = self._generate_points()
-        points = self._lower + unit_points * self._range
+        points = lower + unit_points * ranges
 
         fidelities = self._assign_fidelities()
 

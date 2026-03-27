@@ -2,13 +2,18 @@ from abc import ABC, abstractmethod
 from typing import Iterable, Mapping, Sequence, Any
 
 from activelearning.utils.types import Candidate, Observation
+from activelearning.runtime import ALRuntimeMixin
 
 
-class Surrogate(ABC):
+class Surrogate(ABC, ALRuntimeMixin):
     """Abstract surrogate interface used by acquisitions and the active learning loop.
 
-    Surrogate models approximate the oracles based on
-    observed data, enabling efficient candidate evaluation.
+    Surrogate models approximate the oracles based on observed data, enabling
+    efficient candidate evaluation.
+
+    Surrogates must implement ``updates_from_latest()`` to declare whether they
+    support incremental updates from the latest observations or require full
+    retraining on all observations.
 
     Notes
     -----
@@ -18,27 +23,104 @@ class Surrogate(ABC):
     """
 
     @abstractmethod
-    def fit(self, observations: Iterable[Observation]) -> None:
-        """Fit the surrogate model to observations.
+    def updates_from_latest(self) -> bool:
+        """Declare whether this surrogate updates incrementally from latest observations.
 
-        This method is called at each iteration of the active learning loop,
-        as new observations are collected. Implementations are not required to
-        support incremental learning (full retraining is acceptable).
+        Surrogates that support incremental updates (i.e., updating the model
+        without full retraining) should return ``True``. Surrogates that require
+        full retraining on all observations should return ``False``.
+
+          - Return ``True``  → ``update()`` will be called with only the latest observations.
+          - Return ``False`` → ``fit()`` will be called with all observations.
+
+        Returning ``False`` is the safe default. Return ``True`` only when the
+        surrogate genuinely supports incremental learning.
+
+        Returns
+        -------
+        bool
+            ``True`` if this surrogate supports incremental updates via ``update()``,
+            ``False`` if it requires full retraining via ``fit()``.
+        """
+        pass
+
+    def update(self, observations: Iterable[Observation]) -> None:
+        """Incrementally update the surrogate with the latest (new) observations.
+
+        Called when ``updates_from_latest()`` returns ``True``. Implementations
+        should update the model using only the provided observations, without
+        full retraining. This is suited for online or continuous learning
+        scenarios where efficiency matters.
+
+        Surrogates that always return ``False`` from ``updates_from_latest()``
+        do not need to implement this method.
 
         Parameters
         ----------
         observations : Iterable[Observation]
-            Iterable of observations to train on. May be a Sequence
-            (list, tuple) for small datasets or a one-pass iterable (DataLoader)
-            for large datasets.
+            Iterable of the most recent observations (from the latest oracle query).
 
         Notes
         -----
-        Implementations should validate their input requirements:
-        - If you need len() or multiple passes, materialize to list or assert Sequence
-        - If you can handle streaming data, consume the iterable directly
+            This method is *never* called if ``updates_from_latest()`` returns
+            ``False``. In that case the loop calls ``fit(observations)`` instead.
+
+        Raises
+        ------
+        NotImplementedError
+            If this surrogate does not implement incremental updates.
         """
-        pass
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement update(). "
+            "Override update() or ensure updates_from_latest() returns False and override fit()."
+        )
+
+    def fit(self, observations: Iterable[Observation]) -> None:
+        """Fit the surrogate model to observations from scratch.
+
+        Called by the active learning loop if ``updates_from_latest()`` returns
+        ``False``, passing the shared round iterable (same one used by acquisition
+        and sampler). Also useful for standalone use such as notebooks and tests.
+
+        Parameters
+        ----------
+        observations : Iterable[Observation]
+            Iterable of all current observations to train on.
+
+        Raises
+        ------
+        NotImplementedError
+            If this surrogate does not implement fit().
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not implement fit(). "
+            "Override fit() or ensure updates_from_latest() returns True and override update()."
+        )
+
+    def is_fitted(self) -> bool:
+        """Return whether the surrogate is ready to make predictions.
+
+        The active learning loop calls this before passing the surrogate to the
+        acquisition function. When ``False``, the loop skips ``acquisition.update()``
+        and the acquisition falls back to uninformed (e.g. constant) scoring,
+        enabling random candidate selection on the first round.
+
+        The default implementation returns ``True``, which is correct for surrogates
+        that are always ready to predict regardless of whether they have seen data
+        (e.g. simple in-memory or analytic surrogates).
+
+        .. important::
+            If your surrogate builds its model from data — meaning ``predict()``
+            will fail or produce undefined results before ``fit()`` or ``update()``
+            has been called with at least one observation — you **must** override
+            this method to return ``False`` until the model has been initialised.
+
+        Returns
+        -------
+        bool
+            ``True`` if the surrogate is ready for prediction, ``False`` otherwise.
+        """
+        return True
 
     def set_fidelity_confidences(self, confidences: dict[int, float]) -> None:
         """Set per-fidelity confidence metadata for multi-fidelity surrogate models.
