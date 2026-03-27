@@ -106,17 +106,16 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         TypeError
             If the surrogate is not a ``BoTorchGPSurrogate``.
         """
-        super().update(surrogate, observations)
-
         if not isinstance(surrogate, BoTorchGPSurrogate):
             raise TypeError(
                 f"{self.__class__.__name__} requires a BoTorchGPSurrogate, "
                 f"but received {type(surrogate).__name__}."
             )
+        obs_list = list(observations) if observations is not None else None
+        super().update(surrogate, obs_list)
+
         self._botorch_surrogate = surrogate
-        self._observations_cache = (
-            list(observations) if observations is not None else None
-        )
+        self._observations_cache = obs_list
 
         # Resolve shared MF / cost-aware helpers before building the acqf.
         self._resolved_target_fidelity_value = self._resolve_target_fidelity_value()
