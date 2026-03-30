@@ -70,7 +70,13 @@ def sigmoid_iteration_schedule(
         for i in range(num_iterations)
     ]
     weight_sum = sum(weights)
-    allocations = [total_budget * weight / weight_sum for weight in weights]
+
+    # Fallback: if all increments are numerically zero (e.g. steepness so small
+    # that the sigmoid is flat over the iteration range), distribute uniformly.
+    if weight_sum == 0.0:
+        allocations = [total_budget / num_iterations] * num_iterations
+    else:
+        allocations = [total_budget * weight / weight_sum for weight in weights]
 
     def schedule(current_round: int) -> float:
         if current_round < 0 or current_round >= num_iterations:

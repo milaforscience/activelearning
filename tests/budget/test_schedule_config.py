@@ -52,7 +52,20 @@ class TestSigmoidIterationSchedule:
         total = sum(schedule(i) for i in range(10))
         assert total == pytest.approx(100.0, rel=1e-6)
 
-    def test_later_rounds_receive_more_budget_than_early_rounds(self):
+    def test_near_zero_steepness_falls_back_to_uniform(self):
+        """When steepness is so small that all CDF increments are zero,
+        allocations must fall back to uniform rather than raising ZeroDivisionError."""
+        schedule = sigmoid_iteration_schedule(
+            total_budget=100.0,
+            num_iterations=5,
+            midpoint_fraction=0.5,
+            steepness=1e-300,  # Effectively flat sigmoid → zero increments in float32
+        )
+        total = sum(schedule(i) for i in range(5))
+        assert total == pytest.approx(100.0, rel=1e-9)
+        # Each round should receive an equal share
+        for i in range(5):
+            assert schedule(i) == pytest.approx(20.0)
         """Sigmoid schedule should front-load budget toward the midpoint and beyond."""
         schedule = sigmoid_iteration_schedule(
             total_budget=100.0,
