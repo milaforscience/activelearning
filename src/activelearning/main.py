@@ -29,7 +29,11 @@ def _parse_args() -> argparse.Namespace:
         prog="activelearning",
         description="Run the active learning loop from a YAML config file.",
     )
-    parser.add_argument("config", help="Path to YAML config file.")
+    parser.add_argument(
+        "config",
+        nargs="+",
+        help="Path(s) to YAML config file(s). Multiple files are merged left to right.",
+    )
     parser.add_argument(
         "overrides",
         nargs="*",
@@ -43,7 +47,10 @@ def main() -> None:
     """Load config, build components, run the active learning loop."""
     args = _parse_args()
 
-    raw_cfg = load_config(path=args.config, overrides=args.overrides or None)
+    raw_cfg = load_config(
+        path=args.config if len(args.config) > 1 else args.config[0],
+        overrides=args.overrides or None,
+    )
     bootstrap_logger_backend_imports(OmegaConf.to_container(raw_cfg, resolve=False))
 
     from activelearning.active_learning import active_learning
