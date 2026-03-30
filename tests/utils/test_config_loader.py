@@ -4,9 +4,13 @@ These tests verify that:
 - ``load_config`` correctly merges multiple YAML files left to right.
 - The merged config, when validated and built, produces a functional active
   learning loop that runs to completion.
+- The CLI entry point correctly separates config file paths from key=value
+  overrides when both are passed as positional arguments.
 """
 
+import sys
 import textwrap
+from unittest.mock import patch
 
 import pytest
 
@@ -211,3 +215,81 @@ def test_active_learning_loop_budget_override_reduces_rounds(
     assert cost_override <= cost_base, (
         "Tighter budget override must not increase total cost."
     )
+
+
+# ---------------------------------------------------------------------------
+# CLI arg parsing: configs vs. key=value overrides
+# ---------------------------------------------------------------------------
+
+
+def test_cli_separates_overrides_from_config_paths(base_config, acquisition_config):
+    """key=value tokens must be treated as overrides, not as config file paths.
+
+    Regression test: with nargs='+' on a single positional, all tokens are
+    consumed greedily. The splitting logic (args with '=' → overrides, rest →
+    config paths) must ensure that dotlist overrides are applied correctly and
+    that no override token is passed to OmegaConf.load() as a file path.
+    """
+    from activelearning.main import main
+
+    override = "budget.available_budget=0.001"
+
+    with patch.object(
+        sys,
+        "argv",
+        ["activelearning", str(base_config), str(acquisition_config), override],
+    ):
+        # main() must complete without raising (e.g. FileNotFoundError on the
+        # override token being treated as a config path, or a Pydantic
+        # validation error from a missing acquisition block).
+        main()
+
+
+def test_cli_override_takes_effect_over_config_value(base_config, acquisition_config):
+    """A key=value CLI override must supersede the value set in the YAML file.
+
+    Verifies the override is actually applied by inspecting the parsed config
+    before the loop runs, using load_config directly with the same split logic.
+    """
+    override_value = 0.001
+    cfg = load_config(
+        path=[base_config, acquisition_config],
+        overrides=[f"budget.available_budget={override_value}"],
+    )
+    assert cfg.budget.available_budget == pytest.approx(override_value), (
+        "CLI override must take precedence over the value defined in the YAML config."
+    )
+
+
+def test_cli_raises_when_no_config_path_provided(tmp_path):
+    """Passing only key=value tokens with no config path must raise ValueError."""
+    from activelearning.main import main
+
+    with patch.object(sys, "argv", ["activelearning", "budget.available_budget=1.0"]):
+        with pytest.raises(ValueError, match="At least one config file path"):
+            main()
+
+
+def test_cli_unknown_flags_emit_warning_and_do_not_crash(
+    base_config, acquisition_config
+):
+    """Unknown --flag arguments must emit a UserWarning and not raise SystemExit.
+
+    Regression: parse_args() exits on unrecognised flags; parse_known_args()
+    collects them so the process can continue and warn the user.
+    """
+    from activelearning.main import main
+
+    with patch.object(
+        sys,
+        "argv",
+        [
+            "activelearning",
+            str(base_config),
+            str(acquisition_config),
+            "--seed",
+            "42",
+        ],
+    ):
+        with pytest.warns(UserWarning, match="Unrecognised arguments ignored"):
+            main()
