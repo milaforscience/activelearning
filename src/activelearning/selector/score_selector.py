@@ -45,11 +45,6 @@ class TopKAcquisitionSelector(Selector):
             raise ValueError("Acquisition function is required for ScoreSelector.")
         if not candidates:
             return []
-        if not acquisition.supports_singleton_scoring:
-            raise ValueError(
-                "TopKAcquisitionSelector requires an acquisition that supports "
-                "singleton scoring."
-            )
 
         acq_values = acquisition.score(candidates)
         ranked = sorted(zip(candidates, acq_values), key=lambda cv: cv[1], reverse=True)
