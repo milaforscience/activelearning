@@ -1,10 +1,23 @@
 import torch
-from typing import Annotated, Literal, Union
+from typing import Annotated, Callable, Literal, Union
 
 from pydantic import BaseModel, Field
 
 
-def constant_schedule(value: float):
+def constant_schedule(value: float) -> Callable[[int], float]:
+    """Return a schedule that allocates a fixed budget every round.
+
+    Parameters
+    ----------
+    value : float
+        Budget allocated per round, regardless of round index.
+
+    Returns
+    -------
+    Callable[[int], float]
+        A callable that accepts a round index and returns ``value``.
+    """
+
     def schedule(_: int) -> float:
         return value
 
@@ -16,7 +29,38 @@ def sigmoid_iteration_schedule(
     num_iterations: int,
     midpoint_fraction: float,
     steepness: float,
-):
+) -> Callable[[int], float]:
+    """Return a schedule that distributes budget according to a sigmoid curve.
+
+    The per-round allocation is derived from increments of the sigmoid CDF,
+    so cumulative spend follows an S-curve. Early rounds receive a smaller
+    share; spending accelerates around ``midpoint_fraction * num_iterations``
+    and tapers off thereafter. All allocations sum exactly to ``total_budget``.
+
+    Uses ``torch.sigmoid`` internally, which is numerically stable for any
+    finite steepness value.
+
+    Parameters
+    ----------
+    total_budget : float
+        Total budget to distribute across all rounds.
+    num_iterations : int
+        Number of rounds over which the budget is distributed.
+    midpoint_fraction : float
+        Fraction of total iterations at which the sigmoid is centred,
+        i.e. where spending rate is highest. Must be in ``(0, 1)``.
+    steepness : float
+        Controls how sharply spending accelerates around the midpoint.
+        Higher values produce a more step-like allocation.
+
+    Returns
+    -------
+    Callable[[int], float]
+        A callable that accepts a round index and returns the pre-computed
+        budget allocation for that round. Returns ``0.0`` for out-of-range
+        indices.
+    """
+
     def _sigmoid(x: float) -> float:
         return torch.sigmoid(torch.tensor(steepness * (x - midpoint_fraction))).item()
 
