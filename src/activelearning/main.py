@@ -29,7 +29,7 @@ from activelearning.logger.config import bootstrap_logger_backend_imports
 from activelearning.utils.config_loader import load_config
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(
         prog="activelearning",
         description=(
