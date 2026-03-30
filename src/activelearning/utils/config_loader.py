@@ -26,7 +26,8 @@ def load_config(
     Returns
     -------
     DictConfig
-        The merged, validated OmegaConf config object.
+        The merged OmegaConf config object. Schema validation is performed
+        separately via ``parse_config`` using a Pydantic model.
     """
     paths = [path] if not isinstance(path, list) else path
     cfg = OmegaConf.merge(*[OmegaConf.load(p) for p in paths])
