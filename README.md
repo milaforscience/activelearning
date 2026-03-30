@@ -79,7 +79,7 @@ uv run activelearning config/branin_toy_example.yaml
 | **Acquisition** | qMFLBMES (lower-bound multi-fidelity max-value entropy search) |
 | **Sampler** | Latin Hypercube Sampling over the 2D domain (10 000 candidates) |
 | **Selector** | Cost-aware greedy (bang-per-buck within round budget) |
-| **Budget** | 20.0 total, 1.0 allocated per round (constant schedule) |
+| **Budget** | 100.0 total, 5.0 allocated per round (constant schedule) |
 
 ### Config Structure
 
