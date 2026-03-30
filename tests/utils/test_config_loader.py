@@ -249,24 +249,39 @@ def test_cli_separates_overrides_from_config_paths(base_config, acquisition_conf
 def test_cli_override_takes_effect_over_config_value(base_config, acquisition_config):
     """A key=value token in sys.argv must override the value set in the YAML file.
 
-    Calls ``main()`` end-to-end and verifies the loop runs with the overridden
-    budget, confirming the CLI splitting logic passes the override to
-    ``load_config`` rather than treating it as a config file path.
+    Patches ``active_learning`` to capture the ``budget`` argument passed at
+    runtime, then asserts its ``available_budget`` reflects the CLI override
+    rather than the value defined in the YAML file.
     """
     from activelearning.main import main
 
-    override = "budget.available_budget=0.001"
+    captured = {}
+
+    def _capture_budget(*args, **kwargs):
+        captured["budget"] = kwargs.get("budget") or args[5]
+        # Return the shape expected by main(): (dataset, total_cost, num_rounds)
+        return kwargs.get("dataset") or args[0], 0.0, 0
 
     with patch.object(
         sys,
         "argv",
-        ["activelearning", str(base_config), str(acquisition_config), override],
+        [
+            "activelearning",
+            str(base_config),
+            str(acquisition_config),
+            "budget.available_budget=0.001",
+        ],
     ):
-        # If the override were silently dropped, the loop would run with the
-        # base budget (0.05) instead of the tighter one (0.001). Both are valid
-        # runs so we can't distinguish them here; the key assertion is that the
-        # override token is not treated as a file path (which would raise).
-        main()
+        with patch(
+            "activelearning.active_learning.active_learning",
+            side_effect=_capture_budget,
+        ):
+            main()
+
+    assert "budget" in captured, "active_learning was not called."
+    assert captured["budget"].available_budget == pytest.approx(0.001), (
+        "CLI override must take precedence over the value defined in the YAML config."
+    )
 
 
 def test_cli_raises_when_no_config_path_provided():
