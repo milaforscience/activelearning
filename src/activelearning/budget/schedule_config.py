@@ -1,4 +1,4 @@
-import math
+import torch
 from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field
@@ -18,7 +18,7 @@ def sigmoid_iteration_schedule(
     steepness: float,
 ):
     def _sigmoid(x: float) -> float:
-        return 1.0 / (1.0 + math.exp(-steepness * (x - midpoint_fraction)))
+        return torch.sigmoid(torch.tensor(steepness * (x - midpoint_fraction))).item()
 
     # Use CDF increments so cumulative spend follows a sigmoid.
     weights = [
