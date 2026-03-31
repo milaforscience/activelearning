@@ -43,10 +43,10 @@ oracle:
     3: 1.0
 
 budget:
-  available_budget: 20.0
+  available_budget: 100.0
   schedule:
     type: constant
-    value: 1.0
+    value: 5.0
 
 logger:
   type: ConsoleLogger

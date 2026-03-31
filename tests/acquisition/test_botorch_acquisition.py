@@ -11,7 +11,7 @@ from activelearning.acquisition.botorch.botorch_acquisition import (
     AnalyticBoTorchAcquisition,
     QBatchBoTorchAcquisition,
 )
-from activelearning.acquisition.candidate_set import TrainDataCandidateSetSpec
+from activelearning.acquisition.botorch.candidate_set import TrainDataCandidateSetSpec
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
 from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
 from activelearning.utils.types import Candidate, Observation
@@ -137,11 +137,9 @@ class TestCapabilityFlags:
         acq = StubAnalytic(
             maximize=False,
             target_fidelity_value=0.8,
-            fidelity_costs={0: 1.0, 1: 5.0},
         )
         assert acq.maximize is False
         assert acq._target_fidelity_value_override == 0.8
-        assert acq._fidelity_costs == {0: 1.0, 1: 5.0}
 
 
 # ===================================================================
@@ -157,7 +155,7 @@ class TestParameterValidation:
         from activelearning.acquisition.botorch.botorch_multifidelity import (
             QMultiFidelityMaxValueEntropy,
         )
-        from activelearning.acquisition.candidate_set import (
+        from activelearning.acquisition.botorch.candidate_set import (
             HypercubeCandidateSetSpec,
         )
 
@@ -176,7 +174,7 @@ class TestParameterValidation:
         from activelearning.acquisition.botorch.botorch_multifidelity import (
             QMultiFidelityMaxValueEntropy,
         )
-        from activelearning.acquisition.candidate_set import (
+        from activelearning.acquisition.botorch.candidate_set import (
             HypercubeCandidateSetSpec,
         )
 
@@ -195,7 +193,7 @@ class TestParameterValidation:
         from activelearning.acquisition.botorch.botorch_multifidelity import (
             QMultiFidelityMaxValueEntropy,
         )
-        from activelearning.acquisition.candidate_set import (
+        from activelearning.acquisition.botorch.candidate_set import (
             HypercubeCandidateSetSpec,
         )
 
@@ -223,25 +221,22 @@ class TestPropertiesBeforeUpdate:
         return StubAnalytic()
 
     def test_botorch_surrogate_is_none(self, acq: StubAnalytic) -> None:
-        assert acq.botorch_surrogate is None
+        assert acq._botorch_surrogate is None
 
     def test_botorch_acqf_is_none(self, acq: StubAnalytic) -> None:
-        assert acq.botorch_acqf is None
+        assert acq._botorch_acqf is None
 
     def test_observations_cache_is_none(self, acq: StubAnalytic) -> None:
-        assert acq.observations_cache is None
+        assert acq._observations_cache is None
 
     def test_resolved_target_fidelity_value_is_none(self, acq: StubAnalytic) -> None:
-        assert acq.resolved_target_fidelity_value is None
+        assert acq._resolved_target_fidelity_value is None
 
     def test_resolved_project_fn_is_none(self, acq: StubAnalytic) -> None:
-        assert acq.resolved_project_to_target_fidelity_fn is None
+        assert acq._resolved_project_to_target_fidelity_fn is None
 
-    def test_resolved_cost_model_is_none(self, acq: StubAnalytic) -> None:
-        assert acq.resolved_cost_model is None
-
-    def test_resolved_cost_aware_utility_is_none(self, acq: StubAnalytic) -> None:
-        assert acq.resolved_cost_aware_utility is None
+    def test_cost_aware_utility_is_none_by_default(self, acq: StubAnalytic) -> None:
+        assert acq._cost_aware_utility_override is None
 
 
 # ===================================================================
@@ -269,7 +264,7 @@ class TestUpdateValidation:
     ) -> None:
         acq = StubAnalytic()
         acq.update(fitted_surrogate, single_fidelity_observations)
-        assert acq.botorch_surrogate is fitted_surrogate
+        assert acq._botorch_surrogate is fitted_surrogate
 
     def test_stores_surrogate_on_base(
         self,
@@ -279,7 +274,7 @@ class TestUpdateValidation:
         acq = StubAnalytic()
         acq.update(fitted_surrogate)
         assert acq.surrogate is fitted_surrogate
-        assert acq.botorch_surrogate is fitted_surrogate
+        assert acq._botorch_surrogate is fitted_surrogate
 
 
 # ===================================================================
@@ -293,7 +288,7 @@ class TestObservationsCache:
     def test_none_when_not_provided(self, fitted_surrogate: BoTorchGPSurrogate) -> None:
         acq = StubAnalytic()
         acq.update(fitted_surrogate)
-        assert acq.observations_cache is None
+        assert acq._observations_cache is None
 
     def test_materialized_from_list(
         self,
@@ -302,7 +297,7 @@ class TestObservationsCache:
     ) -> None:
         acq = StubAnalytic()
         acq.update(fitted_surrogate, single_fidelity_observations)
-        assert acq.observations_cache == single_fidelity_observations
+        assert acq._observations_cache == single_fidelity_observations
 
     def test_materialized_from_generator(
         self,
@@ -316,7 +311,7 @@ class TestObservationsCache:
 
         acq = StubAnalytic()
         acq.update(fitted_surrogate, gen())
-        assert acq.observations_cache == single_fidelity_observations
+        assert acq._observations_cache == single_fidelity_observations
 
     def test_empty_observations_yield_empty_list(
         self,
@@ -324,7 +319,7 @@ class TestObservationsCache:
     ) -> None:
         acq = StubAnalytic()
         acq.update(fitted_surrogate, [])
-        assert acq.observations_cache == []
+        assert acq._observations_cache == []
 
 
 # ===================================================================
@@ -345,10 +340,10 @@ class TestRepeatedUpdate:
 
         acq = StubAnalytic()
         acq.update(s1, single_fidelity_observations)
-        assert acq.botorch_surrogate is s1
+        assert acq._botorch_surrogate is s1
 
         acq.update(s2, single_fidelity_observations)
-        assert acq.botorch_surrogate is s2
+        assert acq._botorch_surrogate is s2
 
     def test_replaces_acqf(
         self,
@@ -357,11 +352,11 @@ class TestRepeatedUpdate:
     ) -> None:
         acq = StubAnalytic()
         acq.update(fitted_surrogate, single_fidelity_observations)
-        first_acqf = acq.botorch_acqf
+        first_acqf = acq._botorch_acqf
 
         acq.update(fitted_surrogate, single_fidelity_observations)
         assert first_acqf is not None
-        assert acq.botorch_acqf is not first_acqf
+        assert acq._botorch_acqf is not first_acqf
 
     def test_observations_replaced(
         self,
@@ -370,13 +365,13 @@ class TestRepeatedUpdate:
     ) -> None:
         acq = StubAnalytic()
         acq.update(fitted_surrogate, single_fidelity_observations)
-        assert acq.observations_cache is not None
-        assert len(acq.observations_cache) == 3
+        assert acq._observations_cache is not None
+        assert len(acq._observations_cache) == 3
 
         subset = single_fidelity_observations[:1]
         acq.update(fitted_surrogate, subset)
-        assert acq.observations_cache is not None
-        assert len(acq.observations_cache) == 1
+        assert acq._observations_cache is not None
+        assert len(acq._observations_cache) == 1
 
 
 # ===================================================================
@@ -568,8 +563,8 @@ class TestMultiFidelityResolution:
     ) -> None:
         acq = StubAnalytic()
         acq.update(fitted_surrogate, single_fidelity_observations)
-        assert acq.resolved_target_fidelity_value is None
-        assert acq.resolved_project_to_target_fidelity_fn is None
+        assert acq._resolved_target_fidelity_value is None
+        assert acq._resolved_project_to_target_fidelity_fn is None
 
     def test_multi_fidelity_resolves_target_value(
         self,
@@ -578,8 +573,8 @@ class TestMultiFidelityResolution:
     ) -> None:
         acq = StubAnalytic()
         acq.update(fitted_mf_surrogate, multi_fidelity_observations)
-        assert acq.resolved_target_fidelity_value is not None
-        assert acq.resolved_target_fidelity_value == 1.0  # max confidence
+        assert acq._resolved_target_fidelity_value is not None
+        assert acq._resolved_target_fidelity_value == 1.0  # max confidence
 
     def test_multi_fidelity_resolves_projection_fn(
         self,
@@ -588,7 +583,7 @@ class TestMultiFidelityResolution:
     ) -> None:
         acq = StubAnalytic()
         acq.update(fitted_mf_surrogate, multi_fidelity_observations)
-        proj_fn = acq.resolved_project_to_target_fidelity_fn
+        proj_fn = acq._resolved_project_to_target_fidelity_fn
         assert proj_fn is not None
 
         # Verify the projection overwrites the fidelity dimension.
@@ -596,8 +591,8 @@ class TestMultiFidelityResolution:
         X_proj = proj_fn(X)
         fid_dim = fitted_mf_surrogate.get_fidelity_dimension()
         assert fid_dim is not None
-        assert acq.resolved_target_fidelity_value is not None
-        assert torch.all(X_proj[..., fid_dim] == acq.resolved_target_fidelity_value)
+        assert acq._resolved_target_fidelity_value is not None
+        assert torch.all(X_proj[..., fid_dim] == acq._resolved_target_fidelity_value)
 
     def test_target_fidelity_override(
         self,
@@ -607,7 +602,7 @@ class TestMultiFidelityResolution:
         """User-specified override takes precedence over surrogate default."""
         acq = StubAnalytic(target_fidelity_value=0.42)
         acq.update(fitted_mf_surrogate, multi_fidelity_observations)
-        assert acq.resolved_target_fidelity_value == 0.42
+        assert acq._resolved_target_fidelity_value == 0.42
 
     def test_custom_projection_fn_override(
         self,
@@ -621,7 +616,7 @@ class TestMultiFidelityResolution:
 
         acq = StubAnalytic(project_to_target_fidelity_fn=custom_fn)
         acq.update(fitted_mf_surrogate, multi_fidelity_observations)
-        assert acq.resolved_project_to_target_fidelity_fn is custom_fn
+        assert acq._resolved_project_to_target_fidelity_fn is custom_fn
 
 
 # ===================================================================
@@ -639,41 +634,18 @@ class TestCostAwareResolution:
     ) -> None:
         acq = StubAnalytic()
         acq.update(fitted_surrogate, single_fidelity_observations)
-        assert acq.resolved_cost_model is None
-        assert acq.resolved_cost_aware_utility is None
-
-    def test_custom_cost_model_override(
-        self,
-        fitted_surrogate: BoTorchGPSurrogate,
-        single_fidelity_observations: list[Observation],
-    ) -> None:
-        cost_model = object()
-        cost_utility = object()
-        # Both must be provided since default utility builder is not implemented.
-        acq = StubAnalytic(cost_model=cost_model, cost_aware_utility=cost_utility)
-        acq.update(fitted_surrogate, single_fidelity_observations)
-        assert acq.resolved_cost_model is cost_model
-        assert acq.resolved_cost_aware_utility is cost_utility
+        assert acq._cost_aware_utility_override is None
 
     def test_custom_cost_aware_utility_override(
         self,
         fitted_surrogate: BoTorchGPSurrogate,
         single_fidelity_observations: list[Observation],
     ) -> None:
+        """A user-provided cost-aware utility is stored and accessible."""
         sentinel = object()
         acq = StubAnalytic(cost_aware_utility=sentinel)
         acq.update(fitted_surrogate, single_fidelity_observations)
-        assert acq.resolved_cost_aware_utility is sentinel
-
-    def test_fidelity_costs_without_implementation_raises(
-        self,
-        fitted_surrogate: BoTorchGPSurrogate,
-        single_fidelity_observations: list[Observation],
-    ) -> None:
-        """Default cost-model builder is not implemented yet — should raise."""
-        acq = StubAnalytic(fidelity_costs={0: 1.0, 1: 5.0})
-        with pytest.raises(NotImplementedError, match="cost-model construction"):
-            acq.update(fitted_surrogate, single_fidelity_observations)
+        assert acq._cost_aware_utility_override is sentinel
 
 
 # ===================================================================
@@ -691,7 +663,7 @@ class TestBuildLifecycle:
     ) -> None:
         acq = StubAnalytic()
         acq.update(fitted_surrogate, single_fidelity_observations)
-        assert acq.botorch_acqf is not None
+        assert acq._botorch_acqf is not None
 
     def test_acqf_rebuilt_on_each_update(
         self,
@@ -701,10 +673,10 @@ class TestBuildLifecycle:
         """Each update() should produce a fresh acquisition object."""
         acq = StubAnalytic()
         acq.update(fitted_surrogate, single_fidelity_observations)
-        first = acq.botorch_acqf
+        first = acq._botorch_acqf
 
         acq.update(fitted_surrogate, single_fidelity_observations)
-        second = acq.botorch_acqf
+        second = acq._botorch_acqf
         # The stub returns a new lambda each time.
         assert first is not second
 

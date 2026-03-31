@@ -2,19 +2,24 @@
 
 Usage
 -----
-    python -m activelearning <config.yaml> [key=value ...]
+    python -m activelearning <config.yaml> [<config2.yaml> ...] [key=value ...]
 
 Positional arguments
 --------------------
-config
-    Path to a YAML configuration file (see ActiveLearningConfig).
+args
+    One or more YAML configuration file paths, optionally followed by
+    OmegaConf dotlist overrides. Arguments containing ``=`` are treated as
+    overrides; all other arguments are treated as config file paths.
+    Multiple config files are merged left to right (later files take
+    precedence for shared keys). Overrides are applied last.
 
-Optional overrides
-------------------
-key=value
-    OmegaConf dotlist overrides applied on top of the config file, e.g.:
+Examples
+--------
+    # Single config with overrides
+    uv run activelearning config/base.yaml budget.available_budget=10
 
-        budget.available_budget=200 acquisition.beta=0.5
+    # Merge two configs, then apply an override
+    uv run activelearning config/base.yaml config/mf.yaml sampler.num_samples=500
 """
 
 import argparse
@@ -24,26 +29,54 @@ from activelearning.logger.config import bootstrap_logger_backend_imports
 from activelearning.utils.config_loader import load_config
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(
         prog="activelearning",
-        description="Run the active learning loop from a YAML config file.",
+        description=(
+            "Run the active learning loop from one or more YAML config files. "
+            "Arguments containing '=' are treated as OmegaConf dotlist overrides; "
+            "all other arguments are treated as config file paths merged left to right."
+        ),
     )
-    parser.add_argument("config", help="Path to YAML config file.")
     parser.add_argument(
-        "overrides",
-        nargs="*",
-        metavar="key=value",
-        help="OmegaConf dotlist overrides (e.g. budget.available_budget=100).",
+        "args",
+        nargs="+",
+        metavar="config_or_override",
+        help=(
+            "Config file path(s) and/or key=value overrides. "
+            "Example: config/base.yaml config/mf.yaml budget.available_budget=5"
+        ),
     )
-    return parser.parse_args()
+    return parser.parse_known_args()
 
 
 def main() -> None:
     """Load config, build components, run the active learning loop."""
-    args = _parse_args()
+    args, unknown = _parse_args()
 
-    raw_cfg = load_config(path=args.config, overrides=args.overrides or None)
+    configs = [a for a in args.args if "=" not in a]
+    overrides = [a for a in args.args if "=" in a]
+
+    if unknown:
+        import warnings
+
+        warnings.warn(
+            f"Unrecognised arguments ignored: {unknown}. "
+            "Pass OmegaConf overrides as positional key=value tokens, "
+            "e.g. budget.available_budget=10.",
+            stacklevel=2,
+        )
+
+    if not configs:
+        raise ValueError(
+            "At least one config file path must be provided. "
+            "Arguments containing '=' are interpreted as overrides."
+        )
+
+    raw_cfg = load_config(
+        path=configs if len(configs) > 1 else configs[0],
+        overrides=overrides or None,
+    )
     bootstrap_logger_backend_imports(OmegaConf.to_container(raw_cfg, resolve=False))
 
     from activelearning.active_learning import active_learning

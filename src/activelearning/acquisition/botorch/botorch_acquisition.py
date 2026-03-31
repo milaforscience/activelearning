@@ -31,8 +31,6 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         project_to_target_fidelity_fn: Optional[
             Callable[[torch.Tensor], torch.Tensor]
         ] = None,
-        fidelity_costs: Optional[dict[int, float]] = None,
-        cost_model: Optional[Any] = None,
         cost_aware_utility: Optional[Any] = None,
     ) -> None:
         """Initialize the BoTorch acquisition base.
@@ -42,16 +40,28 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         maximize : bool, default=True
             If True, the acquisition assumes a maximization objective.
         target_fidelity_value : float, optional
-            Override for the encoded target fidelity value. If None, inferred
-            from the surrogate.
+            Encoded fidelity level at which the objective is ultimately
+            evaluated. In multi-fidelity settings, acquisition functions
+            measure the value of lower-fidelity queries in terms of their
+            impact on a designated *target fidelity* — typically the highest
+            fidelity, but not restricted to it. If ``None``, the target
+            fidelity is inferred from the surrogate.
         project_to_target_fidelity_fn : callable, optional
-            Callable that projects encoded inputs to the target fidelity.
-        fidelity_costs : dict[int, float], optional
-            Mapping from fidelity ids to query costs.
-        cost_model : object, optional
-            Custom BoTorch-compatible cost model.
+            Callable that maps encoded inputs to the target fidelity level.
+            Given an encoded input tensor, returns a version where the
+            fidelity dimension has been set or transformed to the target
+            fidelity. In the common case this corresponds to setting the
+            fidelity coordinate to a fixed value (e.g. the highest fidelity),
+            but more general transformations are supported. If ``None``, a
+            default projection is constructed from the surrogate.
         cost_aware_utility : object, optional
-            Custom BoTorch-compatible cost-aware utility.
+            A BoTorch-compatible cost-aware utility that adjusts acquisition
+            values to account for the cost of querying at different fidelity
+            levels. This encapsulates both the cost model and the utility
+            transformation (e.g. dividing information gain by query cost).
+            If ``None``, acquisition values are not cost-adjusted.
+            See :class:`botorch.acquisition.cost_aware.CostAwareUtility`
+            for the expected interface.
         """
         super().__init__()
         self.maximize = maximize
@@ -59,10 +69,6 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         # User-specified multi-fidelity / cost-aware configuration
         self._target_fidelity_value_override = target_fidelity_value
         self._project_to_target_fidelity_fn_override = project_to_target_fidelity_fn
-        self._fidelity_costs = (
-            dict(fidelity_costs) if fidelity_costs is not None else None
-        )
-        self._cost_model_override = cost_model
         self._cost_aware_utility_override = cost_aware_utility
 
         # Typed runtime state populated during update()
@@ -75,45 +81,6 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         self._resolved_project_to_target_fidelity_fn: Optional[
             Callable[[torch.Tensor], torch.Tensor]
         ] = None
-        self._resolved_cost_model: Optional[Any] = None
-        self._resolved_cost_aware_utility: Optional[Any] = None
-
-    @property
-    def botorch_surrogate(self) -> Optional[BoTorchGPSurrogate]:
-        """The typed BoTorch surrogate, or ``None`` before ``update()``."""
-        return self._botorch_surrogate
-
-    @property
-    def botorch_acqf(self) -> Optional[Any]:
-        """The internal BoTorch acquisition object, or ``None`` before ``update()``."""
-        return self._botorch_acqf
-
-    @property
-    def observations_cache(self) -> Optional[list[Observation]]:
-        """Materialized observations from the current update cycle, or ``None``."""
-        return self._observations_cache
-
-    @property
-    def resolved_target_fidelity_value(self) -> Optional[float]:
-        """Encoded target fidelity value, or ``None`` when not applicable."""
-        return self._resolved_target_fidelity_value
-
-    @property
-    def resolved_project_to_target_fidelity_fn(
-        self,
-    ) -> Optional[Callable[[torch.Tensor], torch.Tensor]]:
-        """Target-fidelity projection callable, or ``None`` if not applicable."""
-        return self._resolved_project_to_target_fidelity_fn
-
-    @property
-    def resolved_cost_model(self) -> Optional[Any]:
-        """Resolved cost model, or ``None`` if not used."""
-        return self._resolved_cost_model
-
-    @property
-    def resolved_cost_aware_utility(self) -> Optional[Any]:
-        """Resolved cost-aware utility, or ``None`` if not used."""
-        return self._resolved_cost_aware_utility
 
     def update(
         self,
@@ -139,25 +106,22 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         TypeError
             If the surrogate is not a ``BoTorchGPSurrogate``.
         """
-        super().update(surrogate, observations)
-
         if not isinstance(surrogate, BoTorchGPSurrogate):
             raise TypeError(
                 f"{self.__class__.__name__} requires a BoTorchGPSurrogate, "
                 f"but received {type(surrogate).__name__}."
             )
+        obs_list = list(observations) if observations is not None else None
+        super().update(surrogate, obs_list)
+
         self._botorch_surrogate = surrogate
-        self._observations_cache = (
-            list(observations) if observations is not None else None
-        )
+        self._observations_cache = obs_list
 
         # Resolve shared MF / cost-aware helpers before building the acqf.
         self._resolved_target_fidelity_value = self._resolve_target_fidelity_value()
         self._resolved_project_to_target_fidelity_fn = (
             self._resolve_projection_to_target_fidelity()
         )
-        self._resolved_cost_model = self._resolve_cost_model()
-        self._resolved_cost_aware_utility = self._resolve_cost_aware_utility()
 
         self._botorch_acqf = self._build_botorch_acquisition()
 
@@ -260,97 +224,6 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
             return X_projected
 
         return project_to_target_fidelity
-
-    def _resolve_cost_model(self) -> Optional[Any]:
-        """Resolve the cost model used by cost-aware acquisitions.
-
-        Resolution order:
-        1. User-provided custom cost model.
-        2. Library default from fidelity-cost mapping.
-        3. No cost model.
-
-        Returns
-        -------
-        result : Optional[Any]
-            Resolved cost model object, or ``None`` if not used.
-        """
-        if self._cost_model_override is not None:
-            return self._cost_model_override
-
-        if self._fidelity_costs is None:
-            return None
-
-        return self._build_default_cost_model_from_fidelity_costs(self._fidelity_costs)
-
-    def _resolve_cost_aware_utility(self) -> Optional[Any]:
-        """Resolve the cost-aware utility used by cost-aware acquisitions.
-
-        Resolution order:
-        1. User-provided custom cost-aware utility.
-        2. Utility built from the resolved cost model.
-        3. No cost-aware utility.
-
-        Returns
-        -------
-        result : Optional[Any]
-            Resolved cost-aware utility object, or ``None`` if not used.
-        """
-        if self._cost_aware_utility_override is not None:
-            return self._cost_aware_utility_override
-
-        if self._resolved_cost_model is None:
-            return None
-
-        return self._build_default_cost_aware_utility(self._resolved_cost_model)
-
-    def _build_default_cost_model_from_fidelity_costs(
-        self,
-        fidelity_costs: dict[int, float],
-    ) -> Any:
-        """Build a default cost model from a fidelity-cost mapping.
-
-        Parameters
-        ----------
-        fidelity_costs : dict[int, float]
-            Mapping from integer fidelity ids to query costs.
-
-        Returns
-        -------
-        result : Any
-            BoTorch-compatible cost model.
-
-        Raises
-        ------
-        NotImplementedError
-            Default fidelity-cost-based cost modeling has not yet been
-            implemented in the base class.
-        """
-        raise NotImplementedError(
-            "Default cost-model construction from fidelity costs is not implemented yet."
-        )
-
-    def _build_default_cost_aware_utility(self, cost_model: Any) -> Any:
-        """Build a default cost-aware utility from a resolved cost model.
-
-        Parameters
-        ----------
-        cost_model : Any
-            Resolved BoTorch-compatible cost model.
-
-        Returns
-        -------
-        result : Any
-            BoTorch-compatible cost-aware utility.
-
-        Raises
-        ------
-        NotImplementedError
-            Default cost-aware utility construction has not yet been
-            implemented in the base class.
-        """
-        raise NotImplementedError(
-            "Default cost-aware utility construction is not implemented yet."
-        )
 
     @abstractmethod
     def _build_botorch_acquisition(self) -> Any:
