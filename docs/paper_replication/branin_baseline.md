@@ -5,7 +5,7 @@ The canonical Branin benchmark page is now
 
 Use that page for:
 
-- the current runnable baseline: `config/branin_botorch_toy.yaml`,
+- the current runnable baseline: `config/branin_multi_fidelity.yaml`,
 - the adaptable scaffolds: `config/branin_toy.yaml` and
   `config/branin_gflownet_toy.yaml`, and
 - the current boundary between benchmark use and future paper-replication work.

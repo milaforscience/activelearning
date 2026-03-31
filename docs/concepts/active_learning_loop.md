@@ -1,8 +1,6 @@
 # Active Learning Execution Loop
 
-The active learning execution loop iteratively manages budget constraints while interacting with the core components. Iteratively, it: (1) fits the surrogate on current data, (2) samples candidates, (3) selects candidates to label, and (4) queries the oracle and adds observations. The loop stops when the budget is exhausted or no affordable candidates remain.
-
-The architectural sequence is formally defined as:
+The active learning loop is the central orchestration mechanism. Each round, it fits the surrogate on everything observed so far, generates a pool of candidate queries, selects a budget-affordable subset, evaluates them through the oracle, and appends the results to the dataset. The loop stops when the budget is exhausted or no affordable candidates remain.
 
 ```mermaid
 graph TD
@@ -20,58 +18,67 @@ graph TD
     Oracle -.->|Cost Deduction| Budget
 ```
 
-## Context Binding and Initialization
+## Initialisation
 
-Prior to the loop, the system binds the shared `RuntimeContext` to all active learning components ([`Dataset`](../api/dataset.md#activelearning.dataset.dataset.Dataset), [`Surrogate`](../api/surrogate.md#activelearning.surrogate.surrogate.Surrogate), [`Acquisition`](../api/acquisition.md#activelearning.acquisition.acquisition.Acquisition), [`Sampler`](../api/sampler.md#activelearning.sampler.sampler.Sampler), [`Selector`](../api/selector.md#activelearning.selector.selector.Selector), [`Oracle`](../api/oracle.md#activelearning.oracle.oracle.Oracle), [`Budget`](../api/budget.md#activelearning.budget.budget.Budget)). It then propagates oracle fidelity confidences to the surrogate via [`set_fidelity_confidences()`](../api/surrogate.md#activelearning.surrogate.surrogate.Surrogate.set_fidelity_confidences) before the loop begins. Surrogates that do not use fidelity metadata can safely ignore this as a no-op default.
+Before the loop begins, a shared [`RuntimeContext`](../api/runtime_and_types.md) is constructed from the YAML config and bound to all components. This propagates the compute device, floating-point precision, and logger reference across the entire experiment — every component sees the same execution environment without any per-component wiring.
 
-## Active Learning Loop (Per Round)
+Oracle fidelity confidences are also forwarded to the surrogate at this point so it can incorporate fidelity-specific uncertainty scaling from the start.
 
-While [`budget.available_budget`](../api/budget.md#activelearning.budget.budget.Budget) > 0, the loop executes the following sequence:
+## Per-Round Sequence
 
-### 1. Observation Retrieval
-The system calls [`dataset.get_observations_iterable()`](../api/dataset.md#activelearning.dataset.dataset.Dataset.get_observations_iterable) once per round. This ensures all downstream consumers share the same consistent epoch view of the historical observations.
+Each round of the loop performs the following steps in order.
 
-### 2. Surrogate Model Update
-The framework dispatches the [surrogate](../api/surrogate.md#activelearning.surrogate.surrogate.Surrogate) update based on its declared strategy:
+### 1. Observation retrieval
 
-- If [`updates_from_latest()`](../api/surrogate.md#activelearning.surrogate.surrogate.Surrogate.updates_from_latest) is True, it performs an incremental update on new observations only via [`dataset.get_latest_observations_iterable()`](../api/dataset.md#activelearning.dataset.dataset.Dataset.get_latest_observations_iterable).
-- If False, it executes a full refit via [`fit()`](../api/surrogate.md#activelearning.surrogate.surrogate.Surrogate.fit) using the shared observations iterable, guaranteeing it sees the same consistent data as the acquisition and sampler.
+The loop takes a consistent snapshot of the dataset at the start of each round. All downstream components in that round share the same view of historical data.
 
-### 3. Acquisition Update
-The system only couples the [acquisition function](../api/acquisition.md#activelearning.acquisition.acquisition.Acquisition) to the surrogate once [`surrogate.is_fitted()`](../api/surrogate.md#activelearning.surrogate.surrogate.Surrogate.is_fitted) evaluates to True. Before fitting, the acquisition falls back to its unfitted behaviour (e.g., returning zero scores), enabling random candidate selection on a cold start.
+### 2. Surrogate update
 
-### 4. Candidate Sampling
-The [sampler](../api/sampler.md#activelearning.sampler.sampler.Sampler) proposes candidate subsets, returning `samples`. It uses the [acquisition](../api/acquisition.md#activelearning.acquisition.acquisition.Acquisition) for scoring candidates and passes current `observations` to avoid re-sampling previously queried points. This generates the candidate pool.
+The surrogate is refitted on the current observations. Depending on the surrogate's strategy, this may be a full refit from scratch or an incremental update on new data only.
 
-### 5. Cost-Aware Selection
-The framework retrieves the round budget via [`budget.get_round_budget()`](../api/budget.md#activelearning.budget.budget.Budget.get_round_budget). The [selector](../api/selector.md#activelearning.selector.selector.Selector) then evaluates the `samples` to choose final candidates, using the [acquisition](../api/acquisition.md#activelearning.acquisition.acquisition.Acquisition) and [`oracle.get_costs()`](../api/oracle.md#activelearning.oracle.oracle.Oracle.get_costs) as the cost function under the round budget constraint.
+!!! note "Cold start"
+    For the first few rounds — before the dataset contains enough points to fit the surrogate reliably — the acquisition falls back to random scoring. This means the algorithm still makes useful queries even with an empty initial dataset.
 
-### 6. Budget Verification and Oracle Query
-Before execution, the system queries the [oracle](../api/oracle.md#activelearning.oracle.oracle.Oracle) to obtain the total cost for the selected batch.
+### 3. Acquisition update
 
-- It verifies affordability via [`budget.can_afford(total_cost)`](../api/budget.md#activelearning.budget.budget.Budget.can_afford).
-- If affordable, it triggers [`budget.consume(total_cost)`](../api/budget.md#activelearning.budget.budget.Budget.consume) and retrieves `new_observations` via [`oracle.query()`](../api/oracle.md#activelearning.oracle.oracle.Oracle.query).
+Once the surrogate is fitted, the acquisition function is coupled to it and updated. This prepares the scoring function for the candidate pool generated in the next step.
 
-### 7. Dataset Update and Telemetry
-The `new_observations` are committed via [`dataset.add_observations()`](../api/dataset.md#activelearning.dataset.dataset.Dataset.add_observations). If a logger exists in the runtime context, the loop records per-round metrics including `round`, `num_new_samples`, `round_cost`, `total_cost`, and `budget_remaining`.
+### 4. Candidate sampling
 
-## Early Termination Notes
+The sampler generates a pool of candidate-fidelity pairs $(x, m)$ to consider. Sampling is guided by the acquisition signal and avoids re-proposing already-queried points. The size of this pool is controlled by `sampler.num_samples`.
 
-To prevent infinite loops, the execution loop terminates early if:
+### 5. Budget-aware selection
 
-- `not selected_samples` evaluates to True (no candidates selected for the round, avoiding stalling).
-- [`budget.can_afford(total_cost)`](../api/budget.md#activelearning.budget.budget.Budget.can_afford) evaluates to False (budget exhausted).
+The selector scores the candidate pool and picks the subset that fits within the current round budget. It jointly uses the acquisition scores and oracle cost estimates to maximise the value extracted per unit budget.
 
-## Breakdown of Modularity and Research Implications
+!!! tip "Round vs. total budget"
+    The **round budget** (`budget.schedule.value`) caps how much can be spent in a single iteration. The **total budget** (`budget.available_budget`) is the global constraint. Both are enforced independently — a round ends when either limit is hit.
 
-Budget-constrained iterative selection is mandatory for diverse, high-scoring scientific discovery; static, one-shot experimental designs cannot adapt dynamically to acquired evidence. This strict modular decomposition permits targeted experimental ablation without modifying the underlying orchestration logic:
+### 6. Oracle query
 
-- Substitute the **[surrogate](../extension-guide/surrogate.md)** to test alternative probabilistic priors or inter-fidelity transfer mechanisms.
-- Substitute the **[acquisition](../extension-guide/acquisition.md)** to bias the search toward exploitation vs. global exploration.
-- Substitute the **[sampler](../extension-guide/sampler.md)** to evaluate generative proposal mechanisms (e.g., GFlowNets).
-- Substitute the **[selector](../extension-guide/selector.md)** to evaluate greedy vs. lookahead budget allocation policies.
-- Substitute the **[oracle](../extension-guide/oracle.md)** to transition from benchmark functions to real-world workflows.
+The selected batch is sent to the oracle, which evaluates the objective at the requested fidelities. The incurred cost is deducted from the budget. If the batch turns out to be unaffordable (e.g. due to rounding), the round is skipped to prevent overspending.
 
-For step-by-step instructions on implementing custom components, see the [Extension Guide](../extension-guide/index.md).
+### 7. Dataset update and telemetry
 
-To explore the mathematical implications of the multi-fidelity parameterization, proceed to [Multi-Fidelity Active Learning](multi_fidelity.md).
+New observations are appended to the dataset, making them available to the next round. If a logger is configured, the loop records per-round metrics including `round`, `num_new_samples`, `round_cost`, `total_cost`, and `budget_remaining`.
+
+## Early Termination
+
+The loop exits early if:
+
+- the candidate pool is empty (no proposals survived selection),
+- the total budget is insufficient to afford any remaining batch.
+
+## Modularity and Extensibility
+
+This strict decomposition makes ablation studies and extensions straightforward:
+
+- Swap the **[surrogate](../extension-guide/surrogate.md)** to test alternative probabilistic models or inter-fidelity transfer mechanisms.
+- Swap the **[acquisition](../extension-guide/acquisition.md)** to change the exploration-exploitation trade-off.
+- Swap the **[sampler](../extension-guide/sampler.md)** to compare generative proposal mechanisms such as GFlowNets against uniform sampling.
+- Swap the **[selector](../extension-guide/selector.md)** to evaluate different budget allocation policies.
+- Swap the **[oracle](../extension-guide/oracle.md)** to move from benchmark functions to real experimental workflows.
+
+See the [Extension Guide](../extension-guide/index.md) for step-by-step instructions, and the [API Reference](../api/index.md) for the full interface definitions of each component.
+
+To explore the mathematical multi-fidelity parameterisation in depth, proceed to [Multi-Fidelity Active Learning](multi_fidelity.md).

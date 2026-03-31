@@ -20,6 +20,7 @@ The configuration file therefore constitutes a complete, reproducible specificat
 The following shows the full set of top-level configuration blocks with example component types:
 
 ```yaml
+runtime:
   device: cpu
   precision: 64
 
@@ -41,7 +42,7 @@ sampler:
   fidelities: [1, 2, 3]
 
 selector:
-  type: KnapsackSelector
+  type: CostAwareSelector
 
 oracle:
   type: BraninOracle
@@ -89,7 +90,7 @@ The included configurations use `cpu` and `precision: 64`. Local sampler-level o
 
 ## Study-Defining Multi-Fidelity Fields
 
-For paper-aligned multi-fidelity experiments, the fields that materially define the study are:
+For multi-fidelity experiments, the fields that materially define the study are:
 
 - `oracle.fidelity_costs`: valid fidelity levels $m \in \mathcal{M}$ and per-query costs $c(x, m)$.
 - `oracle.fidelity_confidences`: optional confidence map $\kappa(m)$; the built-in augmented-function oracles derive it from relative cost when omitted.
@@ -97,14 +98,14 @@ For paper-aligned multi-fidelity experiments, the fields that materially define 
 - `sampler.fidelities`: candidate-fidelity support for the sampler; accepts a simple list for uniform fidelity sampling, or a cost map that biases sampling inversely proportional to fidelity cost.
 - `budget.available_budget` and `budget.schedule`: total expenditure limit and per-round spending policy (`constant` or `sigmoid_iterations` in the current schema).
 
-Not every sampler emits explicit fidelity labels. That distinction is material when a run must mirror the paper's candidate-fidelity query formulation.
+Not every sampler emits explicit fidelity labels. That distinction is material when working with cost-aware, multi-fidelity acquisition functions.
 
 ## Configuration Overrides
 
 The CLI accepts OmegaConf dotlist overrides following the config path. Overrides apply temporary perturbations—budget reductions, candidate-pool changes, solver limits, or nested GFlowNet settings—without duplicating the entire YAML file.
 
 ```bash
-uv run activelearning config/branin_botorch_toy.yaml \
+uv run activelearning config/branin_multi_fidelity.yaml \
   budget.available_budget=1.0 \
   sampler.num_samples=50 \
   selector.time_limit=5
@@ -118,20 +119,27 @@ uv run activelearning config/branin_gflownet_toy.yaml \
   sampler.conf.agent.optimizer.n_train_steps=1000
 ```
 
-Edit the YAML when a change belongs to the canonical experiment definition. Apply CLI overrides when the change is comparative, exploratory, or local to one run.
+!!! tip "When to override vs. when to edit the YAML"
+    Edit the YAML when a change belongs to the canonical experiment definition.
+    Apply CLI overrides when the change is comparative, exploratory, or local to one run.
 
 ## Starting Points
 
-- `config/branin_botorch_toy.yaml` is the most complete end-to-end CLI baseline in the repository.
-- `config/branin_gflownet_toy.yaml` demonstrates the generative sampler block and nested `sampler.conf` override structure.
-- For curated runnable examples, see [Config Examples](../examples/configs.md).
+!!! tip "Good configs to start from"
+    - `config/branin_single_fidelity.yaml` — simplest runnable baseline, single fidelity.
+    - `config/branin_multi_fidelity.yaml` — multi-fidelity baseline with fidelity costs 0.01 / 0.1 / 1.0.
+    - `config/branin_gflownet_toy.yaml` — demonstrates the generative sampler block and nested `sampler.conf` override structure.
+    - `config/aim_logging.yaml` — logger overlay; compose with any base config to add Aim: `uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml`
+
+    For a full walkthrough of both configs, see the [Branin Experiment Tutorial](../tutorials/branin_experiment.md).
 
 ## Recommended Procedure
 
-1. Begin from an included YAML configuration baseline.
-2. Restrict `runtime` to device and precision settings; modify only when a numerical or hardware constraint requires it.
-3. Apply CLI overrides for short validation runs and comparative experiments.
-4. Promote durable changes back into YAML.
-5. Introduce new component classes only when the configuration schema is insufficient.
+!!! note
+    1. Begin from an included YAML configuration baseline.
+    2. Restrict `runtime` to device and precision settings; modify only when a numerical or hardware constraint requires it.
+    3. Apply CLI overrides for short validation runs and comparative experiments.
+    4. Promote durable changes back into YAML.
+    5. Introduce new component classes only when the configuration schema is insufficient.
 
-For loop mechanics, see [Framework Overview](overview.md) and [Active Learning Loop](active_learning_loop.md). For the repository's current paper-facing status, see [Paper Replication](../paper_replication/index.md).
+For loop mechanics, see [Framework Overview](overview.md) and [Active Learning Loop](active_learning_loop.md).

@@ -247,7 +247,7 @@ it manually or run `make clean` when you no longer need a local build.
 
 ### Terminology
 
-Keep all user-facing text aligned with the paper and the [Methodology](concepts/overview.md)
+Keep all user-facing text aligned with the [Methodology](concepts/overview.md)
 section (see also [Research-Facing Contributions](#9-research-facing-contributions) below).
 
 ---

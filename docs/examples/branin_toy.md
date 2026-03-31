@@ -8,14 +8,14 @@ still outside the repo.
 
 | Layer | Asset | Status today | Use it for |
 | --- | --- | --- | --- |
-| Runnable baseline | `config/branin_botorch_toy.yaml` | current and validated | end-to-end CLI runs, validation runs, and local ablations |
+| Runnable baseline | `config/branin_multi_fidelity.yaml` | current and validated | end-to-end CLI runs, validation runs, and local ablations |
 | Adaptable scaffold | `config/branin_toy.yaml` | legacy schema | the smallest multi-fidelity Branin benchmark skeleton |
 | Adaptable GFlowNet scaffold | `config/branin_gflownet_toy.yaml` | partial integration | candidate-generation experiments, not a paper-equivalent MF-GFN baseline |
 | Future replication work | paper-aligned manifests, seeds, and result scripts | not bundled | exact paper-style reruns |
 
 ## Current runnable baseline
 
-`config/branin_botorch_toy.yaml` is the repo's benchmark-grade Branin entry
+`config/branin_multi_fidelity.yaml` is the repo's benchmark-grade Branin entry
 point. It combines `BoTorchGPSurrogate`,
 `BoTorchMultiFidelityMaxValueEntropyAcquisition`, `HypercubeSampler`,
 `KnapsackSelector`, and `BraninOracle` with the current three-level cost model
@@ -24,7 +24,7 @@ point. It combines `BoTorchGPSurrogate`,
 A small validation run is:
 
 ```bash
-uv run activelearning config/branin_botorch_toy.yaml \
+uv run activelearning config/branin_multi_fidelity.yaml \
   budget.available_budget=0.01 \
   sampler.num_samples=20 \
   selector.time_limit=5 \

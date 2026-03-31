@@ -12,6 +12,8 @@ theme:
     - content.code.copy
 
 markdown_extensions:
+  - admonition
+  - pymdownx.details
   - pymdownx.arithmatex:
       generic: true
   - pymdownx.superfences:
@@ -62,11 +64,12 @@ nav:
       - Runtime and Configuration: concepts/runtime_and_configuration.md
       - Related Work and Positioning: concepts/related-work.md
   - Tutorials:
-      - Available Baselines and Configs: examples/configs.md
-      - Running Experiments: guides/experiments.md
-      - Branin Benchmark: examples/branin_toy.md
-      - Hartmann6D Benchmark: examples/hartmann6d_toy.md
+      - Running Experiments: tutorials/running_experiments.md
+      - Branin Experiment: tutorials/branin_experiment.md
+      - Hartmann6D Experiment: tutorials/hartmann_experiment.md
       - GFlowNet Sampler Setup: examples/gflownet_sampler.md
+  - Reference:
+      - Available Configs: examples/configs.md
   - Extension Guide:
       - Overview: extension-guide/index.md
       - Adding an Oracle: extension-guide/oracle.md

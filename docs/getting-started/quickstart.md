@@ -1,80 +1,56 @@
 # Quickstart
 
-After completing [Installation](installation.md), the minimal validated baseline is a reduced version of the bundled BoTorch Branin study. This baseline uses the same study specification as the broader Branin benchmark path, reducing the candidate pool and oracle budget to minimize computation.
+After completing [Installation](installation.md), the recommended first run is a
+reduced version of the single-fidelity Branin tutorial config. This keeps the
+first experience simple and fully visible in the terminal.
 
 ## Run the minimal validated baseline
 
 ```bash
-uv run activelearning config/branin_botorch_toy.yaml \
-  budget.available_budget=0.01 \
-  sampler.num_samples=100 \
-  selector.time_limit=5 \
-  selector.verbose=false
+uv run activelearning config/branin_single_fidelity.yaml \
+  budget.available_budget=30.0
 ```
 
-## What this baseline does
-
-- Loads `config/branin_botorch_toy.yaml`, the current validated Branin baseline.
-- Constructs the surrogate, acquisition, sampler, selector, oracle, budget, and logger from the study specification.
-- Generates 100 candidate-fidelity queries instead of the larger default pool.
-- Caps the total budget at `0.01`, limiting the run to a single lower-cost query under this configuration.
-- Logs the resolved config and round metrics to the console.
-
-With an empty initial dataset $\mathcal{D}_0 = \emptyset$, the run operates in a cold-start regime: the algorithm proposes candidate-fidelity queries, evaluates one budget-feasible query $(x, m)$, updates $\mathcal{D}$, and terminates when the budget is exhausted.
-
-## What the output means
-
-A representative run ends with output like this:
+You should see output like this in your terminal:
 
 ```text
-[Step 1] round=1 | num_new_samples=1 | round_cost=0.0100 | total_cost=0.0100 | budget_remaining=0.0000
-Done. Rounds: 1 | Total cost: 0.0100
+[Step 1] round=1 | num_new_samples=30 | round_cost=30.0000 | total_cost=30.0000 | budget_remaining=0.0000
+Done. Rounds: 1 | Total cost: 30.0000
 ```
+
+!!! note "Cold start"
+    The first round runs with a random acquisition — the surrogate isn't fitted yet. This is expected. From round 2 onwards the acquisition function guides the search.
 
 The key output fields are:
 
-- `round=1`: one active learning round completed
-- `num_new_samples=1`: one candidate-fidelity query was executed
-- `round_cost=0.0100`: the selected query used the lowest-cost fidelity in this study
-- `budget_remaining=0.0000`: the run terminates because the configured budget is exhausted
+| Field | Meaning |
+| --- | --- |
+| `round` | Active learning round index |
+| `num_new_samples` | Candidates queried in that round |
+| `round_cost` | Budget consumed in that round |
+| `budget_remaining` | Total budget still available |
 
 ## Scale the same study specification
 
-To scale toward a more informative study, remove the budget-reduction overrides incrementally.
+Remove the budget-reduction overrides incrementally as you build confidence.
 
-### Use the bundled baseline config as-is
-
-```bash
-uv run activelearning config/branin_botorch_toy.yaml
-```
-
-### Keep the same study but increase the total oracle budget
+**Use the bundled tutorial config as-is (budget 300):**
 
 ```bash
-uv run activelearning config/branin_botorch_toy.yaml budget.available_budget=1.0
+uv run activelearning config/branin_single_fidelity.yaml
 ```
 
-### Increase the candidate pool without changing anything else
+**Keep the same study but double the total oracle budget:**
 
 ```bash
-uv run activelearning config/branin_botorch_toy.yaml sampler.num_samples=1000
+uv run activelearning config/branin_single_fidelity.yaml budget.available_budget=600
 ```
 
-These variants preserve the validated baseline while scaling the budget or proposal set toward a larger study.
+**Increase the candidate pool without changing anything else:**
 
-## Rationale
+```bash
+uv run activelearning config/branin_single_fidelity.yaml sampler.num_samples=20000
+```
 
-This command constitutes the current validated baseline without claiming a paper-complete reproduction:
-
-- The system parses and validates the configuration.
-- The runtime context is constructed.
-- The sampler generates candidate-fidelity queries $(x, m)$.
-- The acquisition function and selector enforce cost-aware budget allocation.
-- The oracle returns a labeled observation.
-- The logger reports the resolved config and per-round metrics.
-
-To review the methodology before scaling the study, see:
-
-- [Framework Overview](../concepts/overview.md)
-- [Active Learning Loop](../concepts/active_learning_loop.md)
-- [Runtime and Configuration](../concepts/runtime_and_configuration.md)
+!!! tip "Ready to go deeper?"
+    The [Branin Experiment Tutorial](../tutorials/branin_experiment.md) continues from here — adding multi-fidelity, Aim logging, and a comparison between the two settings.

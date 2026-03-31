@@ -57,8 +57,4 @@ For concrete configuration examples, see [Runtime and Configuration](runtime_and
 | Budget role | Limits query count | Constrains query count and fidelity allocation |
 | Search strategy | Targets best-so-far improvement | Mixes fidelities for cost-effective discovery |
 
-## Codebase Status
-
-The current repository supports fidelity-aware data types, multi-fidelity benchmark oracles, cost-aware acquisition functions, and cost-weighted candidate-fidelity proposals. Generative samplers are available for candidate generation. A full paper-equivalent end-to-end multi-fidelity generative workflow is not yet packaged.
-
-For the current mapping between implemented functionality and paper-facing goals, see [Paper Replication](../paper_replication/index.md).
+For concrete configuration examples, see the [Branin tutorial](../tutorials/branin_experiment.md), which walks through both settings side by side.

@@ -1,22 +1,10 @@
 # Hartmann6D Benchmark
 
-This is the canonical Hartmann6D benchmark page. The current repo ships the
-oracle and the benchmark scaffold, but not a committed current-schema Hartmann
-run file, so the main task is to adapt the working Branin stack without
-overstating paper replication.
+The Hartmann6D oracle is available in the repo. This page shows how to adapt the Branin tutorial config to run Hartmann6D experiments.
 
-## Status at a glance
+## Adapting the Branin config
 
-| Layer | Asset | Status today | Use it for |
-| --- | --- | --- | --- |
-| Runnable path | local adaptation of `config/branin_botorch_toy.yaml` | current adaptation path | running Hartmann6D through the existing BoTorch baseline stack |
-| Adaptable scaffold | `config/hartmann6d_toy.yaml` | legacy schema | preserving Hartmann-specific bounds, costs, and budget shaping |
-| Future replication work | committed Hartmann YAML, paper manifests, and result scripts | not bundled | systematic paper-style reruns |
-
-## Current runnable path
-
-Until a dedicated Hartmann YAML is checked in, start from
-`config/branin_botorch_toy.yaml` and change only the Hartmann-specific pieces:
+Start from `config/branin_multi_fidelity.yaml` and change the following fields:
 
 ```yaml
 surrogate:
@@ -40,31 +28,17 @@ oracle:
   fidelity_costs: {1: 0.125, 2: 0.25, 3: 1.0}
 ```
 
-`ard_num_dims: 7` is required because the surrogate receives six design coordinates plus
-one appended fidelity-confidence feature. For an initial validation run, keep the
-budget schedule constant; a staged schedule can be added later for longer allocation studies.
+!!! note "`ard_num_dims: 7`"
+    The surrogate receives six design coordinates plus one appended fidelity-confidence feature, so ARD requires 7 dimensions.
 
-## Adaptable scaffold
+## Scaffold config
 
-`config/hartmann6d_toy.yaml` is still the right place to copy the benchmark
-shape from:
+`config/hartmann6d_toy.yaml` captures the benchmark shape (six-dimensional unit hypercube, fidelity costs `0.125 / 0.25 / 1.0`, sigmoid budget schedule) but uses legacy component tags. It is useful as a reference for copying Hartmann-specific fields into a current-schema config.
 
-- six input dimensions, each in `[0, 1]`,
-- fidelity costs `0.125 / 0.25 / 1.0`, and
-- a `sigmoid_iterations` schedule for spending less budget early and more later.
+## Running
 
-It is not a runnable baseline because it still uses legacy tags
-`DummyDataset`, `DummySurrogate`, and `HypercubeUniformSampler`, and it omits
-`oracle.fidelity_costs`.
+Once you have a current-schema Hartmann config, run it the same way as any other config:
 
-## Future replication work
-
-Hartmann6D still needs a packaged replication layer:
-
-- a committed current-schema Hartmann YAML,
-- exact paper-aligned seeds and hyperparameters,
-- and result aggregation scripts for comparison or figure generation.
-
-Use [Paper Replication](../paper_replication/index.md) for the remaining gap.
-The current page is about benchmark wiring, not a claim that the full paper
-pipeline is already bundled.
+```sh
+uv run activelearning config/my_hartmann6d.yaml
+```

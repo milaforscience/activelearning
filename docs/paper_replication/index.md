@@ -15,7 +15,7 @@ The benchmark instructions themselves live under **Examples**.
   sampler integration and its limits.
 
 For setup and run hygiene before a paper-aligned study, see
-[Running Experiments](../guides/experiments.md).
+[Running Experiments](../tutorials/running_experiments.md).
 
 ## Replication boundary today
 

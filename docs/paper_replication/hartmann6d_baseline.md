@@ -6,7 +6,7 @@ The canonical Hartmann6D benchmark page is now
 Use that page for:
 
 - the current runnable route: a local Hartmann adaptation of
-  `config/branin_botorch_toy.yaml`,
+  `config/branin_multi_fidelity.yaml`,
 - the adaptable scaffold: `config/hartmann6d_toy.yaml`, and
 - the current boundary between benchmark wiring and future replication work.
 

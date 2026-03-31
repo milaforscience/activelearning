@@ -1,0 +1,22 @@
+# Aim logging overlay
+#
+# Merge with any base config to add Aim logging alongside the console logger.
+# The logger block in the base config is replaced with a MultiLogger that fans
+# out to both ConsoleLogger and AimLogger.
+#
+# Usage:
+#   uv run activelearning config/branin_single_fidelity.yaml config/aim_logging.yaml
+#   uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml
+#
+# Override project/run names as needed:
+#   uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml \
+#     "logger.loggers.0.run_name=my-run" \
+#     "logger.loggers.1.run_name=my-run"
+
+logger:
+  type: MultiLogger
+  loggers:
+    - type: ConsoleLogger
+      project_name: activelearning_tutorials
+    - type: AimLogger
+      project_name: activelearning_tutorials

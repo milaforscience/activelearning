@@ -1,0 +1,62 @@
+# Tutorial experiment: 6D Hartmann benchmark with three fidelity levels
+#
+# Run with:
+#   uv run activelearning config/hartmann_multi_fidelity.yaml
+
+runtime:
+  device: cpu
+  precision: 64
+
+dataset:
+  type: ListDataset
+
+surrogate:
+  type: BoTorchGPSurrogate
+
+acquisition:
+  type: QMultiFidelityLowerBoundMaxValueEntropy
+  candidate_set_spec:
+    type: HypercubeCandidateSetSpec
+    bounds:
+      - [0.0, 1.0]
+      - [0.0, 1.0]
+      - [0.0, 1.0]
+      - [0.0, 1.0]
+      - [0.0, 1.0]
+      - [0.0, 1.0]
+    n_points: 1000
+    strategy: lhs
+
+sampler:
+  type: HypercubeSampler
+  bounds:
+    - [0.0, 1.0]
+    - [0.0, 1.0]
+    - [0.0, 1.0]
+    - [0.0, 1.0]
+    - [0.0, 1.0]
+    - [0.0, 1.0]
+  num_samples: 10000
+  fidelities: [1, 2, 3]
+  point_strategy: lhs
+
+selector:
+  type: CostAwareSelector
+
+oracle:
+  type: Hartmann6DOracle
+  fidelity_costs:
+    1: 0.125
+    2: 0.25
+    3: 1.0
+
+budget:
+  available_budget: 100.0
+  schedule:
+    type: constant
+    value: 10.0
+
+logger:
+  type: ConsoleLogger
+  project_name: activelearning_tutorials
+  run_name: hartmann-multi-fidelity

@@ -31,7 +31,8 @@ Once `uv` is installed, install the project and its development dependencies fro
 
 This command executes `uv sync` to align the local `.venv/` with the exact state of the lockfile, and it installs the requisite pre-commit hooks.
 
-> **Note:** `uv sync` strictly enforces the lockfile state. This guarantees experimental reproducibility but will remove any extraneous, undocumented packages from the environment.
+!!! note
+    `uv sync` strictly enforces the lockfile state. This guarantees experimental reproducibility but will remove any extraneous, undocumented packages from the environment.
 
 To use an existing virtual environment instead of generating the default local `.venv/`, define the environment path prior to initialization:
 
@@ -49,17 +50,21 @@ uv run activelearning <config.yaml> [key=value ...]
 
 The YAML configuration file serves as the executable study specification. It defines the experimental parameters by selecting the surrogate, acquisition function, sampler, selector, oracle, budget constraints, and logging mechanisms.
 
-**Example Baseline Run:**
+**Example First Run:**
 
 ```bash
-uv run activelearning config/branin_botorch_toy.yaml \
-  budget.available_budget=0.01 \
-  sampler.num_samples=100 \
-  selector.time_limit=5 \
-  selector.verbose=false
+uv run activelearning config/branin_single_fidelity.yaml \
+  budget.available_budget=30.0
 ```
 
 Arguments following the YAML path are OmegaConf dotlist overrides that modify the configuration without altering the base file.
+
+Later in the tutorial, you can add Aim logging with:
+
+```bash
+uv sync --extra aim
+uv run aim up
+```
 
 ## Maintenance
 
@@ -75,4 +80,6 @@ make clean  # Remove generated artifacts and cache directories
 ## Next Steps
 
 - Proceed to the [Quickstart](quickstart.md) to run a minimal validated baseline.
+- Follow the [Branin Experiment Tutorial](../tutorials/branin_experiment.md) for
+  the full config-to-Aim workflow.
 - Review the [Framework Overview](../concepts/overview.md) for formal definitions of the architectural components.

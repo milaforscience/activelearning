@@ -1,23 +1,10 @@
 # Multi-Fidelity Active Learning
 
-This framework provides a modular environment for **Multi-Fidelity Active Learning** under a finite oracle budget.
+This framework provides a modular, config-driven environment for **Multi-Fidelity Active Learning** under a finite oracle budget. The algorithm selects candidate-fidelity pairs $(x, m)$ to cost-effectively discover high-scoring regions of an expensive black-box objective — querying cheap low-fidelity approximations to guide the search before committing to costly high-fidelity evaluations.
 
-The motivating setting is an expensive black-box objective: the highest-fidelity available oracle is informative but computationally costly, while lower-fidelity approximations are less expensive and provide useful signals to guide the search.
-
-The multi-fidelity acquisition framework extends the decision space beyond the candidate $x$ to include the fidelity level $m$. The algorithm thus selects a pair $(x, m)$, identifying not only where to evaluate but also at what level of precision.
-
-An effective allocation policy distributes the oracle budget across candidate-fidelity decisions to facilitate the cost-effective discovery of diverse, high-scoring candidates.
-
-## Problem Setting
-
-- **Expensive black-box objective:** Direct evaluation is budget-constrained; the algorithm must optimize the allocation of finite computational or physical resources.
-- **Multiple fidelities:** Lower-fidelity approximations provide useful signals at a lower cost than the highest-fidelity available oracle.
-- **Finite budget:** Iterations must satisfy budget constraints and enforce total allowable budget limits.
-- **Discovery focus:** The goal is to identify a diverse population of high-performing candidates. This is achieved through modular acquisition functions, samplers and selectors that balance candidate quality with design-space coverage.
+For a deeper conceptual introduction, start with the [Framework Overview](concepts/overview.md). To learn more about the research motivating this framework, see [References and Citation](resources/references.md).
 
 ## Framework Architecture
-
-The framework implements the following modular execution loop:
 
 ```mermaid
 graph LR
@@ -29,19 +16,7 @@ graph LR
     O -- append --> D
 ```
 
-Refer to the [Framework Overview](concepts/overview.md#component-architecture) for a formal definition of each component, and the [Active Learning Loop](concepts/active_learning_loop.md) for a detailed technical walkthrough of their interactions.
-
-## Core Features
-
-* **De Novo Query Synthesis:** Search across the full object space $\mathcal{X}$ via dynamic candidate generation, enabling discovery in settings where the search space is non-enumerable or does not exist a priori.
-* **Multi-Fidelity Action Space:** Optimize candidate-fidelity pairs $(x, m)$ to strategically balance variable evaluation costs $c(x, m)$ against fidelity-specific confidence levels $\kappa(m)$.
-* **Strict Budgetary Control:** Enforce prescribed round-wise schedules and global aggregate cost limits through a dedicated budget module integrated directly into the selection logic.
-* **Interface-Driven Modularity:** Plug-and-play architecture for surrogates, acquisition functions, samplers, and selectors, all governed by unified interfaces and external YAML configurations.
-* **Generative Discovery:** The goal is to identify a diverse population of high-performing candidates by proposing points proportional to an acquisition signal $\alpha(x, m)$ using GFlowNet or uniform sampling.
-* **Reproducible Workflows:** Execute entire experiments from declarative YAML specifications with native support for OmegaConf-based CLI overrides for controlled perturbations.
-* **Unified Runtime Context:** Automatic propagation of compute device, floating-point precision, and structured logging (W&B, Comet, Aim) across all framework components.
-
-To learn more about the research motivating this framework, see [References and Citation](resources/references.md).
+Each component — surrogate, acquisition, sampler, selector, oracle, budget, and logger — is defined in a YAML config file and can be swapped independently. See [Active Learning Loop](concepts/active_learning_loop.md) for how these interact at runtime.
 
 ## Getting Started
 
@@ -79,9 +54,11 @@ To learn more about the research motivating this framework, see [References and 
 
     ---
 
-    Explore provided configurations, benchmarks, and replication scripts.
+    Start from the Branin tutorial, then branch into the Hartmann6D tutorial
+    or add your own oracle.
 
-    [:octicons-arrow-right-24: Examples](examples/configs.md)
-    · [References](resources/references.md)
+    [:octicons-arrow-right-24: Branin Tutorial](tutorials/branin_experiment.md)
+    · [Hartmann Tutorial](tutorials/hartmann_experiment.md)
+    · [Examples](examples/configs.md)
 
 </div>

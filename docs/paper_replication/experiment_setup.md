@@ -1,6 +1,6 @@
 # Experiment Setup
 
-The canonical run workflow now lives on [Running Experiments](../guides/experiments.md).
+The canonical run workflow now lives on [Running Experiments](../tutorials/running_experiments.md).
 Use that page for environment setup, config preflight, short pilot runs, and
 override patterns.
 

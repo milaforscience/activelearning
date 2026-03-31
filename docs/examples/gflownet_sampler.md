@@ -1,15 +1,8 @@
 # GFlowNet Sampler Setup
 
-**Status:** In the paper, the multi-fidelity GFlowNet method samples both a
-candidate and the fidelity level of the objective oracle to query. In this repo,
-`config/branin_gflownet_toy.yaml` documents the current partial integration:
-the sampler block matches `GFlowNetGridSamplerConfig`, but building it still
-expects a bundled `config/gflownet/env/grid.yaml` file that is not present in
-this snapshot, and the sampler does not yet emit fidelity labels. Treat this
-page as a precise guide to the current config shape and code paths, not as a
-claim of full paper replication.
+The GFlowNet sampler trains a generative flow network as a proposal mechanism, guided by the current acquisition function as a reward signal. This page covers the config surface for `GFlowNetSampler` and `GFlowNetGridSampler`.
 
-## What already exists in the repo
+## What's in the repo
 
 - `config/branin_gflownet_toy.yaml` — top-level activelearning config using
   `GFlowNetGridSampler` for acquisition-guided candidate sampling
@@ -57,10 +50,9 @@ sampler:
 ```
 
 This block is merged over the bundled GFlowNet defaults before the sampler is
-constructed. In the paper's language, it specifies the candidate-sampling side
-of the method: the GFlowNet is trained on acquisition-derived rewards and
-proposes candidate points on a grid, then rescales them into the oracle domain.
-Joint sampling of fidelity levels is not yet part of this CLI path.
+constructed. It specifies the candidate-sampling side of the method: the GFlowNet
+is trained on acquisition-derived rewards and proposes candidate points on a grid,
+then rescales them into the oracle domain.
 
 ## What `sampler.conf` controls
 
@@ -104,18 +96,3 @@ Use it to understand:
 - the naming of nested GFlowNet sections.
 
 Use `config/branin_gflownet_toy.yaml` when you want the top-level activelearning shape.
-
-## Current caveats
-
-Two integration gaps remain:
-
-1. the GFlowNet builder still looks for `config/gflownet/env/grid.yaml` during composition, and
-2. the sampler returns candidate points without a fidelity label, so an end-to-end Branin run still needs a fidelity-assignment step before calling `BraninOracle`.
-
-The second piece is demonstrated in `tests/test_gflownet_branin.py`, where a
-small selector wrapper assigns `fidelity=0` after `TopKAcquisitionSelector`
-picks the candidates.
-
-The files referenced in this section are accurate configuration references for the
-current partial GFlowNet path; they are not yet fully packaged CLI examples or a
-complete MF-GFN implementation.

@@ -99,12 +99,14 @@ Every experiment is defined by a single YAML file with these top-level sections:
 
 ### Overriding Config Values
 
-Append [OmegaConf dotlist](https://omegaconf.readthedocs.io/en/latest/usage.html#from-a-dot-list) overrides directly to the command:
+Append [OmegaConf dotlist](https://omegaconf.readthedocs.io/en/latest/usage.html#from-a-dot-list) overrides directly to the command, or pass multiple YAML files that are merged left to right:
 
 ```sh
-uv run activelearning config/branin_toy_example.yaml \
-  budget.available_budget=50.0 \
-  acquisition.num_mv_samples=20
+# Dotlist override
+uv run activelearning config/branin_multi_fidelity.yaml budget.available_budget=50.0
+
+# Compose two config files (second file overrides shared keys)
+uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml
 ```
 
 ### Loggers
@@ -126,12 +128,10 @@ uv sync --extra comet   # Comet ML
 uv sync --extra aim     # Aim
 ```
 
-Example — switch to Weights & Biases:
+The bundled `config/aim_logging.yaml` overlay adds `AimLogger` alongside `ConsoleLogger` via `MultiLogger`. Compose it with any base config:
 
 ```sh
-uv run activelearning config/branin_toy_example.yaml \
-  logger.type=WandbLogger \
-  logger.project_name=my_project
+uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml
 ```
 
 ## Development & Tooling Notes

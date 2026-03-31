@@ -46,15 +46,13 @@ This decomposition guarantees experimental isolation: researchers can independen
 
 ## Unified Single- and Multi-Fidelity Execution
 
-The underlying execution architecture remains invariant across single-fidelity and multi-fidelity experiments. The primary shift occurs within the action space and the dimensionality of the tensors passed between modules:
+The underlying execution architecture remains invariant across single-fidelity and multi-fidelity experiments. The primary shift occurs within the action space:
 
-- Candidates and observations encode fidelity state.
-- The surrogate model integrates fidelity-specific confidence intervals provided by the oracle.
-- The acquisition function scores the cost-utility trade-off of $(x, m)$ pairs rather than just $x$.
-- The selector trades predicted utility against the remaining computational budget.
-- The framework queries lower-fidelity oracles to map the objective space cost-effectively before escalating to the highest-fidelity target oracle.
+- In **single-fidelity** mode, the fidelity $m$ is fixed and implicit — the algorithm only chooses $x$.
+- In **multi-fidelity** mode, $m$ becomes an explicit decision variable, and the acquisition function must weigh the cost-utility trade-off of querying $(x, m)$ pairs.
 
-This design allows the same orchestration code to support several research settings.
+!!! tip "Same config structure for both settings"
+    The same YAML schema works for both settings. Adding fidelity levels is as simple as extending `oracle.fidelity_costs` and `sampler.fidelities`. The [Branin tutorial](../tutorials/branin_experiment.md) walks through both side-by-side.
 
 ## Core Implementation Principles
 
@@ -63,23 +61,20 @@ Several design choices define this repository:
 - **Config-Driven Experiments:** YAML files dictate component selection and hyperparameter instantiation entirely.
 - **PyTorch-Native Runtime:** Hardware acceleration and precision states are propagated natively across all runtime-aware components.
 - **Modular Multi-Fidelity Support:** Fidelity-aware data structures, oracles, surrogates, and acquisition functions operate strictly behind common interfaces.
-- **Generative Flow Network (GFlowNet) Integration:** The repository provides optional GFlowNet samplers for generative candidate proposal; however, end-to-end multi-fidelity GFlowNet pipelines are still under active development (see [Paper Replication](../paper_replication/index.md)).
+- **Generative Flow Network (GFlowNet) Integration:** The repository provides optional GFlowNet samplers for generative candidate proposal guided by the current acquisition function. See [GFlowNet Sampler Setup](../examples/gflownet_sampler.md) for configuration details.
 
 ## Pool-Based Learning vs. *De Novo* Query Synthesis
 
-While classical active learning literature largely focuses on *pool-based active learning*—where the algorithm selects observations from a finite, pre-computed pool of unlabelled data—this framework targets ***de novo* query synthesis**. Here, the algorithm dynamically generates and evaluates samples drawn from the continuous or combinatorially massive object space $\mathcal{X}$. This paradigm is specifically tailored for scientific discovery domains (King et al., 2004; Xue et al., 2016; Yuan et al., 2018; Kusne et al., 2020).
+Classical active learning typically selects from a finite, pre-computed pool of unlabelled candidates. This framework instead performs ***de novo* query synthesis**: the algorithm generates and evaluates samples directly from the continuous or combinatorially large object space $\mathcal{X}$.
 
-In applied scientific research, the objective is rarely to globally minimize surrogate prediction error across the entirety of $\mathcal{X}$. Rather, it is to isolate and discover diverse candidates exhibiting maximized values of the objective function $f(x)$. Consequently, *de novo* synthesis is the optimal approach for materials design, drug discovery, and automated experimental optimization.
+!!! info "Why de novo synthesis?"
+    In scientific discovery settings — materials design, drug discovery, automated experimentation — no exhaustive candidate pool exists upfront. The goal is also not global prediction accuracy, but to isolate a diverse set of candidates with maximised objective values. *De novo* synthesis is the right paradigm for this.
 
 ## Relationship to Standard Optimization Paradigms
 
-**Bayesian Optimization (BO):** BO fundamentally seeks the global optimum of an expensive objective $f(x)$, utilizing surrogate models (e.g., Gaussian Processes) paired with acquisition functions (e.g., Expected Improvement). Its strict goal is to minimize the total evaluations required to locate $\arg\max f(x)$. This framework leverages BO-style surrogates and acquisitions but diverges in its terminal objective: rather than converging on a single optimal point, it forces the discovery of *diverse sets* of high-performing candidates.
+This framework synthesises Bayesian Optimization (BO), Active Learning, and Active Search: it uses BO-style surrogates and acquisitions within an iterative active learning loop, pursuing diversity among high-scoring candidates (as in active search), all bounded by multi-fidelity budget constraints.
 
-**Standard Active Learning:** Traditional active learning attempts to minimize a model's global prediction error, selecting queries that maximize information gain or reduce posterior variance uniformly across the input space. This framework fundamentally rejects global uncertainty reduction in favor of targeted exploration within high-value regions.
-
-**Active Search:** Active search (Garnett et al., 2012; Jiang et al., 2017) aligns most closely with this framework's theoretical goals: maximizing the total number of discovered targets (candidates exceeding a threshold for $f(x)$) under a strict query budget. This framework scales the active search paradigm into the multi-fidelity regime, introducing dynamic cost variables $c(x, m)$ to the decision-making loop.
-
-In summary, this framework synthesizes these three paradigms: it employs BO-driven modeling within an active learning operational loop, pursuing the high-value spatial diversity characteristic of active search, all strictly bounded by a multi-fidelity finite budget constraints.
+For a more detailed discussion of how this framework relates to prior work, see [Related Work and Positioning](related-work.md).
 
 ## Suggested Reading Order
 
