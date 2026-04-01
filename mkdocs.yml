@@ -68,7 +68,6 @@ nav:
       - Branin Experiment: tutorials/branin_experiment.md
       - Hartmann6D Experiment: tutorials/hartmann_experiment.md
       - GFlowNet Sampler Setup: examples/gflownet_sampler.md
-  - Reference:
       - Available Configs: examples/configs.md
   - Extension Guide:
       - Overview: extension-guide/index.md
