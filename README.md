@@ -1,174 +1,210 @@
 # Multi-Fidelity Active Learning with GFlowNets
 
-This repository extends the codebase accompanying the paper
-**[Multi-Fidelity Active Learning with GFlowNets](http://arxiv.org/abs/2306.11715)**.
+A modular, config-driven framework for **budget-constrained multi-fidelity active learning**. It enables cost-effective discovery of high-scoring candidates by intelligently choosing what to query — and at which fidelity level — under a finite oracle budget.
 
-This is a re-implementation of the original code base at https://github.com/nikita-0209/mf-al-gfn, with a focus on modularity and extensibility, enabling flexible experimental configurations and easier integration of future methods. Note that this is also inspired by a third, intermediate implementation in https://github.com/alexhernandezgarcia/activelearning, with significant contributions by [ginihumer](https://github.com/ginihumer).
+> **📖 Full documentation:** [milaforscience.github.io/activelearning](https://milaforscience.github.io/activelearning)
+>
+> The docs cover framework concepts, component references, extension guides, tutorials, and the API. Start there for anything beyond this README.
 
-## Setup Instructions
+---
 
-### 1. Install uv
+## Background
+
+This repository re-implements and extends the codebase accompanying the paper
+**[Multi-Fidelity Active Learning with GFlowNets](http://arxiv.org/abs/2306.11715)**,
+with a focus on modularity and extensibility. It builds on the original implementation at
+[nikita-0209/mf-al-gfn](https://github.com/nikita-0209/mf-al-gfn) and is also informed by
+an intermediate implementation at [alexhernandezgarcia/activelearning](https://github.com/alexhernandezgarcia/activelearning),
+with significant contributions by [ginihumer](https://github.com/ginihumer).
+
+---
+
+## Framework Architecture
+
+The active learning loop connects eight independently configurable components:
+
+```
+Dataset → Surrogate → Acquisition → Sampler → Selector → Oracle → (back to Dataset)
+```
+
+| Component | Role |
+|-----------|------|
+| **Dataset** | Records observed queries and their outcomes |
+| **Surrogate** | Probabilistic model fitted on the dataset (e.g. BoTorch GP) |
+| **Acquisition** | Scores candidate-fidelity pairs by expected utility |
+| **Sampler** | Generates candidate proposals (e.g. Latin Hypercube, GFlowNet) |
+| **Selector** | Filters proposals to fit within the round budget |
+| **Oracle** | Evaluates the true objective at the requested fidelity |
+| **Budget** | Enforces per-round and total cost constraints |
+| **Logger** | Records metrics and artifacts (console, W&B, Comet, Aim) |
+
+Every component is selected and parameterised by a YAML config file. Swapping any single component requires only a config change — no code modifications needed.
+
+For a deeper conceptual introduction, see the [Framework Overview](https://milaforscience.github.io/activelearning/concepts/overview/) in the docs.
+
+---
+
+## Installation
 
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
 
-**On macOS (Homebrew)**
+**1. Install `uv`**
+
+macOS with Homebrew:
 ```sh
 brew install uv
 ```
 
-**On macOS or Linux**
+macOS / Linux via the official installer:
 ```sh
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-**Using pip**
+Via pip:
 ```sh
 pip install uv
 ```
 
-For more details see the [uv installation docs](https://docs.astral.sh/uv/getting-started/installation/).
-
-### 2. Set up the environment
-
-Install all dependencies (including dev dependencies) and pre-commit hooks:
+**2. Set up the environment**
 
 ```sh
 make setup
 ```
 
-By default, `make setup` (via `uv`) creates and uses a local `.venv/`. If you want to install into an existing virtual environment, set `UV_PROJECT_ENVIRONMENT` to its path before running the command:
+This installs all dependencies from the lockfile and sets up pre-commit hooks. A `.venv/` is created in the project root. To use an existing virtual environment instead:
 
 ```sh
-UV_PROJECT_ENVIRONMENT=/path/to/venv
-make setup
+UV_PROJECT_ENVIRONMENT=/path/to/venv make setup
 ```
 
-#### Note: This will sync the environment to the lockfile,  uninstalling any packages not defined in the project.
+> **Note:** `uv sync` strictly enforces the lockfile — packages not defined in the project will be removed from the environment.
 
-See the [uv documentation](https://docs.astral.sh/uv/concepts/projects/config/#project-environment-path) for details.
+For full details, see the [Installation guide](https://milaforscience.github.io/activelearning/getting-started/installation/).
 
-### 3. Run tests
+---
+
+## Quickstart
+
+Run the minimal single-fidelity Branin baseline:
 
 ```sh
-make test
+uv run activelearning config/branin_single_fidelity.yaml \
+  budget.available_budget=30.0
 ```
+
+Expected output:
+
+```
+[Step 1] round=1 | num_new_samples=30 | round_cost=30.0000 | total_cost=30.0000 | budget_remaining=0.0000
+Done. Rounds: 1 | Total cost: 30.0000
+```
+
+From there, scale up by removing the budget override, or switch to the multi-fidelity config:
+
+```sh
+# Full single-fidelity run
+uv run activelearning config/branin_single_fidelity.yaml
+
+# Multi-fidelity run
+uv run activelearning config/branin_multi_fidelity.yaml
+```
+
+Config values can be overridden inline using [OmegaConf dotlist](https://omegaconf.readthedocs.io/en/latest/usage.html#from-a-dot-list) syntax, and multiple YAML files can be composed (merged left-to-right):
+
+```sh
+# Override a config value
+uv run activelearning config/branin_multi_fidelity.yaml budget.available_budget=50.0
+
+# Compose configs (adds Aim logging on top of the base experiment)
+uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml
+```
+
+The [Quickstart](https://milaforscience.github.io/activelearning/getting-started/quickstart/) and [Branin Tutorial](https://milaforscience.github.io/activelearning/tutorials/branin_experiment/) walk through the full workflow.
+
+---
 
 ## Project Layout
 
-- Package code: `src/activelearning/`
-- Tests: `tests/`
-
-## Running an Experiment
-
-### Quick Start
-
-Run the Branin toy example:
-
-```sh
-uv run activelearning config/branin_toy_example.yaml
+```
+src/activelearning/       # Framework source code
+  acquisition/            # Acquisition functions
+  dataset/                # Dataset backends
+  oracle/                 # Oracle implementations
+  sampler/                # Candidate samplers (LHS, GFlowNet, …)
+  selector/               # Budget-aware selectors
+  surrogate/              # Probabilistic surrogate models
+  logger/                 # Logging backends
+  budget/                 # Budget schedulers
+  config.py               # Top-level Pydantic config model
+  main.py                 # CLI entry point and loop orchestration
+config/                   # Bundled YAML experiment configs
+tests/                    # Test suite
+docs/                     # Documentation source (MkDocs)
 ```
 
-### What the Example Does
+---
 
-`config/branin_toy_example.yaml` runs a multi-fidelity active learning loop on the 2D Augmented Branin benchmark. Key components:
+## Loggers
 
-| Component | Details |
-|-----------|---------|
-| **Oracle** | Negated Augmented Branin with 3 fidelity levels (costs: 0.01 / 0.1 / 1.0) |
-| **Surrogate** | BoTorch GP (`SingleTaskMultiFidelityGP`) |
-| **Acquisition** | qMFLBMES (lower-bound multi-fidelity max-value entropy search) |
-| **Sampler** | Latin Hypercube Sampling over the 2D domain (10 000 candidates) |
-| **Selector** | Cost-aware greedy (bang-per-buck within round budget) |
-| **Budget** | 100.0 total, 5.0 allocated per round (constant schedule) |
+Set `logger.type` in your config to choose a logging backend:
 
-### Config Structure
+| Type | Backend | Optional dependency |
+|------|---------|---------------------|
+| `ConsoleLogger` | stdout | *(none)* |
+| `WandbLogger` | Weights & Biases | `uv sync --extra wandb` |
+| `CometLogger` | Comet ML | `uv sync --extra comet` |
+| `AimLogger` | Aim | `uv sync --extra aim` |
 
-Every experiment is defined by a single YAML file with these top-level sections:
+Multiple loggers can be combined with `MultiLogger`. See the [Logger component docs](https://milaforscience.github.io/activelearning/components/logger/) for configuration details.
 
-| Section | Description |
-|---------|-------------|
-| `runtime` | Device (`cpu`/`cuda`) and floating-point precision (`32`/`64`) |
-| `dataset` | Dataset backend (e.g. `ListDataset`) |
-| `surrogate` | Probabilistic model (e.g. `BoTorchGPSurrogate`) |
-| `acquisition` | Acquisition function (e.g. `QMultiFidelityLowerBoundMaxValueEntropy`) |
-| `sampler` | Candidate generator (e.g. `HypercubeSampler`) |
-| `selector` | Candidate selector (e.g. `CostAwareSelector`) |
-| `oracle` | True objective / query function (e.g. `BraninOracle`) |
-| `budget` | Total budget and per-round schedule |
-| `logger` | *(Optional)* Experiment tracker (see [Loggers](#loggers) below) |
+---
 
-### Overriding Config Values
-
-Append [OmegaConf dotlist](https://omegaconf.readthedocs.io/en/latest/usage.html#from-a-dot-list) overrides directly to the command, or pass multiple YAML files that are merged left to right:
+## Development
 
 ```sh
-# Dotlist override
-uv run activelearning config/branin_multi_fidelity.yaml budget.available_budget=50.0
-
-# Compose two config files (second file overrides shared keys)
-uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml
+make test     # Run the pytest test suite
+make check    # Run all pre-commit validation hooks
+make clean    # Remove generated artifacts and caches
+make help     # List all available Makefile targets
 ```
 
-### Loggers
-
-Set `logger.type` to choose a logging backend:
-
-| Type | Description | Extra |
-|------|-------------|-------|
-| `ConsoleLogger` | Prints metrics to stdout | *(none)* |
-| `WandbLogger` | Logs to Weights & Biases | `wandb` |
-| `CometLogger` | Logs to Comet ML | `comet` |
-| `AimLogger` | Logs to Aim | `aim` |
-
-Install a backend's optional dependency with:
+Pre-commit hooks are installed automatically by `make setup`. If they stop running, reinstall with:
 
 ```sh
-uv sync --extra wandb   # Weights & Biases
-uv sync --extra comet   # Comet ML
-uv sync --extra aim     # Aim
+uv run pre-commit install
 ```
 
-The bundled `config/aim_logging.yaml` overlay adds `AimLogger` alongside `ConsoleLogger` via `MultiLogger`. Compose it with any base config:
+---
 
-```sh
-uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml
-```
+## Extending the Framework
 
-## Development & Tooling Notes
+Each component has a documented extension interface. The [Extension Guide](https://milaforscience.github.io/activelearning/extension-guide/) covers:
 
-- Pre-commit hooks are installed by `make setup`.
-- Run all pre-commit checks locally:
-  ```sh
-  make check
-  ```
-- See available Makefile commands and descriptions:
-  ```sh
-  make help
-  ```
-- Clean generated files and caches:
-  ```sh
-  make clean
-  ```
-- Install uv via the Makefile (optional):
-  ```sh
-  make install-uv
-  ```
-- CI runs `make setup` and `make test`. Do not rename or remove these targets, as this will break GitHub Actions.
-- If hooks are not running, re-install manually:
-  ```sh
-  uv run pre-commit install
-  ```
+- Adding a custom **Oracle**
+- Adding a custom **Sampler** (including GFlowNet integration)
+- Adding a custom **Surrogate**
+- Adding a custom **Selector**
+- Adding a custom **Acquisition function**
+
+---
 
 ## Citation
-If you use this code in your work, please cite the original paper:
+
+If you use this codebase in your work, please cite the original paper:
+
 ```bibtex
 @article{hernandezgarcia2024multifidelity,
-      title={Multi-Fidelity Active Learning with {GF}lowNets},
-      author={Alex Hernandez-Garcia and Nikita Saxena and Moksh Jain and Cheng-Hao Liu and Yoshua Bengio},
-      journal={Transactions on Machine Learning Research},
-      year={2024},
-      issn={2835-8856},
-      url={https://openreview.net/forum?id=dLaazW9zuF},
-      note={Expert Certification}
+  title={Multi-Fidelity Active Learning with {GF}lowNets},
+  author={Alex Hernandez-Garcia and Nikita Saxena and Moksh Jain and Cheng-Hao Liu and Yoshua Bengio},
+  journal={Transactions on Machine Learning Research},
+  year={2024},
+  issn={2835-8856},
+  url={https://openreview.net/forum?id=dLaazW9zuF},
+  note={Expert Certification}
 }
 ```
+
+**Related resources:**
+- 📄 [Paper (arXiv)](http://arxiv.org/abs/2306.11715) · [OpenReview](https://openreview.net/forum?id=dLaazW9zuF)
+- 🎥 [Talk (video)](https://www.dailymotion.com/video/k1k8KKYS67DgFCB516w) · [Slides](https://alexhernandezgarcia.com/slides/mfgfn-tmlr)
+- 🔗 Original code: [nikita-0209/mf-al-gfn](https://github.com/nikita-0209/mf-al-gfn) · [alexhernandezgarcia/activelearning](https://github.com/alexhernandezgarcia/activelearning)

@@ -27,7 +27,9 @@ pip install uv
 
 Once `uv` is installed, install the project and its development dependencies from the repository root:
 
-`make setup`
+```bash
+make setup
+```
 
 This command executes `uv sync` to align the local `.venv/` with the exact state of the lockfile, and it installs the requisite pre-commit hooks.
 
