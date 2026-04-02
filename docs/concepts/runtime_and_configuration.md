@@ -31,15 +31,23 @@ surrogate:
   type: BoTorchGPSurrogate
 
 acquisition:
-  type: BoTorchMultiFidelityMaxValueEntropyAcquisition
-  fidelity_costs:
-    1: 0.01
-    2: 0.1
-    3: 1.0
+  type: QMultiFidelityLowerBoundMaxValueEntropy
+  candidate_set_spec:
+    type: HypercubeCandidateSetSpec
+    bounds:
+      - [-5.0, 10.0]
+      - [0.0, 15.0]
+    n_points: 1000
+    strategy: lhs
 
 sampler:
   type: HypercubeSampler
+  bounds:
+    - [-5.0, 10.0]
+    - [0.0, 15.0]
+  num_samples: 10000
   fidelities: [1, 2, 3]
+  point_strategy: lhs
 
 selector:
   type: CostAwareSelector
@@ -50,16 +58,18 @@ oracle:
     1: 0.01
     2: 0.1
     3: 1.0
+  log_landscape: true
 
 budget:
-  available_budget: 20.0
+  available_budget: 300.0
   schedule:
     type: constant
-    value: 1.0
+    value: 30.0
 
 logger:
   type: ConsoleLogger
-  project_name: activelearning_prototyping
+  project_name: activelearning_tutorials
+  run_name: branin-multi-fidelity
 ```
 
 The top-level sections correspond to the loop's conceptual components:
@@ -94,7 +104,6 @@ For multi-fidelity experiments, the fields that materially define the study are:
 
 - `oracle.fidelity_costs`: valid fidelity levels $m \in \mathcal{M}$ and per-query costs $c(x, m)$.
 - `oracle.fidelity_confidences`: optional confidence map $\kappa(m)$; the built-in augmented-function oracles derive it from relative cost when omitted.
-- `acquisition.fidelity_costs`: cost model $c(x, m)$ used by cost-aware acquisitions.
 - `sampler.fidelities`: candidate-fidelity support for the sampler; accepts a simple list for uniform fidelity sampling, or a cost map that biases sampling inversely proportional to fidelity cost.
 - `budget.available_budget` and `budget.schedule`: total expenditure limit and per-round spending policy (`constant` or `sigmoid_iterations` in the current schema).
 
@@ -102,21 +111,33 @@ Not every sampler emits explicit fidelity labels. That distinction is material w
 
 ## Configuration Overrides
 
-The CLI accepts OmegaConf dotlist overrides following the config path. Overrides apply temporary perturbations—budget reductions, candidate-pool changes, solver limits, or nested GFlowNet settings—without duplicating the entire YAML file.
+The CLI accepts OmegaConf dotlist overrides following the config path. Overrides apply temporary perturbations—budget reductions, candidate-pool changes, or schedule adjustments—without duplicating the entire YAML file.
 
 ```bash
+# Quick pilot with a reduced budget
+uv run activelearning config/branin_single_fidelity.yaml \
+  budget.available_budget=30
+
+# Adjust the round budget
 uv run activelearning config/branin_multi_fidelity.yaml \
-  budget.available_budget=1.0 \
-  sampler.num_samples=50 \
-  selector.time_limit=5
+  budget.schedule.value=5
+
+# Larger candidate pool
+uv run activelearning config/branin_multi_fidelity.yaml \
+  sampler.num_samples=20000
 ```
 
-Nested overrides follow the same pattern:
+Disable logging entirely via an inline override:
 
 ```bash
-uv run activelearning config/branin_gflownet_toy.yaml \
-  sampler.conf.env.length=80 \
-  sampler.conf.agent.optimizer.n_train_steps=1000
+uv run activelearning config/branin_single_fidelity.yaml logger=null
+```
+
+Compose multiple YAML files by passing them in sequence — later files override shared keys:
+
+```bash
+# Add Aim logging to any run without touching the base config
+uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml
 ```
 
 !!! tip "When to override vs. when to edit the YAML"
@@ -126,12 +147,13 @@ uv run activelearning config/branin_gflownet_toy.yaml \
 ## Starting Points
 
 !!! tip "Good configs to start from"
-    - `config/branin_single_fidelity.yaml` — simplest runnable baseline, single fidelity.
-    - `config/branin_multi_fidelity.yaml` — multi-fidelity baseline with fidelity costs 0.01 / 0.1 / 1.0.
-    [:]- `config/branin_gflownet_toy.yaml` — demonstrates the generative sampler block and nested `sampler.conf` override structure.
+    - `config/branin_single_fidelity.yaml` — simplest runnable baseline, single fidelity, Branin 2D.
+    - `config/branin_multi_fidelity.yaml` — multi-fidelity Branin with fidelity costs 0.01 / 0.1 / 1.0.
+    - `config/hartmann_single_fidelity.yaml` — single-fidelity Hartmann6D, budget 100/10.
+    - `config/hartmann_multi_fidelity.yaml` — multi-fidelity Hartmann6D with fidelity costs 0.125 / 0.25 / 1.0.
     - `config/aim_logging.yaml` — logger overlay; compose with any base config to add Aim: `uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml`
 
-    For a full walkthrough of both configs, see the [Branin Experiment Tutorial](../tutorials/branin_experiment.md).
+    For guided walkthroughs, see the [Branin Experiment Tutorial](../tutorials/branin_experiment.md) and the [Hartmann6D Tutorial](../tutorials/hartmann_experiment.md).
 
 ## Recommended Procedure
 
