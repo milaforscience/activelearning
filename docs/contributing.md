@@ -293,7 +293,7 @@ A complete description addresses three questions:
 
 ### Bug reports
 
-Open a [GitHub issue](https://github.com/alexhernandezgarcia/activelearning/issues) and include:
+Open a [GitHub issue](https://github.com/milaforscience/activelearning/issues) and include:
 
 - What you **expected** to happen.
 - What **actually** happened (error message, traceback, unexpected output).
