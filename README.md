@@ -155,7 +155,7 @@ Set `logger.type` in your config to choose a logging backend:
 | `CometLogger` | Comet ML | `uv sync --extra comet` |
 | `AimLogger` | Aim | `uv sync --extra aim` |
 
-Multiple loggers can be combined with `MultiLogger`. See the [Logger component docs](https://milaforscience.github.io/activelearning/components/logger/) for configuration details.
+Multiple loggers can be combined with `MultiLogger`. See the [Logger component docs](https://milaforscience.github.io/activelearning/api/logger/) for configuration details.
 
 ---
 
