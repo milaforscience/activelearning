@@ -59,6 +59,6 @@ Each component — surrogate, acquisition, sampler, selector, oracle, budget, an
 
     [:octicons-arrow-right-24: Branin Tutorial](tutorials/branin_experiment.md)
     · [Hartmann Tutorial](tutorials/hartmann_experiment.md)
-    · [Examples](examples/configs.md)
+    · [Examples](tutorials/configs.md)
 
 </div>

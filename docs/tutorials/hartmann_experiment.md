@@ -76,5 +76,5 @@ Look for `hartmann-single-fidelity` and `hartmann-multi-fidelity` under the
 ## What comes next
 
 - Adapt either config to a **custom oracle** — see the [Extension Guide](../extension-guide/index.md) to swap in your own evaluation function.
-- Explore the [GFlowNet Sampler Setup](../examples/gflownet_sampler.md) to replace the uniform hypercube sampler with an acquisition-guided generative proposal.
+<!-- - Explore the [GFlowNet Sampler Setup](../tutorials/gflownet_sampler.md) to replace the uniform hypercube sampler with an acquisition-guided generative proposal. -->
 - Read [Multi-Fidelity Active Learning](../concepts/multi_fidelity.md) for a deeper conceptual treatment of how fidelity costs and confidences propagate through the loop.

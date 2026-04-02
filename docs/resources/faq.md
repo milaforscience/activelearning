@@ -17,7 +17,9 @@ Define per-fidelity costs in `oracle.fidelity_costs`. For cost-aware acquisition
 
 ## What does this framework support?
 
-The framework supports fidelity-aware data types, multi-fidelity benchmark oracles (Branin, Hartmann6D), cost-aware acquisition functions, cost-weighted candidate-fidelity proposals, and GFlowNet samplers for generative candidate generation. See [GFlowNet Sampler Setup](../examples/gflownet_sampler.md) for details on the GFlowNet integration.
+The framework supports fidelity-aware data types, multi-fidelity benchmark oracles (Branin, Hartmann6D), cost-aware acquisition functions, cost-weighted candidate-fidelity proposals, and GFlowNet samplers for generative candidate generation.
+
+<!-- See [GFlowNet Sampler Setup](../tutorials/gflownet_sampler.md) for details on the GFlowNet integration. -->
 
 ## How should I cite this project?
 

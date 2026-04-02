@@ -14,13 +14,3 @@ These are the primary runnable baselines, validated against the current schema:
 | `config/hartmann_multi_fidelity.yaml` | Multi-fidelity Hartmann6D with fidelity costs 0.125 / 0.25 / 1.0 and budget 100/10. |
 
 See the [Branin tutorial](../tutorials/branin_experiment.md) and [Hartmann6D tutorial](../tutorials/hartmann_experiment.md) for guided walkthroughs.
-
-## Other configs
-
-| File | Description |
-| --- | --- |
-| `config/aim_logging.yaml` | Logger overlay — compose with any base config to add Aim alongside the console. |
-| `config/branin_gflownet_toy.yaml` | Branin with GFlowNet sampler. Demonstrates the `sampler.conf.*` override structure. |
-| `config/hartmann6d_toy.yaml` | Hartmann6D scaffold (legacy schema). Use as a reference for bounds and fidelity costs; requires schema updates before running. |
-
-For GFlowNet sampler details, see [GFlowNet Sampler Setup](gflownet_sampler.md).

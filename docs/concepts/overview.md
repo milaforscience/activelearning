@@ -54,15 +54,6 @@ The underlying execution architecture remains invariant across single-fidelity a
 !!! tip "Same config structure for both settings"
     The same YAML schema works for both settings. Adding fidelity levels is as simple as extending `oracle.fidelity_costs` and `sampler.fidelities`. The [Branin tutorial](../tutorials/branin_experiment.md) walks through both side-by-side.
 
-## Core Implementation Principles
-
-Several design choices define this repository:
-
-- **Config-Driven Experiments:** YAML files dictate component selection and hyperparameter instantiation entirely.
-- **PyTorch-Native Runtime:** Hardware acceleration and precision states are propagated natively across all runtime-aware components.
-- **Modular Multi-Fidelity Support:** Fidelity-aware data structures, oracles, surrogates, and acquisition functions operate strictly behind common interfaces.
-- **Generative Flow Network (GFlowNet) Integration:** The repository provides optional GFlowNet samplers for generative candidate proposal guided by the current acquisition function. See [GFlowNet Sampler Setup](../examples/gflownet_sampler.md) for configuration details.
-
 ## Pool-Based Learning vs. *De Novo* Query Synthesis
 
 Classical active learning typically selects from a finite, pre-computed pool of unlabelled candidates. This framework instead performs ***de novo* query synthesis**: the algorithm generates and evaluates samples directly from the continuous or combinatorially large object space $\mathcal{X}$.

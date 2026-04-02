@@ -103,4 +103,4 @@ print("config ok")
 
 ## Available configs
 
-See [Available Configs](../examples/configs.md) for the full list of bundled YAML files and when to use each.
+See [Available Configs](../tutorials/configs.md) for the full list of bundled YAML files and when to use each.

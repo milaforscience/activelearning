@@ -128,7 +128,7 @@ uv run activelearning config/branin_gflownet_toy.yaml \
 !!! tip "Good configs to start from"
     - `config/branin_single_fidelity.yaml` — simplest runnable baseline, single fidelity.
     - `config/branin_multi_fidelity.yaml` — multi-fidelity baseline with fidelity costs 0.01 / 0.1 / 1.0.
-    - `config/branin_gflownet_toy.yaml` — demonstrates the generative sampler block and nested `sampler.conf` override structure.
+    [:]- `config/branin_gflownet_toy.yaml` — demonstrates the generative sampler block and nested `sampler.conf` override structure.
     - `config/aim_logging.yaml` — logger overlay; compose with any base config to add Aim: `uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml`
 
     For a full walkthrough of both configs, see the [Branin Experiment Tutorial](../tutorials/branin_experiment.md).

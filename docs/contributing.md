@@ -5,7 +5,7 @@ standards for the Multi-Fidelity Active Learning framework. It covers environmen
 coding conventions, and pull request preparation.
 
 If you are looking to adapt or extend the framework for your own experiments rather than
-contribute upstream, start with the [Extension Guide](guides/extending.md) instead.
+contribute upstream, start with the [Extension Guide](extension-guide/index.md) instead.
 
 ---
 

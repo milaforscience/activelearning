@@ -67,8 +67,7 @@ nav:
       - Running Experiments: tutorials/running_experiments.md
       - Branin Experiment: tutorials/branin_experiment.md
       - Hartmann6D Experiment: tutorials/hartmann_experiment.md
-      - GFlowNet Sampler Setup: examples/gflownet_sampler.md
-      - Available Configs: examples/configs.md
+      - Available Configs: tutorials/configs.md
   - Extension Guide:
       - Overview: extension-guide/index.md
       - Adding an Oracle: extension-guide/oracle.md
