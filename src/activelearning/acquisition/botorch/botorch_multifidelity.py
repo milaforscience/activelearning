@@ -57,6 +57,7 @@ class _QMultiFidelityEntropyBase(QBatchBoTorchAcquisition):
     """
 
     _botorch_acqf_class: ClassVar[type[AcquisitionFunction]]
+    _supports_multi_fidelity: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -222,6 +223,8 @@ class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
     **kwargs
         Forwarded to :class:`QBatchBoTorchAcquisition`.
     """
+
+    _supports_multi_fidelity: ClassVar[bool] = True
 
     def __init__(
         self,

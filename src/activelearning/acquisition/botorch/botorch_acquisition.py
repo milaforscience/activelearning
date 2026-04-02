@@ -1,5 +1,6 @@
+import warnings
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Iterable, Optional
+from typing import Any, Callable, ClassVar, Iterable, Optional
 
 import torch
 
@@ -22,6 +23,9 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
     ``_build_botorch_acquisition()`` to construct the BoTorch acquisition
     and optionally ``_score_encoded()`` to customize how scores are computed.
     """
+
+    # Overridden to True by multi-fidelity subclasses.
+    _supports_multi_fidelity: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -110,6 +114,15 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
             raise TypeError(
                 f"{self.__class__.__name__} requires a BoTorchGPSurrogate, "
                 f"but received {type(surrogate).__name__}."
+            )
+        if surrogate._is_multi_fidelity and not self._supports_multi_fidelity:
+            warnings.warn(
+                f"{type(self).__name__} is not a multi-fidelity acquisition function "
+                "and will not account for fidelity costs or structure. "
+                "Acquisition scores may not reflect the true cost-adjusted value "
+                "of querying at lower fidelities.",
+                UserWarning,
+                stacklevel=2,
             )
         obs_list = list(observations) if observations is not None else None
         super().update(surrogate, obs_list)
