@@ -130,7 +130,7 @@ src/activelearning/       # Framework source code
   acquisition/            # Acquisition functions
   dataset/                # Dataset backends
   oracle/                 # Oracle implementations
-  sampler/                # Candidate samplers (LHS, GFlowNet, …)
+  sampler/                # Candidate samplers (Hypercube, pool-uniform, pool-score)
   selector/               # Budget-aware selectors
   surrogate/              # Probabilistic surrogate models
   logger/                 # Logging backends
