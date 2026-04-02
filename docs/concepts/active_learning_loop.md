@@ -45,7 +45,7 @@ Once the surrogate is fitted, the acquisition function is coupled to it and upda
 
 ### 4. Candidate sampling
 
-The sampler generates a pool of candidate-fidelity pairs $(x, m)$ to consider. Sampling is guided by the acquisition signal and avoids re-proposing already-queried points. The size of this pool is controlled by `sampler.num_samples`.
+The sampler generates a pool of candidate-fidelity pairs $(x, m)$ to consider. Some samplers may use the acquisition signal and historical observations to shape this pool, while others may generate proposals independently. The size of this pool is controlled by `sampler.num_samples`.
 
 ### 5. Budget-aware selection
 
