@@ -13,11 +13,11 @@ The action space is a candidate-fidelity pair $(x, m)$, not only a candidate $x$
 
 ## Where do fidelity costs and confidences belong in the config?
 
-Define per-fidelity costs in `oracle.fidelity_costs`. For cost-aware acquisition functions, pass the same mapping to `acquisition.fidelity_costs`. If you want to override the default confidence heuristic in the built-in benchmark oracles, add `oracle.fidelity_confidences`.
+Define per-fidelity costs in `oracle.fidelity_costs`. Cost-aware acquisition functions read fidelity costs directly from the oracle at runtime — there is no separate `acquisition.fidelity_costs` field. If you want to override the default confidence heuristic in the built-in benchmark oracles, add `oracle.fidelity_confidences`.
 
 ## What does this framework support?
 
-The framework supports fidelity-aware data types, multi-fidelity benchmark oracles (Branin, Hartmann6D), cost-aware acquisition functions, cost-weighted candidate-fidelity proposals, and GFlowNet samplers for generative candidate generation.
+The framework supports fidelity-aware data types, multi-fidelity benchmark oracles (Branin, Hartmann6D), cost-aware acquisition functions, cost-weighted candidate-fidelity proposals, and modular samplers (`HypercubeSampler`, `PoolUniformSampler`, `PoolScoreSampler`). A GFlowNet-based sampler is planned as a future extension.
 
 <!-- See [GFlowNet Sampler Setup](../tutorials/gflownet_sampler.md) for details on the GFlowNet integration. -->
 

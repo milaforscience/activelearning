@@ -9,7 +9,7 @@ final query set. Implement a new sampler to:
 - Apply domain constraints that `HypercubeSampler` cannot express.
 
 Before implementing a new sampler, verify that `HypercubeSampler`,
-`GFlowNetSampler`, or `GFlowNetGridSampler` does not already cover your use case.
+`PoolUniformSampler`, or `PoolScoreSampler` does not already cover your use case.
 
 ## What to implement
 

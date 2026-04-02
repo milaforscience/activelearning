@@ -10,6 +10,8 @@ document.addEventListener('DOMContentLoaded', function () {
       : pre.textContent;
     pre.replaceWith(div);
   });
-  mermaid.initialize({ startOnLoad: false, theme: 'default' });
-  mermaid.run({ querySelector: '.mermaid' });
+  if (window.mermaid) {
+    mermaid.initialize({ startOnLoad: false, theme: 'default' });
+    mermaid.run({ querySelector: '.mermaid' });
+  }
 });

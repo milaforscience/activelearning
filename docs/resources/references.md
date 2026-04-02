@@ -37,7 +37,7 @@ If you use this codebase in academic work, please cite:
 
 - Original MF-AL GFlowNets code: <https://github.com/nikita-0209/mf-al-gfn>
 - Earlier active-learning implementation: <https://github.com/alexhernandezgarcia/activelearning>
-- GFlowNet dependency used by the sampler integration: <https://github.com/alexhernandezgarcia/gflownet>
+- GFlowNet library (planned sampler integration): <https://github.com/alexhernandezgarcia/gflownet>
 - BoTorch, used by the surrogate and acquisition baseline: <https://github.com/pytorch/botorch>
 
 ## Benchmark context

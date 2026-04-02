@@ -45,7 +45,7 @@ This framework makes the following contributions relative to the libraries and r
 
 2. **De novo query synthesis**: operates over the full input space $\mathcal{X}$ rather than a fixed pool of candidates. This is the appropriate setting for scientific discovery problems such as drug discovery and materials design, where the candidate pool is too large to enumerate or does not exist a priori.
 
-3. **GFlowNet integration**: incorporates GFlowNets as samplers for diverse candidate generation. GFlowNet samplers generate candidates proportional to an acquisition signal $\alpha(x, m)$, supporting candidate diversity rather than concentrating queries near a single estimated optimum.
+3. **GFlowNet integration** *(planned)*: the framework is designed to support GFlowNets as samplers for diverse candidate generation, where candidates are generated proportional to an acquisition signal $\alpha(x, m)$. This integration is a planned extension and is not yet implemented in the current codebase.
 
 4. **Modular, config-driven design**: every component—surrogate, acquisition, sampler, selector, oracle, budget—is replaceable via YAML configuration. The orchestration logic is fixed; any component can be substituted or extended without modifying the loop.
 
