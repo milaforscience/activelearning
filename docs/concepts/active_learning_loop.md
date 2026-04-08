@@ -1,4 +1,4 @@
-# Active Learning Execution Loop
+# Active Learning Loop
 
 The active learning loop is the central orchestration mechanism. Each round, it fits the surrogate on everything observed so far, generates a pool of candidate queries, selects a budget-affordable subset, evaluates them through the oracle, and appends the results to the dataset. The loop stops when the budget is exhausted or no affordable candidates remain.
 
@@ -20,7 +20,7 @@ graph TD
 
 ## Initialisation
 
-Before the loop begins, a shared [`RuntimeContext`](../api/runtime_and_types.md) is constructed from the YAML config and bound to all components. This propagates the compute device, floating-point precision, and logger reference across the entire experiment — every component sees the same execution environment without any per-component wiring.
+Before the loop begins, a shared [`RuntimeContext`](../api/runtime_and_types.md#activelearning.runtime.RuntimeContext) is constructed from the YAML config and bound to all components. This propagates the compute device, floating-point precision, and logger reference across the entire experiment — every component sees the same execution environment without any per-component wiring.
 
 Oracle fidelity confidences are also forwarded to the surrogate at this point so it can incorporate fidelity-specific uncertainty scaling from the start.
 
@@ -81,4 +81,4 @@ This strict decomposition makes ablation studies and extensions straightforward:
 
 See the [Extension Guide](../extension-guide/index.md) for step-by-step instructions, and the [API Reference](../api/index.md) for the full interface definitions of each component.
 
-To explore the mathematical multi-fidelity parameterisation in depth, proceed to [Multi-Fidelity Active Learning](multi_fidelity.md).
+To explore the mathematical multi-fidelity parameterisation in depth, proceed to [Multi-Fidelity Setting](multi_fidelity.md).

@@ -17,7 +17,7 @@ Define per-fidelity costs in `oracle.fidelity_costs`. Cost-aware acquisition fun
 
 ## What does this framework support?
 
-The framework supports fidelity-aware data types, multi-fidelity benchmark oracles (Branin, Hartmann6D), cost-aware acquisition functions, cost-weighted candidate-fidelity proposals, and modular samplers (`HypercubeSampler`, `PoolUniformSampler`, `PoolScoreSampler`). A GFlowNet-based sampler is planned as a future extension.
+The framework supports fidelity-aware data types, multi-fidelity benchmark oracles (Branin, Hartmann), cost-aware acquisition functions, cost-weighted candidate-fidelity proposals, and modular samplers ([`HypercubeSampler`](../api/sampler.md#activelearning.sampler.hypercube_sampler.HypercubeSampler), [`PoolUniformSampler`](../api/sampler.md#activelearning.sampler.pool_uniform_sampler.PoolUniformSampler), [`PoolScoreSampler`](../api/sampler.md#activelearning.sampler.pool_score_sampler.PoolScoreSampler)). A GFlowNet-based sampler is planned as a future extension.
 
 <!-- See [GFlowNet Sampler Setup](../tutorials/gflownet_sampler.md) for details on the GFlowNet integration. -->
 

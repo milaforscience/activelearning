@@ -1,4 +1,4 @@
-# Multi-Fidelity Active Learning
+# Multi-Fidelity Setting
 
 This page details how fidelity is represented and propagated through each component of the framework. It assumes familiarity with the problem setting (see [Home](../index.md)) and the execution loop (see [Active Learning Loop](active_learning_loop.md)).
 
@@ -6,7 +6,7 @@ In the multi-fidelity setting, the action space is the set of candidate-fidelity
 
 ## Oracle-Defined Fidelity Structure
 
-The [`Oracle`](../api/oracle.md) defines the multi-fidelity structure of the experiment. It specifies:
+The [`Oracle`](../api/oracle.md#activelearning.oracle.oracle.Oracle) defines the multi-fidelity structure of the experiment. It specifies:
 
 - The valid fidelity levels $m \in \mathcal{M}$.
 - The cost $c(x, m)$ associated with each fidelity level.
@@ -18,22 +18,22 @@ Fidelity costs are required; fidelity confidences are optional. When confidences
 
 ### Sampler
 
-The [`Sampler`](../api/sampler.md) is responsible for emitting explicit candidate-fidelity pairs $(x, m)$ rather than candidates alone. Two strategies are supported:
+The [`Sampler`](../api/sampler.md#activelearning.sampler.sampler.Sampler) is responsible for emitting explicit candidate-fidelity pairs $(x, m)$ rather than candidates alone. Two strategies are supported:
 
 - **Uniform fidelity sampling**: fidelity levels are drawn uniformly over $\mathcal{M}$.
 - **Cost-weighted fidelity sampling**: fidelity levels are sampled inversely proportional to $c(x, m)$, increasing the proportion of lower-fidelity proposals and preserving budget headroom for high-fidelity queries in later rounds.
 
 ### Surrogate
 
-Prior to loop execution, the [`Oracle`](../api/oracle.md) passes fidelity confidences $\kappa(m)$ to the [`Surrogate`](../api/surrogate.md) via [`set_fidelity_confidences()`](../api/surrogate.md#activelearning.surrogate.surrogate.Surrogate.set_fidelity_confidences). The surrogate uses these confidences to condition its probabilistic model on fidelity level, producing a posterior that accounts for the reduced reliability of lower-fidelity observations.
+Prior to loop execution, the [`Oracle`](../api/oracle.md#activelearning.oracle.oracle.Oracle) passes fidelity confidences $\kappa(m)$ to the [`Surrogate`](../api/surrogate.md#activelearning.surrogate.surrogate.Surrogate) via [`set_fidelity_confidences()`](../api/surrogate.md#activelearning.surrogate.surrogate.Surrogate.set_fidelity_confidences). The surrogate uses these confidences to condition its probabilistic model on fidelity level, producing a posterior that accounts for the reduced reliability of lower-fidelity observations.
 
 ### Acquisition
 
-A multi-fidelity [`Acquisition`](../api/acquisition.md) function $\alpha(x, m)$ scores candidate-fidelity pairs by expected utility per unit cost $c(x, m)$, balancing information gain against the cost of obtaining it. This cost-normalisation ensures that lower-fidelity queries remain competitive when they provide sufficient information gain relative to their cost.
+A multi-fidelity [`Acquisition`](../api/acquisition.md#activelearning.acquisition.acquisition.Acquisition) function $\alpha(x, m)$ scores candidate-fidelity pairs by expected utility per unit cost $c(x, m)$, balancing information gain against the cost of obtaining it. This cost-normalisation ensures that lower-fidelity queries remain competitive when they provide sufficient information gain relative to their cost.
 
 ### Selector and Budget
 
-The [`Selector`](../api/selector.md) makes the final spending decision under the round budget $B_k$, jointly considering:
+The [`Selector`](../api/selector.md#activelearning.selector.selector.Selector) makes the final spending decision under the round budget $B_k$, jointly considering:
 
 - Acquisition values $\alpha(x, m)$ over the proposed set $\mathcal{P}$.
 - Oracle query costs $c(x, m)$.
@@ -57,4 +57,4 @@ For concrete configuration examples, see [Runtime and Configuration](runtime_and
 | Budget role | Limits query count | Constrains query count and fidelity allocation |
 | Search strategy | Targets best-so-far improvement | Mixes fidelities for cost-effective discovery |
 
-For concrete configuration examples, see the [Branin tutorial](../tutorials/branin_experiment.md), which walks through both settings side by side.
+For concrete configuration examples, see the [Synthetic Function Examples](../tutorials/synthetic_function_experiment.md) tutorial, which walks through both settings side by side.

@@ -21,7 +21,7 @@ The architectural execution loop follows this trajectory:
 ```mermaid
 graph LR
     D([Dataset]) -- fit --> S([Surrogate])
-    S -- update --> A([Acquisition])
+    S -- inform --> A([Acquisition])
     A -- guide --> Sa([Sampler])
     Sa -- propose --> Se([Selector])
     Se -- query --> O([Oracle])
@@ -52,7 +52,7 @@ The underlying execution architecture remains invariant across single-fidelity a
 - In **multi-fidelity** mode, $m$ becomes an explicit decision variable, and the acquisition function must weigh the cost-utility trade-off of querying $(x, m)$ pairs.
 
 !!! tip "Same config structure for both settings"
-    The same YAML schema works for both settings. Adding fidelity levels is as simple as extending `oracle.fidelity_costs` and `sampler.fidelities`. The [Branin tutorial](../tutorials/branin_experiment.md) walks through both side-by-side.
+    The same YAML schema works for both settings. Adding fidelity levels is as simple as extending `oracle.fidelity_costs` and `sampler.fidelities`. The [Synthetic Function Examples](../tutorials/synthetic_function_experiment.md) tutorial walks through both side-by-side.
 
 ## Pool-Based Learning vs. *De Novo* Query Synthesis
 
@@ -70,5 +70,5 @@ For a more detailed discussion of how this framework relates to prior work, see 
 ## Suggested Reading Order
 
 1. [Active Learning Loop](active_learning_loop.md)
-2. [Multi-Fidelity Active Learning](multi_fidelity.md)
+2. [Multi-Fidelity Setting](multi_fidelity.md)
 3. [Runtime and Configuration](runtime_and_configuration.md)

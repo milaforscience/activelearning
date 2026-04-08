@@ -1,41 +1,12 @@
 # Running Experiments
 
-This page covers everything you need to run, configure, and monitor experiments
-with this framework. It assumes you have already [installed the package](../getting-started/installation.md).
+This page covers the CLI mechanics for configuring, composing, and monitoring experiments. If you haven't run your first experiment yet, start with the [Quickstart](../getting-started/quickstart.md).
 
-## Setup
+## Override config values
 
-```sh
-make setup
-```
-
-This installs the package and the `activelearning` CLI entrypoint.
-
-## Run your first experiment
-
-Pass a YAML config file to the CLI:
+Append `key=value` arguments after the config path to override any field without touching the YAML file. Keys use dot notation to address nested fields (`budget.schedule.value` maps to `schedule.value` inside the `budget` block). This follows standard [OmegaConf](https://omegaconf.readthedocs.io/) syntax:
 
 ```sh
-uv run activelearning config/branin_single_fidelity.yaml
-```
-
-You will see per-round metrics printed to the terminal:
-
-```text
-[Step 1] round=1 | num_new_samples=28 | round_cost=28.0 | total_cost=28.0 | budget_remaining=272.0
-...
-Done. Rounds: 10 | Total cost: 300.0
-```
-
-## Override any config value
-
-Append OmegaConf dotlist overrides directly after the config path. Any
-top-level or nested field can be overridden:
-
-```sh
-# Quick pilot with reduced budget
-uv run activelearning config/branin_single_fidelity.yaml budget.available_budget=30.0
-
 # Change the round budget
 uv run activelearning config/branin_multi_fidelity.yaml budget.schedule.value=5.0
 
@@ -45,47 +16,32 @@ uv run activelearning config/branin_multi_fidelity.yaml sampler.num_samples=2000
 
 ## Compose multiple configs
 
-Pass two or more YAML files. They are merged left to right — later files override
-shared keys, everything else is inherited:
-
-```sh
-# Add Aim logging to any run without touching the base config
-uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml
-```
-
-The bundled `config/aim_logging.yaml` replaces only the `logger` block.
-
-## Add Aim logging
-
-Install the optional Aim dependency:
-
-```sh
-uv sync --extra aim
-```
-
-Then compose with the Aim overlay:
+Pass two or more YAML files. They are merged left to right — later files override shared keys, everything else is inherited:
 
 ```sh
 uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml
 ```
 
-Open the Aim UI:
+The bundled `config/aim_logging.yaml` replaces only the `logger` block, leaving the rest of the experiment unchanged. This pattern works with any base config.
 
-```sh
-uv run aim up
-```
+## Logging
 
-Other supported backends: `WandbLogger` (`uv sync --extra wandb`),
-`CometLogger` (`uv sync --extra comet`). Override `logger.type` directly
-or provide your own logger YAML overlay.
+The framework supports several logging backends. Install the optional dependency for the one you want and compose with the corresponding overlay:
 
-## Disable logging
+| Backend | Install | `logger.type` |
+| --- | --- | --- |
+| Console | — | [`ConsoleLogger`](../api/logger.md#activelearning.logger.logger.ConsoleLogger) |
+| [Aim](https://aimstack.io/) | `uv sync --extra aim` | [`AimLogger`](../api/logger.md#activelearning.logger.logger.AimLogger) |
+| [Weights & Biases](https://wandb.ai/) | `uv sync --extra wandb` | [`WandbLogger`](../api/logger.md#activelearning.logger.logger.WandbLogger) |
+| [Comet](https://www.comet.com/) | `uv sync --extra comet` | [`CometLogger`](../api/logger.md#activelearning.logger.logger.CometLogger) |
 
-```yaml
-logger: null
-```
+You can override `logger.type` directly or provide your own logger YAML overlay.
 
-Or as an override:
+For a step-by-step walkthrough of Aim logging, see the [Synthetic Function Examples](synthetic_function_experiment.md) tutorial.
+
+### Disable logging
+
+Set `logger` to `null` in the config or as a CLI override:
 
 ```sh
 uv run activelearning config/branin_single_fidelity.yaml logger=null
@@ -103,4 +59,4 @@ print("config ok")
 
 ## Available configs
 
-See [Available Configs](../tutorials/configs.md) for the full list of bundled YAML files and when to use each.
+See the [Synthetic Function Examples](synthetic_function_experiment.md) tutorial for the full list of bundled configs and guided walkthroughs.

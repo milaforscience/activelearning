@@ -9,8 +9,8 @@ selector to:
   thresholds).
 - Mix cost awareness with acquisition scoring in a custom way.
 
-Before implementing a new selector, verify that `TopKAcquisitionSelector` or
-`CostAwareSelector` does not already meet your requirements.
+Before implementing a new selector, verify that [`TopKAcquisitionSelector`](../api/selector.md#activelearning.selector.score_selector.TopKAcquisitionSelector) or
+[`CostAwareSelector`](../api/selector.md#activelearning.selector.cost_aware_selector.CostAwareSelector) does not already meet your requirements.
 
 ## What to implement
 
@@ -20,158 +20,32 @@ Subclass `activelearning.selector.selector.Selector` and implement one method:
 |---|---|
 | `__call__` | `(candidates, acquisition=None, cost_fn=None, round_budget=None) -> list[Candidate]` |
 
-Return a **subset** of the input candidates. Never query the oracle, compute
+Return a **subset** of the input candidates — including an empty list if no candidates are feasible. Never query the oracle, compute
 observations, or modify the budget inside the selector.
 
-## Complete example: diversity-aware selector
+## Reference implementations
 
-This selector scores candidates with the acquisition function and then applies
-a simple spread heuristic: candidates that are too close to an already-selected
-point are penalized, promoting diversity.
+Review the built-in selectors as concrete examples before writing your own:
 
-```python
-# src/activelearning/selector/diversity_selector.py
+- [`TopKAcquisitionSelector`](../api/selector.md#activelearning.selector.score_selector.TopKAcquisitionSelector) — picks the top-K candidates by acquisition score; the simplest selector.
+- [`CostAwareSelector`](../api/selector.md#activelearning.selector.cost_aware_selector.CostAwareSelector) — selects candidates by score-per-unit-cost within the round budget; the default for multi-fidelity experiments.
 
-import math
-from typing import Callable, Optional, Sequence
-
-from activelearning.acquisition.acquisition import Acquisition
-from activelearning.selector.selector import Selector
-from activelearning.utils.types import Candidate
-
-
-def _euclidean(a: list[float], b: list[float]) -> float:
-    """Compute Euclidean distance between two flat coordinate lists."""
-    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b)))
-
-
-class DiversityAwareSelector(Selector):
-    """Selects candidates by balancing acquisition score and spatial spread.
-
-    Scores each candidate with the acquisition function, then greedily picks
-    the next candidate whose distance to all already-selected candidates
-    exceeds ``min_distance``. Falls back to the top-scoring remaining
-    candidate when no diverse point exists.
-
-    Parameters
-    ----------
-    num_samples : int
-        Maximum number of candidates to select per round.
-    min_distance : float
-        Minimum Euclidean distance between any two selected candidates.
-        Candidates closer than this threshold to an already-selected point
-        are de-prioritized but not permanently excluded.
-    """
-
-    def __init__(self, num_samples: int, min_distance: float = 0.1) -> None:
-        self._num_samples = num_samples
-        self._min_distance = min_distance
-
-    def __call__(
-        self,
-        candidates: Sequence[Candidate],
-        acquisition: Optional[Acquisition] = None,
-        cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
-        round_budget: Optional[float] = None,
-    ) -> list[Candidate]:
-        """Select a diverse, high-scoring subset of candidates.
-
-        Parameters
-        ----------
-        candidates : Sequence[Candidate]
-            Pool to select from.
-        acquisition : Acquisition, optional
-            Used to score candidates. If ``None``, selection is random.
-        cost_fn : callable, optional
-            Unused by this selector. Accepted for interface compatibility.
-        round_budget : float, optional
-            Unused by this selector. Accepted for interface compatibility.
-
-        Returns
-        -------
-        selected : list[Candidate]
-            Up to ``num_samples`` candidates that balance score and spread.
-            Returns an empty list when ``candidates`` is empty.
-        """
-        if not candidates:
-            return []
-
-        # Score every candidate (fall back to 0.0 when no acquisition)
-        if acquisition is not None and acquisition.supports_singleton_scoring:
-            scores = acquisition.score(candidates)
-        else:
-            scores = [0.0] * len(candidates)
-
-        # Sort descending by score; work on index pairs for stable tracking
-        indexed = sorted(
-            enumerate(candidates), key=lambda ic: scores[ic[0]], reverse=True
-        )
-
-        selected: list[Candidate] = []
-        selected_coords: list[list[float]] = []
-
-        for _original_idx, candidate in indexed:
-            if len(selected) >= self._num_samples:
-                break
-
-            x = candidate.x if isinstance(candidate.x, list) else list(candidate.x)
-
-            # Check distance to all already-selected candidates
-            too_close = any(
-                _euclidean(x, sc) < self._min_distance
-                for sc in selected_coords
-            )
-
-            if not too_close:
-                selected.append(candidate)
-                selected_coords.append(x)
-
-        # If diversity filtering was too aggressive, top up with best remaining
-        if len(selected) < self._num_samples:
-            remaining = [
-                c for _, c in indexed if c not in selected
-            ]
-            needed = self._num_samples - len(selected)
-            selected.extend(remaining[:needed])
-
-        return selected
-```
+Source: `src/activelearning/selector/`.
 
 ## Config model and registration
 
-Add a config model and extend `SelectorConfig` in
-`src/activelearning/selector/config.py`:
+Add a Pydantic config model in `src/activelearning/selector/config.py` and extend the `SelectorConfig` union. See the existing models in that file as reference.
 
 ```python
-# src/activelearning/selector/config.py  (additions)
-from typing import Annotated, Literal, Union
-from pydantic import BaseModel, Field
-from activelearning.selector.diversity_selector import DiversityAwareSelector
-from activelearning.selector.selector import Selector
-
-
-class DiversityAwareSelectorConfig(BaseModel):
-    """Configuration for the diversity-aware selector."""
-
-    type: Literal["DiversityAwareSelector"] = "DiversityAwareSelector"
-    num_samples: int = Field(gt=0)
-    min_distance: float = 0.1
+class MySelectorConfig(BaseModel):
+    type: Literal["MySelector"] = "MySelector"
+    # your parameters here
 
     def build(self) -> Selector:
-        """Instantiate and return the selector."""
-        return DiversityAwareSelector(
-            num_samples=self.num_samples,
-            min_distance=self.min_distance,
-        )
+        return MySelector(...)
 
-
-# Extend the union
 SelectorConfig = Annotated[
-    Union[
-        TopKAcquisitionSelectorConfig,
-        CostAwareSelectorConfig,
-        DiversityAwareSelectorConfig,   # <-- new
-    ],
+    Union[..., MySelectorConfig],
     Field(discriminator="type"),
 ]
 ```
@@ -180,28 +54,15 @@ Then in your YAML:
 
 ```yaml
 selector:
-  type: DiversityAwareSelector
-  num_samples: 10
-  min_distance: 0.05
+  type: MySelector
 ```
 
 ## Fidelity preservation
 
 Selected candidates must carry their fidelity ids unchanged. Do not modify
-`Candidate.fidelity` inside the selector — the oracle and dataset use it to
-route and record observations correctly. Since `Candidate` is a frozen
+[`Candidate.fidelity`](../api/runtime_and_types.md#activelearning.utils.types.Candidate) inside the selector — the oracle and dataset use it to
+route and record observations correctly. Since [`Candidate`](../api/runtime_and_types.md#activelearning.utils.types.Candidate) is a frozen
 dataclass, accidental mutation will raise an `AttributeError`.
-
-## Returning an empty list
-
-Return an empty list when no candidates are feasible (e.g. all candidates
-violate a constraint or the budget is exhausted before any selection is made).
-The loop treats an empty return as a valid termination condition for the current round.
-
-```python
-if round_budget is not None and min_cost > round_budget:
-    return []   # nothing fits in budget — stop cleanly
-```
 
 ## Using `acquisition.score()` inside the selector
 

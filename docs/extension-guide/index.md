@@ -6,7 +6,7 @@ component in the active-learning loop can be replaced independently:
 ```mermaid
 graph LR
     D([Dataset]) -- fit --> S([Surrogate])
-    S -- update --> A([Acquisition])
+    S -- inform --> A([Acquisition])
     A -- guide --> Sa([Sampler])
     Sa -- propose --> Se([Selector])
     Se -- query --> O([Oracle])
@@ -21,11 +21,7 @@ components operate without modification.
 
 Every component follows the same four-step pattern:
 
-1. **Implement** your class by subclassing the relevant abstract base.
-2. **Add a Pydantic config model** with a `type` literal and a `build()` method.
-3. **Register** that config model in the component's `config.py` by adding it to
-   the `Union` type alias.
-4. **Point your YAML** at the new `type`.
+**1. Implement** your class by subclassing the relevant abstract base.
 
 ```python
 # src/activelearning/oracle/my_oracle.py
@@ -35,8 +31,11 @@ class MyOracle(Oracle):
     def get_fidelity_confidences(self) -> dict[int, float]: ...
     def get_costs(self, candidates): ...
     def query(self, candidates): ...
+```
 
+**2. Add a Pydantic config model** with a `type` literal and a `build()` method.
 
+```python
 # src/activelearning/oracle/config.py  (additions)
 from activelearning.oracle.my_oracle import MyOracle
 
@@ -46,12 +45,18 @@ class MyOracleConfig(BaseModel):
 
     def build(self) -> Oracle:
         return MyOracle(...)
+```
 
+**3. Register** that config model in the component's `config.py` by adding it to the `Union` type alias.
+
+```python
 OracleConfig = Annotated[
     Union[..., MyOracleConfig],
     Field(discriminator="type"),
 ]
 ```
+
+**4. Point your YAML** at the new `type`.
 
 ```yaml
 # config.yaml
@@ -61,7 +66,7 @@ oracle:
 
 ## Runtime context
 
-All components inherit from `ALRuntimeMixin`. The runtime context (device, dtype,
+All components inherit from [`ALRuntimeMixin`](../api/runtime_and_types.md#activelearning.runtime.ALRuntimeMixin). The runtime context (device, dtype,
 logger) is **bound after `build()`** — avoid using it in `__init__()`. Access it
 inside your methods instead:
 

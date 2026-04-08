@@ -60,14 +60,12 @@ nav:
   - Introduction:
       - Framework Overview: concepts/overview.md
       - Active Learning Loop: concepts/active_learning_loop.md
-      - Multi-Fidelity Active Learning: concepts/multi_fidelity.md
+      - Multi-Fidelity Setting: concepts/multi_fidelity.md
       - Runtime and Configuration: concepts/runtime_and_configuration.md
       - Related Work and Positioning: concepts/related-work.md
   - Tutorials:
       - Running Experiments: tutorials/running_experiments.md
-      - Branin Experiment: tutorials/branin_experiment.md
-      - Hartmann6D Experiment: tutorials/hartmann_experiment.md
-      - Available Configs: tutorials/configs.md
+      - Synthetic Function Examples: tutorials/synthetic_function_experiment.md
   - Extension Guide:
       - Overview: extension-guide/index.md
       - Adding an Oracle: extension-guide/oracle.md

@@ -8,7 +8,7 @@ A run follows this sequence:
 
 1. **OmegaConf loads the YAML file.**
 2. **CLI dotlist overrides are merged on top.**
-3. **Pydantic validates the result** as `ActiveLearningConfig`.
+3. **Pydantic validates the result** as [`ActiveLearningConfig`](../api/config.md#activelearning.config.ActiveLearningConfig).
 4. **Each top-level block instantiates one concrete component.**
 5. **A shared runtime context is constructed** and bound to runtime-aware components.
 6. **The budget-constrained active-learning loop begins.**
@@ -149,11 +149,11 @@ uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml
 !!! tip "Good configs to start from"
     - `config/branin_single_fidelity.yaml` — simplest runnable baseline, single fidelity, Branin 2D.
     - `config/branin_multi_fidelity.yaml` — multi-fidelity Branin with fidelity costs 0.01 / 0.1 / 1.0.
-    - `config/hartmann_single_fidelity.yaml` — single-fidelity Hartmann6D, budget 100/10.
-    - `config/hartmann_multi_fidelity.yaml` — multi-fidelity Hartmann6D with fidelity costs 0.125 / 0.25 / 1.0.
+    - `config/hartmann_single_fidelity.yaml` — single-fidelity Hartmann, budget 100/10.
+    - `config/hartmann_multi_fidelity.yaml` — multi-fidelity Hartmann with fidelity costs 0.125 / 0.25 / 1.0.
     - `config/aim_logging.yaml` — logger overlay; compose with any base config to add Aim: `uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml`
 
-    For guided walkthroughs, see the [Branin Experiment Tutorial](../tutorials/branin_experiment.md) and the [Hartmann6D Tutorial](../tutorials/hartmann_experiment.md).
+    For guided walkthroughs, see the [Synthetic Function Examples](../tutorials/synthetic_function_experiment.md) tutorial.
 
 ## Recommended Procedure
 

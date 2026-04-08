@@ -44,4 +44,4 @@ If you use this codebase in academic work, please cite:
 
 The built-in Branin and Hartmann benchmark oracles provide standard
 multi-fidelity reference problems. For a guided walkthrough, start with the
-[Branin Experiment Tutorial](../tutorials/branin_experiment.md).
+[Synthetic Function Examples](../tutorials/synthetic_function_experiment.md) tutorial.
