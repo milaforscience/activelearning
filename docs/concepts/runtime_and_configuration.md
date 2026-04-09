@@ -8,7 +8,7 @@ A run follows this sequence:
 
 1. **OmegaConf loads the YAML file.**
 2. **CLI dotlist overrides are merged on top.**
-3. **Pydantic validates the result** as [`ActiveLearningConfig`](../api/config.md#activelearning.config.ActiveLearningConfig).
+3. **Pydantic validates the result** as [`ActiveLearningConfig`](../reference/activelearning/config.md#activelearning.config.ActiveLearningConfig).
 4. **Each top-level block instantiates one concrete component.**
 5. **A shared runtime context is constructed** and bound to runtime-aware components.
 6. **The budget-constrained active-learning loop begins.**

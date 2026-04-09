@@ -37,11 +37,19 @@ extra_javascript:
 
 plugins:
   - search
+  - gen-files:
+      scripts:
+        - docs/gen_ref_pages.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - section-index
   - mkdocstrings:
       handlers:
         python:
           paths: [src]
           options:
+            # Source display and heading level are set globally so every
+            # auto-generated reference page inherits them automatically.
             show_source: true
             show_root_heading: true
             show_root_full_path: false
@@ -73,18 +81,7 @@ nav:
       - Adding a Surrogate: extension-guide/surrogate.md
       - Adding a Selector: extension-guide/selector.md
       - Adding an Acquisition: extension-guide/acquisition.md
-  - API Reference:
-      - Overview: api/index.md
-      - Configuration Model: api/config.md
-      - Runtime and Types: api/runtime_and_types.md
-      - Dataset: api/dataset.md
-      - Surrogate: api/surrogate.md
-      - Acquisition: api/acquisition.md
-      - Sampler: api/sampler.md
-      - Selector: api/selector.md
-      - Oracle: api/oracle.md
-      - Budget: api/budget.md
-      - Logger: api/logger.md
+  - API Reference: reference/
   - Resources:
       - FAQ: resources/faq.md
       - References and Citation: resources/references.md

@@ -66,7 +66,7 @@ oracle:
 
 ## Runtime context
 
-All components inherit from [`ALRuntimeMixin`](../api/runtime_and_types.md#activelearning.runtime.ALRuntimeMixin). The runtime context (device, dtype,
+All components inherit from [`ALRuntimeMixin`](../reference/activelearning/runtime.md#activelearning.runtime.ALRuntimeMixin). The runtime context (device, dtype,
 logger) is **bound after `build()`** — avoid using it in `__init__()`. Access it
 inside your methods instead:
 

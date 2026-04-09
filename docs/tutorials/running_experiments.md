@@ -30,10 +30,10 @@ The framework supports several logging backends. Install the optional dependency
 
 | Backend | Install | `logger.type` |
 | --- | --- | --- |
-| Console | — | [`ConsoleLogger`](../api/logger.md#activelearning.logger.logger.ConsoleLogger) |
-| [Aim](https://aimstack.io/) | `uv sync --extra aim` | [`AimLogger`](../api/logger.md#activelearning.logger.logger.AimLogger) |
-| [Weights & Biases](https://wandb.ai/) | `uv sync --extra wandb` | [`WandbLogger`](../api/logger.md#activelearning.logger.logger.WandbLogger) |
-| [Comet](https://www.comet.com/) | `uv sync --extra comet` | [`CometLogger`](../api/logger.md#activelearning.logger.logger.CometLogger) |
+| Console | — | [`ConsoleLogger`](../reference/activelearning/logger/logger.md#activelearning.logger.logger.ConsoleLogger) |
+| [Aim](https://aimstack.io/) | `uv sync --extra aim` | [`AimLogger`](../reference/activelearning/logger/logger.md#activelearning.logger.logger.AimLogger) |
+| [Weights & Biases](https://wandb.ai/) | `uv sync --extra wandb` | [`WandbLogger`](../reference/activelearning/logger/logger.md#activelearning.logger.logger.WandbLogger) |
+| [Comet](https://www.comet.com/) | `uv sync --extra comet` | [`CometLogger`](../reference/activelearning/logger/logger.md#activelearning.logger.logger.CometLogger) |
 
 You can override `logger.type` directly or provide your own logger YAML overlay.
 

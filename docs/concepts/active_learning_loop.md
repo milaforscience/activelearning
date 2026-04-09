@@ -20,7 +20,7 @@ graph TD
 
 ## Initialisation
 
-Before the loop begins, a shared [`RuntimeContext`](../api/runtime_and_types.md#activelearning.runtime.RuntimeContext) is constructed from the YAML config and bound to all components. This propagates the compute device, floating-point precision, and logger reference across the entire experiment — every component sees the same execution environment without any per-component wiring.
+Before the loop begins, a shared [`RuntimeContext`](../reference/activelearning/runtime.md#activelearning.runtime.RuntimeContext) is constructed from the YAML config and bound to all components. This propagates the compute device, floating-point precision, and logger reference across the entire experiment — every component sees the same execution environment without any per-component wiring.
 
 Oracle fidelity confidences are also forwarded to the surrogate at this point so it can incorporate fidelity-specific uncertainty scaling from the start.
 

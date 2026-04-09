@@ -6,10 +6,10 @@ final query set. Implement a new sampler to:
 - Propose candidates from a new search space geometry (graph, sequence, grid).
 - Use an acquisition-guided or model-based proposal (MCMC, GFlowNet-style).
 - Integrate an external candidate generator.
-- Apply domain constraints that [`HypercubeSampler`](../api/sampler.md#activelearning.sampler.hypercube_sampler.HypercubeSampler) cannot express.
+- Apply domain constraints that [`HypercubeSampler`](../reference/activelearning/sampler/hypercube_sampler.md#activelearning.sampler.hypercube_sampler.HypercubeSampler) cannot express.
 
-Before implementing a new sampler, verify that [`HypercubeSampler`](../api/sampler.md#activelearning.sampler.hypercube_sampler.HypercubeSampler),
-[`PoolUniformSampler`](../api/sampler.md#activelearning.sampler.pool_uniform_sampler.PoolUniformSampler), or [`PoolScoreSampler`](../api/sampler.md#activelearning.sampler.pool_score_sampler.PoolScoreSampler) does not already cover your use case.
+Before implementing a new sampler, verify that [`HypercubeSampler`](../reference/activelearning/sampler/hypercube_sampler.md#activelearning.sampler.hypercube_sampler.HypercubeSampler),
+[`PoolUniformSampler`](../reference/activelearning/sampler/pool_uniform_sampler.md#activelearning.sampler.pool_uniform_sampler.PoolUniformSampler), or [`PoolScoreSampler`](../reference/activelearning/sampler/pool_score_sampler.md#activelearning.sampler.pool_score_sampler.PoolScoreSampler) does not already cover your use case.
 
 ## What to implement
 
@@ -25,8 +25,8 @@ Both arguments are optional — your sampler may ignore either or both.
 
 Review the built-in samplers as concrete examples before writing your own:
 
-- [`HypercubeSampler`](../api/sampler.md#activelearning.sampler.hypercube_sampler.HypercubeSampler) — uniform sampling over a hypercube; the default sampler and simplest possible implementation.
-- [`PoolScoreSampler`](../api/sampler.md#activelearning.sampler.pool_score_sampler.PoolScoreSampler) — scores a fixed pool with the acquisition function and returns the top-scoring candidates; a good example of acquisition-guided sampling.
+- [`HypercubeSampler`](../reference/activelearning/sampler/hypercube_sampler.md#activelearning.sampler.hypercube_sampler.HypercubeSampler) — uniform sampling over a hypercube; the default sampler and simplest possible implementation.
+- [`PoolScoreSampler`](../reference/activelearning/sampler/pool_score_sampler.md#activelearning.sampler.pool_score_sampler.PoolScoreSampler) — scores a fixed pool with the acquisition function and returns the top-scoring candidates; a good example of acquisition-guided sampling.
 
 Source: `src/activelearning/sampler/`.
 
@@ -59,7 +59,7 @@ sampler:
 
 The sampler is responsible for setting `Candidate.fidelity`. If your oracle
 requires explicit fidelity ids (i.e. it is multi-fidelity), stamp each
-[`Candidate`](../api/runtime_and_types.md#activelearning.utils.types.Candidate) before returning it:
+[`Candidate`](../reference/activelearning/utils/types.md#activelearning.utils.types.Candidate) before returning it:
 
 ```python
 # uniform random assignment across two fidelity levels
@@ -95,7 +95,7 @@ the surrogate has been fitted.
 
 ## Common pitfalls
 
-**Return [`Candidate`](../api/runtime_and_types.md#activelearning.utils.types.Candidate) objects, not tensors.** The selector and oracle expect
+**Return [`Candidate`](../reference/activelearning/utils/types.md#activelearning.utils.types.Candidate) objects, not tensors.** The selector and oracle expect
 `Candidate` instances. Wrapping tensors as `Candidate.x` values is fine, but
 the outer type must be `Candidate`.
 
@@ -110,4 +110,4 @@ a lazy generator. Never hold a reference to the generator and iterate it later.
 - [Oracle guide](oracle.md) — aligning fidelity ids
 - [Selector guide](selector.md) — what happens to the candidate pool after sampling
 - [Extension guide overview](index.md)
-- [Sampler API](../api/sampler.md)
+- [Sampler API](../reference/activelearning/sampler/index.md)
