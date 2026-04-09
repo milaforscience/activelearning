@@ -1,8 +1,8 @@
-# Related Work and Positioning
+# **Related Work and Positioning**
 
 The Multi-Fidelity Active Learning framework, described in Hernandez-Garcia et al. (2024), addresses a combination of research objectives not covered by existing active learning or Bayesian optimization libraries. The sections below identify the nearest related systems and characterize the specific gaps this framework fills.
 
-## Existing Active Learning Frameworks
+## **Existing Active Learning Frameworks**
 
 Most general-purpose active learning libraries share a common design: they operate over a fixed pool of unlabelled data and focus on reducing model uncertainty or prediction error across the entire input space. None address multi-fidelity queries or de novo synthesis.
 
@@ -17,7 +17,7 @@ Most general-purpose active learning libraries share a common design: they opera
 
 No existing framework addresses multi-fidelity experimentation, de novo synthesis over continuous or structured spaces, or budget-constrained discovery of diverse high-scoring candidates.
 
-## Bayesian Optimization Libraries
+## **Bayesian Optimization Libraries**
 
 BO libraries operate over continuous input spaces and minimize expensive oracle evaluations, placing them closer in spirit to this framework than pool-based AL systems.
 
@@ -27,7 +27,7 @@ BO libraries operate over continuous input spaces and minimize expensive oracle 
 
 **Dragonfly** (Kandasamy et al., 2020) supports multi-fidelity BO and certain structured input spaces, but targets global optimization rather than active search for diverse candidates and does not include GFlowNet-based samplers.
 
-## Multi-Fidelity and Scientific Discovery
+## **Multi-Fidelity and Scientific Discovery**
 
 The following research directions are directly relevant to the multi-fidelity setting addressed here.
 
@@ -37,7 +37,7 @@ The following research directions are directly relevant to the multi-fidelity se
 
 **GFlowNets** (Bengio et al., 2021, 2023) are generative models trained to sample objects proportional to a reward signal. They are suited to generating diverse high-scoring candidates in combinatorial or structured spaces. The GFlowNet sampler integration in this framework introduces diverse candidate generation into the multi-fidelity active learning loop—a combination absent from existing BO and AL libraries.
 
-## Framework Contributions
+## **Framework Contributions**
 
 This framework makes the following contributions relative to the libraries and research directions above:
 
@@ -51,7 +51,7 @@ This framework makes the following contributions relative to the libraries and r
 
 5. **Scientific discovery focus**: the framework targets settings where the goal is to identify a diverse set of high-scoring candidates for downstream experimental validation. This reflects the standard experimental workflow in computational biology, chemistry, and materials science.
 
-## References
+## **References**
 
 - Settles, B. (2009). *Active Learning Literature Survey*. Computer Sciences Technical Report 1648, University of Wisconsin–Madison.
 - King, R. D., et al. (2004). Functional genomic hypothesis generation and experimentation by a robot scientist. *Nature*, 427(6971), 247–252.

@@ -1,4 +1,4 @@
-# Adding a New Sampler
+# **Adding a New Sampler**
 
 Samplers generate the pool of candidates that the selector then trims to the
 final query set. Implement a new sampler to:
@@ -11,7 +11,7 @@ final query set. Implement a new sampler to:
 Before implementing a new sampler, verify that [`HypercubeSampler`](../reference/activelearning/sampler/hypercube_sampler.md#activelearning.sampler.hypercube_sampler.HypercubeSampler),
 [`PoolUniformSampler`](../reference/activelearning/sampler/pool_uniform_sampler.md#activelearning.sampler.pool_uniform_sampler.PoolUniformSampler), or [`PoolScoreSampler`](../reference/activelearning/sampler/pool_score_sampler.md#activelearning.sampler.pool_score_sampler.PoolScoreSampler) does not already cover your use case.
 
-## What to implement
+## **What to implement**
 
 Subclass `activelearning.sampler.sampler.Sampler` and implement one method:
 
@@ -21,7 +21,7 @@ Subclass `activelearning.sampler.sampler.Sampler` and implement one method:
 
 Both arguments are optional — your sampler may ignore either or both.
 
-## Reference implementations
+## **Reference implementations**
 
 Review the built-in samplers as concrete examples before writing your own:
 
@@ -30,7 +30,7 @@ Review the built-in samplers as concrete examples before writing your own:
 
 Source: `src/activelearning/sampler/`.
 
-## Config model and registration
+## **Config model and registration**
 
 Add a Pydantic config model in `src/activelearning/sampler/config.py` and extend the `SamplerConfig` union. See the existing models in that file as reference.
 
@@ -55,7 +55,7 @@ sampler:
   type: MySampler
 ```
 
-## Fidelity handling
+## **Fidelity handling**
 
 The sampler is responsible for setting `Candidate.fidelity`. If your oracle
 requires explicit fidelity ids (i.e. it is multi-fidelity), stamp each
@@ -75,7 +75,7 @@ details.
 
 For single-fidelity setups, leave `fidelity=None`.
 
-## Using acquisition scores in sampling
+## **Using acquisition scores in sampling**
 
 If your sampler uses the acquisition function to weight proposals, call
 `acquisition.score()` inside `sample()`:
@@ -93,7 +93,7 @@ def sample(self, acquisition=None, observations=None):
 Always guard with `acquisition is not None` — the sampler may be called before
 the surrogate has been fitted.
 
-## Common pitfalls
+## **Common pitfalls**
 
 **Return [`Candidate`](../reference/activelearning/utils/types.md#activelearning.utils.types.Candidate) objects, not tensors.** The selector and oracle expect
 `Candidate` instances. Wrapping tensors as `Candidate.x` values is fine, but
@@ -105,7 +105,7 @@ evaluation happens in the oracle step.
 **Avoid side effects from `observations`.** The observations iterable may be
 a lazy generator. Never hold a reference to the generator and iterate it later.
 
-## Related pages
+## **Related pages**
 
 - [Oracle guide](oracle.md) — aligning fidelity ids
 - [Selector guide](selector.md) — what happens to the candidate pool after sampling

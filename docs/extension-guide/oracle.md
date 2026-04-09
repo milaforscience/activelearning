@@ -1,4 +1,4 @@
-# Adding a New Oracle
+# **Adding a New Oracle**
 
 An oracle implements the ground-truth evaluation function $f(x)$ at each fidelity level $m \in \mathcal{M}$. Implement a new oracle subclass to:
 
@@ -10,7 +10,7 @@ If you only need to **combine** existing oracles across fidelity levels, see
 [Using CompositeOracle](#using-compositeoracle-instead-of-building-from-scratch)
 before writing a new class.
 
-## What to implement
+## **What to implement**
 
 Subclass `activelearning.oracle.oracle.Oracle` and implement three methods:
 
@@ -20,7 +20,7 @@ Subclass `activelearning.oracle.oracle.Oracle` and implement three methods:
 | `get_costs(candidates)` | Returns one cost per input candidate (same order) |
 | `query(candidates)` | Returns one [`Observation`](../reference/activelearning/utils/types.md#activelearning.utils.types.Observation) per input candidate (same order) |
 
-## Reference implementations
+## **Reference implementations**
 
 Review the built-in oracles as concrete examples before writing your own:
 
@@ -30,7 +30,7 @@ Review the built-in oracles as concrete examples before writing your own:
 
 Source: `src/activelearning/oracle/augmented_function_oracle.py` and `src/activelearning/oracle/composite_oracle.py`.
 
-## Config model and registration
+## **Config model and registration**
 
 Add a Pydantic config model in `src/activelearning/oracle/config.py` and extend the `OracleConfig` union. See the existing models in that file as reference.
 
@@ -55,7 +55,7 @@ oracle:
   type: MyOracle
 ```
 
-## Fidelity id alignment with the sampler
+## **Fidelity id alignment with the sampler**
 
 The fidelity ids used in `get_fidelity_confidences()` must match the ids your
 sampler stamps onto `Candidate.fidelity`. If the sampler emits fidelity `0` or
@@ -63,7 +63,7 @@ sampler stamps onto `Candidate.fidelity`. If the sampler emits fidelity `0` or
 `ValueError`. The [`HypercubeSampler`](../reference/activelearning/sampler/hypercube_sampler.md#activelearning.sampler.hypercube_sampler.HypercubeSampler) `fidelities` parameter controls which ids
 it assigns — keep them consistent.
 
-## Common pitfalls
+## **Common pitfalls**
 
 **Order alignment** — `get_costs()` and `query()` must return one item per
 input candidate, in the exact same order. Never sort, group, or filter the
@@ -75,7 +75,7 @@ happens in the loop; your oracle only observes.
 **Runtime tensors** — build tensors inside `query()`, not in `__init__()`.
 Use `self.dtype` and `self.device` so the runtime binding takes effect.
 
-## Using CompositeOracle instead of building from scratch
+## **Using CompositeOracle instead of building from scratch**
 
 When different oracle implementations each handle a subset of fidelity levels, use [`CompositeOracle`](../reference/activelearning/oracle/composite_oracle.md#activelearning.oracle.composite_oracle.CompositeOracle). It merges `get_fidelity_confidences()` from all
 sub-oracles, routes candidates to the cheapest sub-oracle that handles each
@@ -95,7 +95,7 @@ Use [`CompositeOracle`](../reference/activelearning/oracle/composite_oracle.md#a
 implementations. Write a new oracle class when the routing logic cannot be
 expressed as independent sub-oracles.
 
-## Related pages
+## **Related pages**
 
 - [Sampler guide](sampler.md) — aligning fidelity ids with the sampler
 - [Extension guide overview](index.md)

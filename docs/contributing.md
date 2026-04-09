@@ -1,4 +1,4 @@
-# Contributing
+# **Contributing**
 
 This guide describes the contribution workflow, coding conventions, and pull request
 standards for the Multi-Fidelity Active Learning framework. It covers environment setup,
@@ -9,9 +9,9 @@ contribute upstream, start with the [Extension Guide](extension-guide/index.md) 
 
 ---
 
-## 1. Getting Started
+## **1. Getting Started**
 
-### Fork and clone
+### **Fork and clone**
 
 Fork the repository on GitHub, then clone your fork locally:
 
@@ -20,7 +20,7 @@ git clone https://github.com/<your-username>/activelearning.git
 cd activelearning
 ```
 
-### Local setup
+### **Local setup**
 
 This project uses [`uv`](https://docs.astral.sh/uv/) for dependency management.
 A single command installs `uv` (if missing), syncs all development dependencies,
@@ -36,7 +36,7 @@ If `uv` is not on your `PATH` yet, install it first:
 make install-uv
 ```
 
-### Verify the setup
+### **Verify the setup**
 
 Confirm that linting, tests, and docs all pass before making any changes:
 
@@ -46,11 +46,11 @@ make check && make test && make docs-build
 
 ---
 
-## 2. Coding Conventions
+## **2. Coding Conventions**
 
 Consistent, readable code reduces maintenance burden and simplifies review.
 
-### Type hints
+### **Type hints**
 
 All functions and class methods must carry full type annotations.
 
@@ -59,7 +59,7 @@ def select_candidates(scores: list[float], top_k: int) -> list[int]:
     ...
 ```
 
-### Naming
+### **Naming**
 
 | Construct | Style | Example |
 |---|---|---|
@@ -68,13 +68,13 @@ def select_candidates(scores: list[float], top_k: int) -> list[int]:
 | Module-level constants | `UPPER_SNAKE_CASE` | `MAX_BUDGET` |
 | Private helpers | leading underscore | `_normalize_inputs` |
 
-### Function design
+### **Function design**
 
 - Keep functions **single-purpose**: one function should do one thing well.
 - Prefer explicit arguments over `**kwargs` for public APIs so that type checkers
   and documentation tools can inspect them.
 
-### Comments
+### **Comments**
 
 Add comments only for logic that is complex or non-obvious. Avoid restating what the
 code already says clearly:
@@ -90,13 +90,13 @@ rows = rows[1:]
 
 ---
 
-## 3. Docstring Guidelines
+## **3. Docstring Guidelines**
 
 All public classes and methods require a **NumPy-style docstring**. This is the style
 configured for `mkdocstrings` in `mkdocs.yml` and is therefore the authoritative format
 for auto-generated API reference pages.
 
-### Full example
+### **Full example**
 
 ```python
 def select_queries(
@@ -141,7 +141,7 @@ def select_queries(
     """
 ```
 
-### Section checklist
+### **Section checklist**
 
 | Section | Required? | Purpose |
 |---|---|---|
@@ -155,9 +155,9 @@ def select_queries(
 
 ---
 
-## 4. Testing
+## **4. Testing**
 
-### Running the test suite
+### **Running the test suite**
 
 ```sh
 make test
@@ -165,7 +165,7 @@ make test
 
 This runs `uv run pytest` against the full `tests/` directory.
 
-### Writing tests
+### **Writing tests**
 
 - Place all tests under `tests/`, mirroring the source layout where practical.
 - Every new public function or class should have at least one test.
@@ -186,7 +186,7 @@ def test_greedy_selector_returns_top_k(top_k: int, expected_len: int) -> None:
 
 ---
 
-## 5. Pre-commit Checks
+## **5. Pre-commit Checks**
 
 The repository uses [pre-commit](https://pre-commit.com/) to enforce quality gates
 automatically. The hooks run on every commit once `make setup` has been called
@@ -216,9 +216,9 @@ Fix any failures reported by `make check` before opening a pull request.
 
 ---
 
-## 6. Documentation
+## **6. Documentation**
 
-### Preview locally
+### **Preview locally**
 
 ```sh
 make docs-serve
@@ -227,7 +227,7 @@ make docs-serve
 This starts a live-reload server at `http://127.0.0.1:8000`. Changes to `.md` files
 and docstrings are reflected immediately.
 
-### Build with strict validation
+### **Build with strict validation**
 
 ```sh
 make docs-build
@@ -237,7 +237,7 @@ Builds the site into `site/` with the same `--strict` flag used in CI (broken li
 missing references are treated as errors). The `site/` directory is Git-ignored; delete
 it manually or run `make clean` when you no longer need a local build.
 
-### Writing docs
+### **Writing docs**
 
 - All documentation lives under `docs/` and is written in Markdown.
 - API reference pages are auto-generated from docstrings using
@@ -245,16 +245,16 @@ it manually or run `make clean` when you no longer need a local build.
   complete rather than duplicating information in hand-written pages.
 - If you add a new top-level page, register it in the `nav:` section of `mkdocs.yml`.
 
-### Terminology
+### **Terminology**
 
 Keep all user-facing text aligned with the [Methodology](concepts/overview.md)
 section (see also [Research-Facing Contributions](#9-research-facing-contributions) below).
 
 ---
 
-## 7. Opening a Pull Request
+## **7. Opening a Pull Request**
 
-### Branch naming
+### **Branch naming**
 
 ```sh
 git checkout -b feature/your-feature-name
@@ -262,7 +262,7 @@ git checkout -b feature/your-feature-name
 git checkout -b fix/short-description
 ```
 
-### Before you push
+### **Before you push**
 
 Run the full validation suite:
 
@@ -272,14 +272,14 @@ make check && make test && make docs-build
 
 All three must pass with no errors.
 
-### PR scope
+### **PR scope**
 
 - **One logical change per PR.** If you are fixing a bug and adding a feature, open
   two separate PRs.
 - Include tests for any new functionality.
 - Update or add documentation if you are adding a new component or changing a public API.
 
-### PR description
+### **PR description**
 
 A complete description addresses three questions:
 
@@ -289,9 +289,9 @@ A complete description addresses three questions:
 
 ---
 
-## 8. Reporting Issues and Requesting Features
+## **8. Reporting Issues and Requesting Features**
 
-### Bug reports
+### **Bug reports**
 
 Open a [GitHub issue](https://github.com/milaforscience/activelearning/issues) and include:
 
@@ -300,7 +300,7 @@ Open a [GitHub issue](https://github.com/milaforscience/activelearning/issues) a
 - A **minimal reproduction** command or script.
 - Your Python version and relevant dependency versions (`uv run pip list`).
 
-### Feature requests
+### **Feature requests**
 
 Describe:
 
@@ -311,7 +311,7 @@ Describe:
 
 ---
 
-## 9. Research-Facing Contributions
+## **9. Research-Facing Contributions**
 
 For methodology, benchmark, and paper-replication changes, keep terminology aligned with
 the [Methodology](concepts/overview.md) and paper-replication pages:

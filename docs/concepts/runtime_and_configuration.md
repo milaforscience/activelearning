@@ -1,8 +1,8 @@
-# Runtime and Configuration
+# **Runtime and Configuration**
 
 The YAML configuration file serves as the executable experiment specification for a multi-fidelity active-learning run. It specifies the objective oracle, surrogate model, acquisition rule, sampler, selector, budget policy, and runtime context. Reproducibility depends on expressing all study-defining choices explicitly in configuration rather than embedding them in custom driver code.
 
-## Execution Model
+## **Execution Model**
 
 A run follows this sequence:
 
@@ -15,7 +15,7 @@ A run follows this sequence:
 
 The configuration file therefore constitutes a complete, reproducible specification of the study.
 
-## Top-Level Schema
+## **Top-Level Schema**
 
 The following shows the full set of top-level configuration blocks with example component types:
 
@@ -92,13 +92,13 @@ The top-level sections correspond to the loop's conceptual components:
 
 Every non-null component block uses a `type` discriminator. The matching config model lives in `src/activelearning/<component>/config.py`; its `build()` method is the boundary between declarative YAML and runtime objects.
 
-## Runtime Context
+## **Runtime Context**
 
 `runtime.device` and `runtime.precision` define the shared torch execution context. The logger, if configured, is constructed once and inserted into that context. The resulting runtime context is bound into runtime-aware components—dataset, surrogate, acquisition, sampler, selector, and oracle—so all components in one study share a single device, dtype, and logger reference.
 
 The included configurations use `cpu` and `precision: 64`. Local sampler-level overrides (`sampler.device`, `sampler.float_precision`) inherit from `runtime` when omitted and take precedence when set explicitly. Local overrides are appropriate only when the sampler requires a different execution environment from the rest of the study.
 
-## Study-Defining Multi-Fidelity Fields
+## **Study-Defining Multi-Fidelity Fields**
 
 For multi-fidelity experiments, the fields that materially define the study are:
 
@@ -109,7 +109,7 @@ For multi-fidelity experiments, the fields that materially define the study are:
 
 Not every sampler emits explicit fidelity labels. That distinction is material when working with cost-aware, multi-fidelity acquisition functions.
 
-## Configuration Overrides
+## **Configuration Overrides**
 
 The CLI accepts OmegaConf dotlist overrides following the config path. Overrides apply temporary perturbations—budget reductions, candidate-pool changes, or schedule adjustments—without duplicating the entire YAML file.
 
@@ -144,7 +144,7 @@ uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml
     Edit the YAML when a change belongs to the canonical experiment definition.
     Apply CLI overrides when the change is comparative, exploratory, or local to one run.
 
-## Starting Points
+## **Starting Points**
 
 !!! tip "Good configs to start from"
     - `config/branin_single_fidelity.yaml` — simplest runnable baseline, single fidelity, Branin 2D.
@@ -155,7 +155,7 @@ uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml
 
     For guided walkthroughs, see the [Synthetic Function Examples](../tutorials/synthetic_function_experiment.md) tutorial.
 
-## Recommended Procedure
+## **Recommended Procedure**
 
 !!! note
     1. Begin from an included YAML configuration baseline.

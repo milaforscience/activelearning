@@ -1,4 +1,4 @@
-# Adding a New Surrogate
+# **Adding a New Surrogate**
 
 Surrogates approximate the objective function from collected observations,
 enabling cheap candidate scoring without querying the oracle. Implement a new
@@ -13,7 +13,7 @@ Before implementing a new surrogate, verify that [`DummyMeanSurrogate`](../refer
 baselines) or [`BoTorchGPSurrogate`](../reference/activelearning/surrogate/botorch_surrogate.md#activelearning.surrogate.botorch_surrogate.BoTorchGPSurrogate) (for GP-based work) does not already meet your
 requirements.
 
-## What to implement
+## **What to implement**
 
 Subclass `activelearning.surrogate.surrogate.Surrogate`. The methods you must
 or should implement depend on your update strategy:
@@ -27,7 +27,7 @@ or should implement depend on your update strategy:
 | `is_fitted()` | If unsafe before training | Override to return `False` until first fit |
 | `set_fidelity_confidences(confidences)` | For multi-fidelity surrogates | Called before `fit()` / `update()` |
 
-## Reference implementations
+## **Reference implementations**
 
 Review the built-in surrogates as concrete examples before writing your own:
 
@@ -36,7 +36,7 @@ Review the built-in surrogates as concrete examples before writing your own:
 
 Source: `src/activelearning/surrogate/`.
 
-## Config model and registration
+## **Config model and registration**
 
 Add a Pydantic config model in `src/activelearning/surrogate/config.py` and extend the `SurrogateConfig` union. See the existing models in that file as reference.
 
@@ -61,7 +61,7 @@ surrogate:
   type: MySurrogate
 ```
 
-## The `is_fitted()` contract
+## **The `is_fitted()` contract**
 
 The loop only calls `acquisition.update()` — which in turn calls
 `surrogate.predict()` inside the acquisition — after `is_fitted()` returns
@@ -77,7 +77,7 @@ def is_fitted(self) -> bool:
     return self._model is not None
 ```
 
-## `updates_from_latest()` semantics
+## **`updates_from_latest()` semantics**
 
 | Return value | Loop behavior | Method called |
 |---|---|---|
@@ -90,11 +90,11 @@ degrading accuracy. The `False` path is the safe default.
 If `True` is returned without implementing `update()`, the base class raises
 `NotImplementedError`.
 
-## Multi-fidelity support
+## **Multi-fidelity support**
 
 If your surrogate uses fidelity information, override `set_fidelity_confidences()`. The loop calls this method once at startup with the oracle's confidence mapping. Store the values and use them to weight training data inside `fit()` or `update()`.
 
-## Common Pitfalls
+## **Common Pitfalls**
 
 **`__init__()` must not construct tensors directly** — use `self.dtype` and `self.device`
 inside `fit()` or `predict()` after the runtime context has been bound.
@@ -107,7 +107,7 @@ random access or multiple passes.
 [`BoTorchGPSurrogate`](../reference/activelearning/surrogate/botorch_surrogate.md#activelearning.surrogate.botorch_surrogate.BoTorchGPSurrogate), not a generic [`Surrogate`](../reference/activelearning/surrogate/surrogate.md#activelearning.surrogate.surrogate.Surrogate). Custom surrogates that wrap
 non-BoTorch models should pair with acquisitions that only use `predict()`.
 
-## Related pages
+## **Related pages**
 
 - [Acquisition guide](acquisition.md) — how the acquisition consumes `predict()`
 - [Extension guide overview](index.md)

@@ -1,10 +1,10 @@
-# API Reference
+# **API Reference**
 
 This section documents the public API surface under `src/activelearning/`. Each page covers one component family — from surrogate fitting and acquisition scoring to budget accounting and logging — and shows the auto-generated class reference.
 
 For a conceptual explanation of how these components interact at runtime, see [Active Learning Loop](../concepts/active_learning_loop.md) and [Framework Overview](../concepts/overview.md). For a complete auto-generated listing of every module, see the [Module Summary](../reference/summary.md).
 
-## Reference map
+## **Reference map**
 
 | Module | Covers |
 | --- | --- |

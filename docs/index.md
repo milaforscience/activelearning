@@ -1,4 +1,4 @@
-# Multi-Fidelity Active Learning
+# **Multi-Fidelity Active Learning**
 
 A Python framework for **multi-fidelity active learning** over expensive black-box functions.
 
@@ -6,7 +6,7 @@ To evaluate candidates on a limited budget, this framework queries **oracles** (
 
 Designed with a modular architecture, it provides a flexible foundation that allows users to easily swap components and extend the framework for novel research or custom workflows.
 
-## Framework Architecture
+## **Framework Architecture**
 
 At its core, the framework executes a **multi-fidelity active learning loop**: a surrogate model is fit to observed data, an acquisition function scores potential candidates, a sampler proposes the next batch, and a selector determines which candidate–fidelity pairs the oracle should evaluate next. The new observations are then added to the dataset for the next round of the active learning loop.
 
@@ -22,7 +22,7 @@ graph LR
 
 Every core component in this loop is designed to be strictly modular. This means they can be independently replaced or extended for specific research needs without altering the underlying execution code.
 
-## Getting Started
+## **Getting Started**
 
 <div class="grid cards" markdown>
 

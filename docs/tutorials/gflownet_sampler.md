@@ -1,4 +1,4 @@
-# GFlowNet Sampler Setup
+# **GFlowNet Sampler Setup**
 
 !!! warning "Not yet implemented"
     GFlowNet sampler support is planned as a future extension. This page is a placeholder and will be updated when the integration is available.

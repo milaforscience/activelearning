@@ -1,4 +1,4 @@
-# Quickstart
+# **Quickstart**
 
 After completing [Installation](installation.md), you are ready to run your first experiment. The framework is invoked with:
 
@@ -8,7 +8,7 @@ uv run activelearning <config.yaml> [key=value ...]
 
 The YAML file defines the full experiment — surrogate, acquisition function, sampler, selector, oracle, and budget. Any arguments after it are [OmegaConf](https://omegaconf.readthedocs.io/) overrides that adjust the config on the fly without editing the file.
 
-## First run
+## **First run**
 
 Start with a minimal version of the single-fidelity Branin config, capped to a small budget so the run completes in seconds:
 
@@ -36,7 +36,7 @@ The key output fields are:
 | `round_cost` | Budget consumed in that round |
 | `budget_remaining` | Total budget still available |
 
-## Scale up
+## **Scale up**
 
 Once the first run looks right, remove the budget override to run the full experiment:
 

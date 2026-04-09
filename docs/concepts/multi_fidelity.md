@@ -1,10 +1,10 @@
-# Multi-Fidelity Setting
+# **Multi-Fidelity Setting**
 
 This page details how fidelity is represented and propagated through each component of the framework. It assumes familiarity with the problem setting (see [Home](../index.md)) and the execution loop (see [Active Learning Loop](active_learning_loop.md)).
 
 In the multi-fidelity setting, the action space is the set of candidate-fidelity pairs $(x, m)$, where $m \in \mathcal{M}$ determines both the cost $c(x, m)$ and the confidence $\kappa(m)$ of the query. An effective policy exploits lower-fidelity approximations to improve budget efficiency, reserving higher-fidelity evaluation for promising regions.
 
-## Oracle-Defined Fidelity Structure
+## **Oracle-Defined Fidelity Structure**
 
 The [`Oracle`](../reference/activelearning/oracle/oracle.md#activelearning.oracle.oracle.Oracle) defines the multi-fidelity structure of the experiment. It specifies:
 
@@ -14,24 +14,24 @@ The [`Oracle`](../reference/activelearning/oracle/oracle.md#activelearning.oracl
 
 Fidelity costs are required; fidelity confidences are optional. When confidences are omitted, they are derived from relative cost: the highest-cost fidelity is assigned $\kappa(m) = 1.0$, and lower-fidelity levels carry signal proportional to their relative cost.
 
-## Fidelity Integration Across Components
+## **Fidelity Integration Across Components**
 
-### Sampler
+### **Sampler**
 
 The [`Sampler`](../reference/activelearning/sampler/sampler.md#activelearning.sampler.sampler.Sampler) is responsible for emitting explicit candidate-fidelity pairs $(x, m)$ rather than candidates alone. Two strategies are supported:
 
 - **Uniform fidelity sampling**: fidelity levels are drawn uniformly over $\mathcal{M}$.
 - **Cost-weighted fidelity sampling**: fidelity levels are sampled inversely proportional to $c(x, m)$, increasing the proportion of lower-fidelity proposals and preserving budget headroom for high-fidelity queries in later rounds.
 
-### Surrogate
+### **Surrogate**
 
 Prior to loop execution, the [`Oracle`](../reference/activelearning/oracle/oracle.md#activelearning.oracle.oracle.Oracle) passes fidelity confidences $\kappa(m)$ to the [`Surrogate`](../reference/activelearning/surrogate/surrogate.md#activelearning.surrogate.surrogate.Surrogate) via [`set_fidelity_confidences()`](../reference/activelearning/surrogate/surrogate.md#activelearning.surrogate.surrogate.Surrogate.set_fidelity_confidences). The surrogate uses these confidences to condition its probabilistic model on fidelity level, producing a posterior that accounts for the reduced reliability of lower-fidelity observations.
 
-### Acquisition
+### **Acquisition**
 
 A multi-fidelity [`Acquisition`](../reference/activelearning/acquisition/acquisition.md#activelearning.acquisition.acquisition.Acquisition) function $\alpha(x, m)$ scores candidate-fidelity pairs by expected utility per unit cost $c(x, m)$, balancing information gain against the cost of obtaining it. This cost-normalisation ensures that lower-fidelity queries remain competitive when they provide sufficient information gain relative to their cost.
 
-### Selector and Budget
+### **Selector and Budget**
 
 The [`Selector`](../reference/activelearning/selector/selector.md#activelearning.selector.selector.Selector) makes the final spending decision under the round budget $B_k$, jointly considering:
 
@@ -41,13 +41,13 @@ The [`Selector`](../reference/activelearning/selector/selector.md#activelearning
 
 Lower-fidelity queries support cost-effective allocation: they can fit within the round budget while still improving the surrogate sufficiently to guide subsequent higher-fidelity queries. The accumulated oracle cost $\sum_{i} c(x_i, m_i)$ across all executed queries is tracked and logged by the framework.
 
-## Fidelity in the Configuration
+## **Fidelity in the Configuration**
 
 Multi-fidelity behaviour is activated by specifying a fidelity cost map (and optionally a confidence map) consistently across the oracle, sampler, and acquisition blocks of the YAML configuration. The sampler uses the cost map to weight its fidelity proposals; the acquisition uses it to normalise utility scores; and the oracle uses it to compute query costs and derive default confidences.
 
 For concrete configuration examples, see [Runtime and Configuration](runtime_and_configuration.md) and the [Quickstart](../getting-started/quickstart.md).
 
-## Single-Fidelity vs. Multi-Fidelity
+## **Single-Fidelity vs. Multi-Fidelity**
 
 | Dimension | Single-Fidelity | Multi-Fidelity |
 | --- | --- | --- |

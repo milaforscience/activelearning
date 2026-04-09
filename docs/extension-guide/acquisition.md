@@ -1,4 +1,4 @@
-# Adding a New Acquisition Function
+# **Adding a New Acquisition Function**
 
 Acquisition functions map the surrogate's predictive posterior to a utility score $\alpha(x, m)$ over candidate-fidelity queries $(x, m)$. This score drives selector allocation decisions. Implement a new acquisition subclass to:
 
@@ -8,7 +8,7 @@ Acquisition functions map the surrogate's predictive posterior to a utility scor
   scalarization).
 - Use a surrogate type that existing acquisitions do not expose.
 
-## What to implement
+## **What to implement**
 
 Subclass `activelearning.acquisition.acquisition.Acquisition`. The core methods
 are:
@@ -24,7 +24,7 @@ for joint batch utility, or both. The `supports_singleton_scoring` and
 `supports_batch_scoring` properties are inferred automatically from which
 methods you override.
 
-## `DummyAcquisition` Reference
+## **`DummyAcquisition` Reference**
 
 [`DummyAcquisition`](../reference/activelearning/acquisition/dummy_acquisition.md#activelearning.acquisition.dummy_acquisition.DummyAcquisition) is the simplest acquisition in the framework. It reads
 `"mean"` and optionally `"std"` from `surrogate.predict()` and returns
@@ -47,7 +47,7 @@ class DummyAcquisition(Acquisition):
         return [m + self._beta * s for m, s in zip(means, stds)]
 ```
 
-## Reference implementations
+## **Reference implementations**
 
 Review the built-in acquisitions as concrete examples before writing your own:
 
@@ -57,7 +57,7 @@ Review the built-in acquisitions as concrete examples before writing your own:
 
 Source: `src/activelearning/acquisition/`.
 
-## Config model and registration
+## **Config model and registration**
 
 Add a Pydantic config model in `src/activelearning/acquisition/config.py` and extend the `AcquisitionConfig` union. See the existing models in that file as reference.
 
@@ -82,7 +82,7 @@ acquisition:
   type: MyAcquisition
 ```
 
-## BoTorch acquisitions
+## **BoTorch acquisitions**
 
 For acquisitions that wrap a BoTorch acquisition function, use the intermediate
 base classes instead of [`Acquisition`](../reference/activelearning/acquisition/acquisition.md#activelearning.acquisition.acquisition.Acquisition) directly. Both handle candidate encoding,
@@ -115,7 +115,7 @@ For analytic acquisitions, subclass [`AnalyticBoTorchAcquisition`](../reference/
 the same pattern — see [`ExpectedImprovement`](../reference/activelearning/acquisition/botorch/botorch_analytic.md#activelearning.acquisition.botorch.botorch_analytic.ExpectedImprovement) or [`UpperConfidenceBound`](../reference/activelearning/acquisition/botorch/botorch_analytic.md#activelearning.acquisition.botorch.botorch_analytic.UpperConfidenceBound) in
 the framework as reference.
 
-## Common pitfalls
+## **Common pitfalls**
 
 **Materializing `observations`** — the `observations` parameter in `update()` may be a one-pass generator. Convert it to a list immediately if you need to iterate it more than once.
 
@@ -130,7 +130,7 @@ not yet available rather than raising.
 call it as the last step after computing raw scores, and return its result. Do
 not apply cost weighting twice.
 
-## Related pages
+## **Related pages**
 
 - [Surrogate guide](surrogate.md) — what `predict()` returns
 - [Selector guide](selector.md) — how `score()` is called during selection

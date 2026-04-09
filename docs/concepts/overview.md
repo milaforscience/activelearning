@@ -1,8 +1,8 @@
-# Framework Overview
+# **Framework Overview**
 
 This framework provides a modular decision loop for budget-constrained discovery with an expensive black-box objective. When multiple fidelities are available, the acquisition algorithm must determine which candidate to query and which fidelity level to allocate. The objective is the cost-effective, budget-constrained discovery of high-scoring regions within the target space and, dependent on the configured search policy, the generation of a diverse set of high-performing candidates.
 
-## Problem Formulation
+## **Problem Formulation**
 
 Let $x \in \mathcal{X}$ denote a candidate within the object space, and let $m \in \mathcal{M}$ denote a discrete fidelity level. A single action within the active learning loop constitutes a candidate-fidelity query $(x, m)$.
 
@@ -14,7 +14,7 @@ Each query $(x, m)$ executed by the framework:
 
 In single-fidelity environments, $m$ is static and implicit. In multi-fidelity environments, the selection of $m$ becomes an explicit dimension of the sequential decision-making problem.
 
-## Core Workflow
+## **Core Workflow**
 
 The architectural execution loop follows this trajectory:
 
@@ -30,7 +30,7 @@ graph LR
 
 This decomposition guarantees experimental isolation: researchers can independently substitute any single component—the decision rule, the predictive model, the generative proposal mechanism, or the budget allocation policy—without modifying the underlying orchestration logic.
 
-## Component Architecture
+## **Component Architecture**
 
 | Component | Methodological Role | Operational Objective |
 | --- | --- | --- |
@@ -44,7 +44,7 @@ This decomposition guarantees experimental isolation: researchers can independen
 | **Logger** | Experiment telemetry | Persists runtime metrics, model artifacts, and configurations. |
 | **Runtime Context** | Infrastructure state | Synchronizes device (`cuda`/`cpu`) and tensor dtypes across modules. |
 
-## Unified Single- and Multi-Fidelity Execution
+## **Unified Single- and Multi-Fidelity Execution**
 
 The underlying execution architecture remains invariant across single-fidelity and multi-fidelity experiments. The primary shift occurs within the action space:
 
@@ -54,20 +54,20 @@ The underlying execution architecture remains invariant across single-fidelity a
 !!! tip "Same config structure for both settings"
     The same YAML schema works for both settings. Adding fidelity levels is as simple as extending `oracle.fidelity_costs` and `sampler.fidelities`. The [Synthetic Function Examples](../tutorials/synthetic_function_experiment.md) tutorial walks through both side-by-side.
 
-## Pool-Based Learning vs. *De Novo* Query Synthesis
+## **Pool-Based Learning vs. *De Novo* Query Synthesis**
 
 Classical active learning typically selects from a finite, pre-computed pool of unlabelled candidates. This framework instead performs ***de novo* query synthesis**: the algorithm generates and evaluates samples directly from the continuous or combinatorially large object space $\mathcal{X}$.
 
 !!! info "Why de novo synthesis?"
     In scientific discovery settings — materials design, drug discovery, automated experimentation — no exhaustive candidate pool exists upfront. The goal is also not global prediction accuracy, but to isolate a diverse set of candidates with maximised objective values. *De novo* synthesis is the right paradigm for this.
 
-## Relationship to Standard Optimization Paradigms
+## **Relationship to Standard Optimization Paradigms**
 
 This framework synthesises Bayesian Optimization (BO), Active Learning, and Active Search: it uses BO-style surrogates and acquisitions within an iterative active learning loop, pursuing diversity among high-scoring candidates (as in active search), all bounded by multi-fidelity budget constraints.
 
 For a more detailed discussion of how this framework relates to prior work, see [Related Work and Positioning](related-work.md).
 
-## Suggested Reading Order
+## **Suggested Reading Order**
 
 1. [Active Learning Loop](active_learning_loop.md)
 2. [Multi-Fidelity Setting](multi_fidelity.md)

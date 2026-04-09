@@ -1,4 +1,4 @@
-# Extension Guide
+# **Extension Guide**
 
 The multi-fidelity active learning framework is designed for extension. Every
 component in the active-learning loop can be replaced independently:
@@ -17,7 +17,7 @@ Extending the framework — replacing or adding oracles, surrogates, samplers,
 selectors, or acquisitions — is the primary intended use; all other loop
 components operate without modification.
 
-## The common extension recipe
+## **The common extension recipe**
 
 Every component follows the same four-step pattern:
 
@@ -64,7 +64,7 @@ oracle:
   type: MyOracle
 ```
 
-## Runtime context
+## **Runtime context**
 
 All components inherit from [`ALRuntimeMixin`](../reference/activelearning/runtime.md#activelearning.runtime.ALRuntimeMixin). The runtime context (device, dtype,
 logger) is **bound after `build()`** — avoid using it in `__init__()`. Access it
@@ -81,7 +81,7 @@ class MyOracle(Oracle):
 The sampler is the only component whose `build()` receives `runtime` directly
 (see [Sampler guide](sampler.md#config-model-and-registration)).
 
-## Quick reference: what to extend
+## **Quick reference: what to extend**
 <div class="schema-table" markdown>
 
 | If you need to change… | Extend… | Key method(s) |
@@ -94,7 +94,7 @@ The sampler is the only component whose `build()` receives `runtime` directly
 
 </div>
 
-## Detailed guides
+## **Detailed guides**
 
 - [Oracle](oracle.md) — add a new evaluation mechanism
 - [Sampler](sampler.md) — add a new candidate proposal strategy

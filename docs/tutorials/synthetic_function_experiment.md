@@ -1,4 +1,4 @@
-# Synthetic Function Examples
+# **Synthetic Function Examples**
 
 This tutorial walks you through running complete active learning experiments on two synthetic benchmarks: the 2D **Branin** function and the 6-dimensional **Hartmann** function. Before starting, make sure you have completed [Installation](../getting-started/installation.md).
 
@@ -10,7 +10,7 @@ It is structured as three stages — each one runnable on its own:
 
 All four tutorial configs use [`ConsoleLogger`](../reference/activelearning/logger/logger.md#activelearning.logger.logger.ConsoleLogger) by default, so every stage gives you visible output immediately.
 
-## The benchmarks
+## **The benchmarks**
 
 **Branin** is a 2-dimensional function commonly used in optimization research. Its small input space makes it quick to run and easy to visualize — the oracle logs a 2D contour plot after each round when Aim logging is enabled.
 
@@ -28,7 +28,7 @@ Both use the same algorithmic stack: a Gaussian process surrogate, max-value ent
 !!! tip
     All configs are fully self-contained YAML files — open them before running to see the complete experiment specification.
 
-## 1. Single-Fidelity Setting
+## **1. Single-Fidelity Setting**
 
 Start with the simplest runnable version of Branin — a short pilot with a reduced budget:
 
@@ -76,7 +76,7 @@ Drop the override for the full run:
 uv run activelearning config/hartmann_single_fidelity.yaml
 ```
 
-## 2. Multi-Fidelity Setting
+## **2. Multi-Fidelity Setting**
 
 Switch to the Branin multi-fidelity config:
 
@@ -108,7 +108,7 @@ Full run:
 uv run activelearning config/hartmann_multi_fidelity.yaml
 ```
 
-## 3. Add Aim Logging
+## **3. Add Aim Logging**
 
 So far, results only exist in the terminal. [Aim](https://aimstack.io/) is an open-source experiment tracker that persists runs locally and lets you explore metrics, configs, and figures in an interactive UI.
 
@@ -129,7 +129,7 @@ uv run activelearning config/hartmann_multi_fidelity.yaml config/aim_logging.yam
 
 All runs still print to the console and are now also persisted in Aim. Branin runs additionally log a 2D contour of the landscape after each oracle query; Hartmann runs do not.
 
-## 4. Open Aim and inspect
+## **4. Open Aim and inspect**
 
 Aim stores its data in the `.aim/` directory at the repository root (already git-ignored).
 
@@ -150,7 +150,7 @@ The most useful views to start with:
 !!! tip "Comparing runs"
     Because all runs log to the same `activelearning_tutorials` project, you can compare all four side by side — overlaying `total_cost` curves to see how multi-fidelity covers more of the space per unit budget, and how Branin and Hartmann differ in their convergence behaviour.
 
-## 5. What comes next
+## **5. What comes next**
 
 This tutorial covers running and monitoring experiments from the checked-in configs. Natural follow-ups include:
 
