@@ -2,7 +2,14 @@
 
 This repository uses [`uv`](https://docs.astral.sh/uv/) for deterministic environment management.
 
-## 1. Install uv
+## 1. Clone the Repository
+
+```bash
+git clone https://github.com/milaforscience/activelearning.git
+cd activelearning
+```
+
+## 2. Install uv
 
 Install `uv` using one of the supported methods below.
 
@@ -21,7 +28,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 pip install uv
 ```
 
-## 2. Set Up the Environment
+## 3. Set Up the Environment
 
 Once `uv` is installed, sync the project dependencies from the repository root:
 

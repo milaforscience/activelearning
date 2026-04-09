@@ -46,7 +46,14 @@ For a deeper conceptual introduction, see the [Framework Overview](https://milaf
 
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
 
-**1. Install `uv`**
+**1. Clone the repository**
+
+```sh
+git clone https://github.com/milaforscience/activelearning.git
+cd activelearning
+```
+
+**2. Install `uv`**
 
 macOS with Homebrew:
 ```sh
@@ -63,7 +70,7 @@ Via pip:
 pip install uv
 ```
 
-**2. Set up the environment**
+**3. Set up the environment**
 
 ```sh
 make setup
