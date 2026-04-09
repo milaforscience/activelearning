@@ -15,7 +15,7 @@ Most general-purpose active learning libraries share a common design: they opera
 | **libact** | Pool-based AL with active learning by learning | Single fidelity; pool-based only; classification focus |
 | **Baal** ([baal-org/baal](https://github.com/baal-org/baal)) | Bayesian deep AL via Monte Carlo Dropout and ensemble uncertainty; image and text classification loops | Single fidelity; pool-based only; deep learning classifiers/regressors only; no multi-fidelity or de novo synthesis |
 
-No existing library addresses multi-fidelity experimentation, de novo synthesis over continuous or structured spaces, or budget-constrained discovery of diverse high-scoring candidates.
+No existing framework addresses multi-fidelity experimentation, de novo synthesis over continuous or structured spaces, or budget-constrained discovery of diverse high-scoring candidates.
 
 ## Bayesian Optimization Libraries
 

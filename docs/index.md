@@ -1,14 +1,14 @@
 # Multi-Fidelity Active Learning
 
-[Framework Name] is a Python framework for **multi-fidelity active learning** over expensive black-box functions.
+A Python framework for **multi-fidelity active learning** over expensive black-box functions.
 
-To evaluate candidates on a limited budget, this library queries **oracles** (evaluation environments like simulations, model training, or lab experiments) across different **fidelity levels**. By blending fast, approximate estimates (low fidelity) with slow, highly precise measurements (high fidelity), it intelligently decides not just which candidate to try next, but at what fidelity.
+To evaluate candidates on a limited budget, this framework queries **oracles** (evaluation environments like simulations, model training, or lab experiments) across different **fidelity levels**. By blending fast, approximate estimates (low fidelity) with slow, highly precise measurements (high fidelity), it intelligently decides not just which candidate to try next, but at what fidelity.
 
 Designed with a modular architecture, it provides a flexible foundation that allows users to easily swap components and extend the framework for novel research or custom workflows.
 
 ## Framework Architecture
 
-At its core, the library executes a **multi-fidelity active learning loop**: a surrogate model is fit to observed data, an acquisition function scores potential candidates, a sampler proposes the next batch, and a selector determines which candidate–fidelity pairs the oracle should evaluate next. The new observations are then added to the dataset for the next round of the active learning loop.
+At its core, the framework executes a **multi-fidelity active learning loop**: a surrogate model is fit to observed data, an acquisition function scores potential candidates, a sampler proposes the next batch, and a selector determines which candidate–fidelity pairs the oracle should evaluate next. The new observations are then added to the dataset for the next round of the active learning loop.
 
 ```mermaid
 graph LR
@@ -30,7 +30,7 @@ Every core component in this loop is designed to be strictly modular. This means
 
     ---
 
-    Install the library and run your first end-to-end experiment in minutes.
+    Install the framework and run your first end-to-end experiment in minutes.
 
     [:octicons-arrow-right-24: Installation](getting-started/installation.md)
     · [Quickstart](getting-started/quickstart.md)

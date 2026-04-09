@@ -26,7 +26,7 @@ methods you override.
 
 ## `DummyAcquisition` Reference
 
-[`DummyAcquisition`](../reference/activelearning/acquisition/dummy_acquisition.md#activelearning.acquisition.dummy_acquisition.DummyAcquisition) is the simplest acquisition in the library. It reads
+[`DummyAcquisition`](../reference/activelearning/acquisition/dummy_acquisition.md#activelearning.acquisition.dummy_acquisition.DummyAcquisition) is the simplest acquisition in the framework. It reads
 `"mean"` and optionally `"std"` from `surrogate.predict()` and returns
 `mean + beta * std` as the score. Review it before implementing a new acquisition —
 most custom acquisitions require only minor additions to this pattern.
@@ -113,7 +113,7 @@ class MyBoTorchAcquisition(QBatchBoTorchAcquisition):
 
 For analytic acquisitions, subclass [`AnalyticBoTorchAcquisition`](../reference/activelearning/acquisition/botorch/botorch_acquisition.md#activelearning.acquisition.botorch.botorch_acquisition.AnalyticBoTorchAcquisition) and follow
 the same pattern — see [`ExpectedImprovement`](../reference/activelearning/acquisition/botorch/botorch_analytic.md#activelearning.acquisition.botorch.botorch_analytic.ExpectedImprovement) or [`UpperConfidenceBound`](../reference/activelearning/acquisition/botorch/botorch_analytic.md#activelearning.acquisition.botorch.botorch_analytic.UpperConfidenceBound) in
-the library as reference.
+the framework as reference.
 
 ## Common pitfalls
 
