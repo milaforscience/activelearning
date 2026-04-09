@@ -3,8 +3,6 @@
 A modular, config-driven framework for **budget-constrained multi-fidelity active learning**. It enables cost-effective discovery of high-scoring candidates by intelligently choosing what to query — and at which fidelity level — under a finite oracle budget.
 
 > **📖 Full documentation:** [milaforscience.github.io/activelearning](https://milaforscience.github.io/activelearning)
->
-> The docs cover framework concepts, component references, extension guides, tutorials, and the API. Start there for anything beyond this README.
 
 ---
 
@@ -119,7 +117,7 @@ uv run activelearning config/branin_multi_fidelity.yaml budget.available_budget=
 uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml
 ```
 
-The [Quickstart](https://milaforscience.github.io/activelearning/getting-started/quickstart/) and [Branin Tutorial](https://milaforscience.github.io/activelearning/tutorials/branin_experiment/) walk through the full workflow.
+The [Quickstart](https://milaforscience.github.io/activelearning/getting-started/quickstart/) and [Synthetic Function Examples](https://milaforscience.github.io/activelearning/tutorials/synthetic_function_experiment/) tutorial walk through the full workflow.
 
 ---
 
@@ -155,7 +153,7 @@ Set `logger.type` in your config to choose a logging backend:
 | `CometLogger` | Comet ML | `uv sync --extra comet` |
 | `AimLogger` | Aim | `uv sync --extra aim` |
 
-Multiple loggers can be combined with `MultiLogger`. See the [Logger component docs](https://milaforscience.github.io/activelearning/api/logger/) for configuration details.
+Multiple loggers can be combined with `MultiLogger`. See the [Logger API reference](https://milaforscience.github.io/activelearning/reference/activelearning/logger/) for configuration details.
 
 ---
 
