@@ -13,6 +13,9 @@
 #     "logger.loggers.0.run_name=my-run" \
 #     "logger.loggers.1.run_name=my-run"
 
+runtime:
+  seed: 42
+
 logger:
   type: MultiLogger
   loggers:

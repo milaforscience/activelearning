@@ -17,6 +17,7 @@ def test_multi_fidelity_branin_tutorial_config_parses() -> None:
 
     assert config.oracle.type == "BraninOracle"
     assert config.budget.available_budget == 300.0
+    assert config.runtime.seed == 42
     assert config.logger is not None
 
 
@@ -28,6 +29,7 @@ def test_single_fidelity_branin_tutorial_config_parses() -> None:
 
     assert config.oracle.type == "BraninOracle"
     assert config.budget.schedule.type == "constant"
+    assert config.runtime.seed == 42
     assert config.logger is not None
 
 
@@ -40,6 +42,7 @@ def test_multi_fidelity_hartmann_tutorial_config_parses() -> None:
     assert config.oracle.type == "Hartmann6DOracle"
     assert config.budget.available_budget == 100.0
     assert config.budget.schedule.type == "constant"
+    assert config.runtime.seed == 42
     assert config.logger is not None
 
 
@@ -51,4 +54,20 @@ def test_single_fidelity_hartmann_tutorial_config_parses() -> None:
 
     assert config.oracle.type == "Hartmann6DOracle"
     assert config.budget.schedule.type == "constant"
+    assert config.runtime.seed == 42
     assert config.logger is not None
+
+
+def test_aim_logging_overlay_parses_when_merged_with_base_config() -> None:
+    """Ensure the Aim logging overlay remains schema-valid when merged with a base config."""
+    config = load_and_parse(
+        [
+            REPOSITORY_ROOT / "config" / "branin_single_fidelity.yaml",
+            REPOSITORY_ROOT / "config" / "aim_logging.yaml",
+        ],
+        ActiveLearningConfig,
+    )
+
+    assert config.runtime.seed == 42
+    assert config.logger is not None
+    assert config.logger.type == "MultiLogger"

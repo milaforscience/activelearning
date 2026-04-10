@@ -6,6 +6,7 @@
 runtime:
   device: cpu
   precision: 64
+  seed: 42
 
 dataset:
   type: ListDataset

@@ -83,8 +83,10 @@ def main() -> None:
     from activelearning.config import ActiveLearningConfig
     from activelearning.utils.config_loader import parse_config
     from activelearning.runtime import bind_runtime_context
+    from activelearning.utils.seeding import set_global_seed
 
     cfg = parse_config(raw_cfg, ActiveLearningConfig)
+    set_global_seed(cfg.runtime.seed)
 
     dataset = cfg.dataset.build()
     surrogate = cfg.surrogate.build()
