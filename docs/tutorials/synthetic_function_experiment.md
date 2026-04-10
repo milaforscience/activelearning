@@ -129,6 +129,10 @@ uv run activelearning config/hartmann_multi_fidelity.yaml config/aim_logging.yam
 
 All runs still print to the console and are now also persisted in Aim. Branin runs additionally log a 2D contour of the landscape after each oracle query; Hartmann runs do not.
 
+The figure below illustrates a typical visualization logged to Aim during a Branin run. Captured after the 10th active learning round, it displays the objective landscape overlaid with the known minima and the candidates queried at each fidelity level.
+
+![Branin landscape logged to Aim after round 10](../assets/branin_landscape.png)
+
 ## **4. Open Aim and inspect**
 
 Aim stores its data in the `.aim/` directory at the repository root (already git-ignored).
