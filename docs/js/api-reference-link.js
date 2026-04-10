@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
   const isApiReferencePath = (pathname) => {
     const normalized = pathname.replace(/\/+$/, "");
-    return normalized === "/reference" || normalized.endsWith("/reference");
+    return normalized === "/reference" || normalized.includes("/reference/");
   };
 
   for (const link of document.querySelectorAll('a[href]')) {
@@ -16,10 +16,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (!isApiReferencePath(url.pathname)) continue;
-    if (link.textContent?.trim() !== "API Reference") continue;
-
     link.target = "_blank";
     link.rel = "noopener noreferrer";
+
+    if (link.textContent?.trim() !== "API Reference") continue;
+
     link.classList.add("api-reference-external-link");
     link.setAttribute("aria-label", "API Reference (opens in a new tab)");
 
