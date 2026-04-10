@@ -37,12 +37,12 @@ nav = [
         {"Adding a Selector" = "extension-guide/selector.md"},
         {"Adding an Acquisition" = "extension-guide/acquisition.md"},
     ]},
-    {"API Reference" = "reference/"},
     {"Resources" = [
         {"FAQ" = "resources/faq.md"},
         {"References and Citation" = "resources/references.md"},
         {"Contributing" = "contributing.md"},
     ]},
+    {"API Reference" = "reference/"},
 ]
 
 [project.theme]
