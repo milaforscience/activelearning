@@ -20,7 +20,7 @@ graph TD
 
 ## **Initialisation**
 
-Before the loop begins, a shared [`RuntimeContext`](../reference/activelearning/runtime.md#activelearning.runtime.RuntimeContext) is constructed from the YAML config and bound to all components. This propagates the compute device, floating-point precision, and logger reference across the entire experiment — every component sees the same execution environment without any per-component wiring.
+Before the loop begins, a shared [`RuntimeContext`](../reference/activelearning/runtime/#activelearning.runtime.RuntimeContext) is constructed from the YAML config and bound to all components. This propagates the compute device, floating-point precision, and logger reference across the entire experiment — every component sees the same execution environment without any per-component wiring.
 
 Oracle fidelity confidences are also forwarded to the surrogate at this point so it can incorporate fidelity-specific uncertainty scaling from the start.
 
@@ -79,6 +79,6 @@ This strict decomposition makes ablation studies and extensions straightforward:
 - Swap the **[selector](../extension-guide/selector.md)** to evaluate different budget allocation policies.
 - Swap the **[oracle](../extension-guide/oracle.md)** to move from benchmark functions to real experimental workflows.
 
-See the [Extension Guide](../extension-guide/overview.md) for step-by-step instructions, and the [API Reference](../reference/overview.md) for the full interface definitions of each component.
+See the [Extension Guide](../extension-guide/overview.md) for step-by-step instructions, and the [API Reference](../reference/) for the full interface definitions of each component.
 
 To explore the mathematical multi-fidelity parameterisation in depth, proceed to [Multi-Fidelity Setting](multi_fidelity.md).

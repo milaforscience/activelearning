@@ -5,7 +5,7 @@
   min-width: 12rem;
 }
 
-/* Replace abbreviated mkdocstrings symbol labels with full words */
+/* Replace abbreviated API symbol labels with full words */
 code.doc-symbol-method::after,
 a code.doc-symbol-method::after {
   content: "method";
@@ -22,4 +22,13 @@ a code.doc-symbol-attribute::after {
 .schema-table th,
 .schema-table td {
   min-width: 6rem;
+}
+
+.api-reference-external-link {
+  white-space: nowrap;
+}
+
+.api-reference-external-icon {
+  font-size: 0.9em;
+  font-weight: 600;
 }

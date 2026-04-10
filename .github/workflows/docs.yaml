@@ -36,7 +36,7 @@ jobs:
         run: uv sync
 
       - name: Build docs
-        run: uv run python docs/gen_ref_pages.py && uv run zensical build --config-file zensical.toml --clean
+        run: make docs-build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

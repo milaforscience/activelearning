@@ -9,8 +9,8 @@ surrogate subclass to:
 - Implement incremental or online updates.
 - Control fidelity-weighted training data.
 
-Before implementing a new surrogate, verify that [`DummyMeanSurrogate`](../reference/activelearning/surrogate/dummy_mean_surrogate.md#activelearning.surrogate.dummy_mean_surrogate.DummyMeanSurrogate) (for
-baselines) or [`BoTorchGPSurrogate`](../reference/activelearning/surrogate/botorch_surrogate.md#activelearning.surrogate.botorch_surrogate.BoTorchGPSurrogate) (for GP-based work) does not already meet your
+Before implementing a new surrogate, verify that [`DummyMeanSurrogate`](../reference/activelearning/surrogate/dummy_mean_surrogate/#activelearning.surrogate.dummy_mean_surrogate.DummyMeanSurrogate) (for
+baselines) or [`BoTorchGPSurrogate`](../reference/activelearning/surrogate/botorch_surrogate/#activelearning.surrogate.botorch_surrogate.BoTorchGPSurrogate) (for GP-based work) does not already meet your
 requirements.
 
 ## **What to implement**
@@ -31,8 +31,8 @@ or should implement depend on your update strategy:
 
 Review the built-in surrogates as concrete examples before writing your own:
 
-- [`DummyMeanSurrogate`](../reference/activelearning/surrogate/dummy_mean_surrogate.md#activelearning.surrogate.dummy_mean_surrogate.DummyMeanSurrogate) — a minimal surrogate that returns a fixed mean; useful as a baseline or starting point.
-- [`BoTorchGPSurrogate`](../reference/activelearning/surrogate/botorch_surrogate.md#activelearning.surrogate.botorch_surrogate.BoTorchGPSurrogate) — a full multi-fidelity GP surrogate using BoTorch; the primary production surrogate.
+- [`DummyMeanSurrogate`](../reference/activelearning/surrogate/dummy_mean_surrogate/#activelearning.surrogate.dummy_mean_surrogate.DummyMeanSurrogate) — a minimal surrogate that returns a fixed mean; useful as a baseline or starting point.
+- [`BoTorchGPSurrogate`](../reference/activelearning/surrogate/botorch_surrogate/#activelearning.surrogate.botorch_surrogate.BoTorchGPSurrogate) — a full multi-fidelity GP surrogate using BoTorch; the primary production surrogate.
 
 Source: `src/activelearning/surrogate/`.
 
@@ -104,11 +104,11 @@ that may be a one-pass generator. Convert to a list immediately if you need
 random access or multiple passes.
 
 **Surrogate compatibility** — BoTorch acquisitions require a
-[`BoTorchGPSurrogate`](../reference/activelearning/surrogate/botorch_surrogate.md#activelearning.surrogate.botorch_surrogate.BoTorchGPSurrogate), not a generic [`Surrogate`](../reference/activelearning/surrogate/surrogate.md#activelearning.surrogate.surrogate.Surrogate). Custom surrogates that wrap
+[`BoTorchGPSurrogate`](../reference/activelearning/surrogate/botorch_surrogate/#activelearning.surrogate.botorch_surrogate.BoTorchGPSurrogate), not a generic [`Surrogate`](../reference/activelearning/surrogate/surrogate/#activelearning.surrogate.surrogate.Surrogate). Custom surrogates that wrap
 non-BoTorch models should pair with acquisitions that only use `predict()`.
 
 ## **Related pages**
 
 - [Acquisition guide](acquisition.md) — how the acquisition consumes `predict()`
 - [Extension guide overview](index.md)
-- [Surrogate API](../reference/activelearning/surrogate/surrogate.md)
+- [Surrogate API](../reference/activelearning/surrogate/surrogate/)

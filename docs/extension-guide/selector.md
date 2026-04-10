@@ -9,8 +9,8 @@ selector to:
   thresholds).
 - Mix cost awareness with acquisition scoring in a custom way.
 
-Before implementing a new selector, verify that [`TopKAcquisitionSelector`](../reference/activelearning/selector/score_selector.md#activelearning.selector.score_selector.TopKAcquisitionSelector) or
-[`CostAwareSelector`](../reference/activelearning/selector/cost_aware_selector.md#activelearning.selector.cost_aware_selector.CostAwareSelector) does not already meet your requirements.
+Before implementing a new selector, verify that [`TopKAcquisitionSelector`](../reference/activelearning/selector/score_selector/#activelearning.selector.score_selector.TopKAcquisitionSelector) or
+[`CostAwareSelector`](../reference/activelearning/selector/cost_aware_selector/#activelearning.selector.cost_aware_selector.CostAwareSelector) does not already meet your requirements.
 
 ## **What to implement**
 
@@ -27,8 +27,8 @@ observations, or modify the budget inside the selector.
 
 Review the built-in selectors as concrete examples before writing your own:
 
-- [`TopKAcquisitionSelector`](../reference/activelearning/selector/score_selector.md#activelearning.selector.score_selector.TopKAcquisitionSelector) — picks the top-K candidates by acquisition score; the simplest selector.
-- [`CostAwareSelector`](../reference/activelearning/selector/cost_aware_selector.md#activelearning.selector.cost_aware_selector.CostAwareSelector) — selects candidates by score-per-unit-cost within the round budget; the default for multi-fidelity experiments.
+- [`TopKAcquisitionSelector`](../reference/activelearning/selector/score_selector/#activelearning.selector.score_selector.TopKAcquisitionSelector) — picks the top-K candidates by acquisition score; the simplest selector.
+- [`CostAwareSelector`](../reference/activelearning/selector/cost_aware_selector/#activelearning.selector.cost_aware_selector.CostAwareSelector) — selects candidates by score-per-unit-cost within the round budget; the default for multi-fidelity experiments.
 
 Source: `src/activelearning/selector/`.
 
@@ -60,8 +60,8 @@ selector:
 ## **Fidelity preservation**
 
 Selected candidates must carry their fidelity ids unchanged. Do not modify
-[`Candidate.fidelity`](../reference/activelearning/utils/types.md#activelearning.utils.types.Candidate) inside the selector — the oracle and dataset use it to
-route and record observations correctly. Since [`Candidate`](../reference/activelearning/utils/types.md#activelearning.utils.types.Candidate) is a frozen
+[`Candidate.fidelity`](../reference/activelearning/utils/types/#activelearning.utils.types.Candidate) inside the selector — the oracle and dataset use it to
+route and record observations correctly. Since [`Candidate`](../reference/activelearning/utils/types/#activelearning.utils.types.Candidate) is a frozen
 dataclass, accidental mutation will raise an `AttributeError`.
 
 ## **Using `acquisition.score()` inside the selector**
@@ -101,4 +101,4 @@ sure of the upstream sampler's output format.
 - [Sampler guide](sampler.md) — how the candidate pool is generated
 - [Acquisition guide](acquisition.md) — how `score()` works
 - [Extension guide overview](index.md)
-- [Selector API](../reference/activelearning/selector/selector.md)
+- [Selector API](../reference/activelearning/selector/selector/)

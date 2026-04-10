@@ -1,6 +1,6 @@
 # **Adding a New Oracle**
 
-An oracle implements the ground-truth evaluation function $f(x)$ at each fidelity level $m \in \mathcal{M}$. Implement a new oracle subclass to:
+An oracle implements the ground-truth evaluation function $f(x, m)$ at each fidelity level $m \in \mathcal{M}$. Implement a new oracle subclass to:
 
 - Wrap a new simulator, benchmark function, or lab instrument.
 - Define a different fidelity structure (different levels, costs, or confidences).
@@ -18,15 +18,15 @@ Subclass `activelearning.oracle.oracle.Oracle` and implement three methods:
 |---|---|
 | `get_fidelity_confidences()` | Returns a dict mapping each fidelity id to a confidence in `[0, 1]` |
 | `get_costs(candidates)` | Returns one cost per input candidate (same order) |
-| `query(candidates)` | Returns one [`Observation`](../reference/activelearning/utils/types.md#activelearning.utils.types.Observation) per input candidate (same order) |
+| `query(candidates)` | Returns one [`Observation`](../reference/activelearning/utils/types/#activelearning.utils.types.Observation) per input candidate (same order) |
 
 ## **Reference implementations**
 
 Review the built-in oracles as concrete examples before writing your own:
 
-- [`BraninOracle`](../reference/activelearning/oracle/augmented_function_oracle.md#activelearning.oracle.augmented_function_oracle.BraninOracle) — 2D benchmark with configurable single and multi-fidelity costs.
-- [`Hartmann6DOracle`](../reference/activelearning/oracle/augmented_function_oracle.md#activelearning.oracle.augmented_function_oracle.Hartmann6DOracle) — 6-dimensional benchmark with the same structure.
-- [`CompositeOracle`](../reference/activelearning/oracle/composite_oracle.md#activelearning.oracle.composite_oracle.CompositeOracle) — routes queries across sub-oracles by fidelity level.
+- [`BraninOracle`](../reference/activelearning/oracle/augmented_function_oracle/#activelearning.oracle.augmented_function_oracle.BraninOracle) — 2D benchmark with configurable single and multi-fidelity costs.
+- [`Hartmann6DOracle`](../reference/activelearning/oracle/augmented_function_oracle/#activelearning.oracle.augmented_function_oracle.Hartmann6DOracle) — 6-dimensional benchmark with the same structure.
+- [`CompositeOracle`](../reference/activelearning/oracle/composite_oracle/#activelearning.oracle.composite_oracle.CompositeOracle) — routes queries across sub-oracles by fidelity level.
 
 Source: `src/activelearning/oracle/augmented_function_oracle.py` and `src/activelearning/oracle/composite_oracle.py`.
 
@@ -60,8 +60,8 @@ oracle:
 The fidelity ids used in `get_fidelity_confidences()` must match the ids your
 sampler stamps onto `Candidate.fidelity`. If the sampler emits fidelity `0` or
 `1` but your oracle only declares fidelity `2`, every query will raise a
-`ValueError`. The [`HypercubeSampler`](../reference/activelearning/sampler/hypercube_sampler.md#activelearning.sampler.hypercube_sampler.HypercubeSampler) `fidelities` parameter controls which ids
-it assigns — keep them consistent.
+`ValueError` (e.g., the [`HypercubeSampler`](../reference/activelearning/sampler/hypercube_sampler/#activelearning.sampler.hypercube_sampler.HypercubeSampler) `fidelities` parameter controls which ids
+it assigns — keep them consistent).
 
 ## **Common pitfalls**
 
@@ -77,7 +77,7 @@ Use `self.dtype` and `self.device` so the runtime binding takes effect.
 
 ## **Using CompositeOracle instead of building from scratch**
 
-When different oracle implementations each handle a subset of fidelity levels, use [`CompositeOracle`](../reference/activelearning/oracle/composite_oracle.md#activelearning.oracle.composite_oracle.CompositeOracle). It merges `get_fidelity_confidences()` from all
+When different oracle implementations each handle a subset of fidelity levels, use [`CompositeOracle`](../reference/activelearning/oracle/composite_oracle/#activelearning.oracle.composite_oracle.CompositeOracle). It merges `get_fidelity_confidences()` from all
 sub-oracles, routes candidates to the cheapest sub-oracle that handles each
 fidelity, and assembles results in the original candidate order.
 
@@ -91,7 +91,7 @@ oracle:
       fidelity_costs: {1: 5.0}
 ```
 
-Use [`CompositeOracle`](../reference/activelearning/oracle/composite_oracle.md#activelearning.oracle.composite_oracle.CompositeOracle) when fidelity levels are cleanly separated across
+Use [`CompositeOracle`](../reference/activelearning/oracle/composite_oracle/#activelearning.oracle.composite_oracle.CompositeOracle) when fidelity levels are cleanly separated across
 implementations. Write a new oracle class when the routing logic cannot be
 expressed as independent sub-oracles.
 
@@ -99,4 +99,4 @@ expressed as independent sub-oracles.
 
 - [Sampler guide](sampler.md) — aligning fidelity ids with the sampler
 - [Extension guide overview](index.md)
-- [Oracle API](../reference/activelearning/oracle/oracle.md)
+- [Oracle API](../reference/activelearning/oracle/oracle/)

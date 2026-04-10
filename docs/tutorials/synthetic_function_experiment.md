@@ -8,7 +8,7 @@ It is structured as three stages — each one runnable on its own:
 2. **Multi-fidelity** — add fidelity levels and observe how the algorithm trades off cost vs. quality.
 3. **Aim logging** — persist metrics and figures to a local Aim dashboard.
 
-All four tutorial configs use [`ConsoleLogger`](../reference/activelearning/logger/logger.md#activelearning.logger.logger.ConsoleLogger) by default, so every stage gives you visible output immediately.
+All four tutorial configs use [`ConsoleLogger`](../reference/activelearning/logger/logger/#activelearning.logger.logger.ConsoleLogger) by default, so every stage gives you visible output immediately.
 
 ## **The benchmarks**
 

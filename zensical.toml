@@ -10,6 +10,7 @@ extra_javascript = [
     "https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js",
     "https://unpkg.com/mermaid@11/dist/mermaid.min.js",
     "js/mermaid-init.js",
+    "js/api-reference-link.js",
 ]
 nav = [
     {"Home" = "index.md"},
@@ -36,21 +37,7 @@ nav = [
         {"Adding a Selector" = "extension-guide/selector.md"},
         {"Adding an Acquisition" = "extension-guide/acquisition.md"},
     ]},
-    {"API Reference" = [
-        {"Overview" = "reference/overview.md"},
-        {"Module Summary" = "reference/summary.md"},
-        {"Configuration" = "reference/activelearning/config.md"},
-        {"Runtime" = "reference/activelearning/runtime.md"},
-        {"Types" = "reference/activelearning/utils/types.md"},
-        {"Dataset" = "reference/activelearning/dataset/overview.md"},
-        {"Surrogate" = "reference/activelearning/surrogate/overview.md"},
-        {"Acquisition" = "reference/activelearning/acquisition/overview.md"},
-        {"Sampler" = "reference/activelearning/sampler/overview.md"},
-        {"Selector" = "reference/activelearning/selector/overview.md"},
-        {"Oracle" = "reference/activelearning/oracle/overview.md"},
-        {"Budget" = "reference/activelearning/budget/overview.md"},
-        {"Logger" = "reference/activelearning/logger/overview.md"},
-    ]},
+    {"API Reference" = "reference/"},
     {"Resources" = [
         {"FAQ" = "resources/faq.md"},
         {"References and Citation" = "resources/references.md"},
@@ -59,11 +46,17 @@ nav = [
 ]
 
 [project.theme]
-variant = "classic"
+variant = "modern"
 features = [
     "content.code.copy",
     "navigation.indexes",
+    "navigation.tabs",
+    "navvigation.sections"
 ]
+
+[project.theme.font]
+text = "Inter"
+code = "JetBrains Mono"
 
 [project.markdown_extensions.admonition]
 
@@ -84,19 +77,3 @@ emoji_generator = "zensical.extensions.emoji.to_svg"
 custom_fences = [
     { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
 ]
-
-[project.plugins.mkdocstrings.handlers.python]
-paths = ["src"]
-
-[project.plugins.mkdocstrings.handlers.python.options]
-members = true
-show_source = true
-show_root_heading = true
-show_root_full_path = false
-show_symbol_type_heading = true
-show_symbol_type_toc = true
-docstring_style = "numpy"
-merge_init_into_class = true
-inherited_members = false
-members_order = "source"
-show_if_no_docstring = true

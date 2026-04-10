@@ -144,7 +144,8 @@ src/activelearning/       # Framework source code
   main.py                 # CLI entry point and loop orchestration
 config/                   # Bundled YAML experiment configs
 tests/                    # Test suite
-docs/                     # Documentation source (Zensical)
+docs/                     # Prose documentation source (Zensical)
+docs_api/                 # API reference source (Sphinx + AutoAPI)
 ```
 
 ---

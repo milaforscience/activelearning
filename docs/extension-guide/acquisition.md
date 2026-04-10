@@ -24,36 +24,13 @@ for joint batch utility, or both. The `supports_singleton_scoring` and
 `supports_batch_scoring` properties are inferred automatically from which
 methods you override.
 
-## **`DummyAcquisition` Reference**
-
-[`DummyAcquisition`](../reference/activelearning/acquisition/dummy_acquisition.md#activelearning.acquisition.dummy_acquisition.DummyAcquisition) is the simplest acquisition in the framework. It reads
-`"mean"` and optionally `"std"` from `surrogate.predict()` and returns
-`mean + beta * std` as the score. Review it before implementing a new acquisition —
-most custom acquisitions require only minor additions to this pattern.
-
-```python
-# Simplified structure of DummyAcquisition
-class DummyAcquisition(Acquisition):
-    def __init__(self, beta: float = 1.0) -> None:
-        super().__init__()
-        self._beta = beta
-
-    def score(self, candidates):
-        pred = self.surrogate.predict(list(candidates))
-        means = pred["mean"]
-        stds = pred.get("std")
-        if stds is None:
-            return list(means)
-        return [m + self._beta * s for m, s in zip(means, stds)]
-```
-
 ## **Reference implementations**
 
 Review the built-in acquisitions as concrete examples before writing your own:
 
-- [`DummyAcquisition`](../reference/activelearning/acquisition/dummy_acquisition.md#activelearning.acquisition.dummy_acquisition.DummyAcquisition) — scores candidates as `mean + beta * std`; the simplest possible acquisition and a good starting point for custom implementations.
-- Analytic BoTorch acquisitions ([`ExpectedImprovement`](../reference/activelearning/acquisition/botorch/botorch_analytic.md#activelearning.acquisition.botorch.botorch_analytic.ExpectedImprovement), [`UpperConfidenceBound`](../reference/activelearning/acquisition/botorch/botorch_analytic.md#activelearning.acquisition.botorch.botorch_analytic.UpperConfidenceBound), etc.) — subclass [`AnalyticBoTorchAcquisition`](../reference/activelearning/acquisition/botorch/botorch_acquisition.md#activelearning.acquisition.botorch.botorch_acquisition.AnalyticBoTorchAcquisition).
-- Q-batch BoTorch acquisitions ([`QMultiFidelityKnowledgeGradient`](../reference/activelearning/acquisition/botorch/botorch_multifidelity.md#activelearning.acquisition.botorch.botorch_multifidelity.QMultiFidelityKnowledgeGradient), [`QMultiFidelityMaxValueEntropy`](../reference/activelearning/acquisition/botorch/botorch_multifidelity.md#activelearning.acquisition.botorch.botorch_multifidelity.QMultiFidelityMaxValueEntropy), etc.) — subclass [`QBatchBoTorchAcquisition`](../reference/activelearning/acquisition/botorch/botorch_acquisition.md#activelearning.acquisition.botorch.botorch_acquisition.QBatchBoTorchAcquisition).
+- [`DummyAcquisition`](../reference/activelearning/acquisition/dummy_acquisition/#activelearning.acquisition.dummy_acquisition.DummyAcquisition) — scores candidates as `mean + beta * std`; the simplest possible acquisition and a good starting point for custom implementations.
+- Analytic BoTorch acquisitions ([`ExpectedImprovement`](../reference/activelearning/acquisition/botorch/botorch_analytic/#activelearning.acquisition.botorch.botorch_analytic.ExpectedImprovement), [`UpperConfidenceBound`](../reference/activelearning/acquisition/botorch/botorch_analytic/#activelearning.acquisition.botorch.botorch_analytic.UpperConfidenceBound), etc.) — subclass [`AnalyticBoTorchAcquisition`](../reference/activelearning/acquisition/botorch/botorch_acquisition/#activelearning.acquisition.botorch.botorch_acquisition.AnalyticBoTorchAcquisition).
+- Q-batch BoTorch acquisitions ([`QMultiFidelityKnowledgeGradient`](../reference/activelearning/acquisition/botorch/botorch_multifidelity/#activelearning.acquisition.botorch.botorch_multifidelity.QMultiFidelityKnowledgeGradient), [`QMultiFidelityMaxValueEntropy`](../reference/activelearning/acquisition/botorch/botorch_multifidelity/#activelearning.acquisition.botorch.botorch_multifidelity.QMultiFidelityMaxValueEntropy), etc.) — subclass [`QBatchBoTorchAcquisition`](../reference/activelearning/acquisition/botorch/botorch_acquisition/#activelearning.acquisition.botorch.botorch_acquisition.QBatchBoTorchAcquisition).
 
 Source: `src/activelearning/acquisition/`.
 
@@ -85,12 +62,12 @@ acquisition:
 ## **BoTorch acquisitions**
 
 For acquisitions that wrap a BoTorch acquisition function, use the intermediate
-base classes instead of [`Acquisition`](../reference/activelearning/acquisition/acquisition.md#activelearning.acquisition.acquisition.Acquisition) directly. Both handle candidate encoding,
+base classes instead of [`Acquisition`](../reference/activelearning/acquisition/acquisition/#activelearning.acquisition.acquisition.Acquisition) directly. Both handle candidate encoding,
 multi-fidelity infrastructure, and the BoTorch acquisition lifecycle:
 
-- **[`AnalyticBoTorchAcquisition`](../reference/activelearning/acquisition/botorch/botorch_acquisition.md#activelearning.acquisition.botorch.botorch_acquisition.AnalyticBoTorchAcquisition)** — for analytic BoTorch acquisitions that
+- **[`AnalyticBoTorchAcquisition`](../reference/activelearning/acquisition/botorch/botorch_acquisition/#activelearning.acquisition.botorch.botorch_acquisition.AnalyticBoTorchAcquisition)** — for analytic BoTorch acquisitions that
   score candidates independently (UCB, EI, PI, and similar).
-- **[`QBatchBoTorchAcquisition`](../reference/activelearning/acquisition/botorch/botorch_acquisition.md#activelearning.acquisition.botorch.botorch_acquisition.QBatchBoTorchAcquisition)** — for Monte Carlo / q-batch BoTorch
+- **[`QBatchBoTorchAcquisition`](../reference/activelearning/acquisition/botorch/botorch_acquisition/#activelearning.acquisition.botorch.botorch_acquisition.QBatchBoTorchAcquisition)** — for Monte Carlo / q-batch BoTorch
   acquisitions.
 
 The only method you must implement is `_build_botorch_acquisition()`, which
@@ -111,8 +88,8 @@ class MyBoTorchAcquisition(QBatchBoTorchAcquisition):
         return qExpectedImprovement(model=model, best_f=best_f)
 ```
 
-For analytic acquisitions, subclass [`AnalyticBoTorchAcquisition`](../reference/activelearning/acquisition/botorch/botorch_acquisition.md#activelearning.acquisition.botorch.botorch_acquisition.AnalyticBoTorchAcquisition) and follow
-the same pattern — see [`ExpectedImprovement`](../reference/activelearning/acquisition/botorch/botorch_analytic.md#activelearning.acquisition.botorch.botorch_analytic.ExpectedImprovement) or [`UpperConfidenceBound`](../reference/activelearning/acquisition/botorch/botorch_analytic.md#activelearning.acquisition.botorch.botorch_analytic.UpperConfidenceBound) in
+For analytic acquisitions, subclass [`AnalyticBoTorchAcquisition`](../reference/activelearning/acquisition/botorch/botorch_acquisition/#activelearning.acquisition.botorch.botorch_acquisition.AnalyticBoTorchAcquisition) and follow
+the same pattern — see [`ExpectedImprovement`](../reference/activelearning/acquisition/botorch/botorch_analytic/#activelearning.acquisition.botorch.botorch_analytic.ExpectedImprovement) or [`UpperConfidenceBound`](../reference/activelearning/acquisition/botorch/botorch_analytic/#activelearning.acquisition.botorch.botorch_analytic.UpperConfidenceBound) in
 the framework as reference.
 
 ## **Common pitfalls**
@@ -135,4 +112,4 @@ not apply cost weighting twice.
 - [Surrogate guide](surrogate.md) — what `predict()` returns
 - [Selector guide](selector.md) — how `score()` is called during selection
 - [Extension guide overview](index.md)
-- [Acquisition API](../reference/activelearning/acquisition/acquisition.md)
+- [Acquisition API](../reference/activelearning/acquisition/acquisition/)
