@@ -144,7 +144,7 @@ src/activelearning/       # Framework source code
   main.py                 # CLI entry point and loop orchestration
 config/                   # Bundled YAML experiment configs
 tests/                    # Test suite
-docs/                     # Documentation source (MkDocs)
+docs/                     # Documentation source (Zensical)
 ```
 
 ---
@@ -160,7 +160,7 @@ Set `logger.type` in your config to choose a logging backend:
 | `CometLogger` | Comet ML | `uv sync --extra comet` |
 | `AimLogger` | Aim | `uv sync --extra aim` |
 
-Multiple loggers can be combined with `MultiLogger`. See the [Logger API reference](https://milaforscience.github.io/activelearning/reference/activelearning/logger/) for configuration details.
+Multiple loggers can be combined with `MultiLogger`. See the [Logger API reference](https://milaforscience.github.io/activelearning/reference/activelearning/logger/logger/) for configuration details.
 
 ---
 
@@ -183,7 +183,7 @@ uv run pre-commit install
 
 ## Extending the Framework
 
-Each component has a documented extension interface. The [Extension Guide](https://milaforscience.github.io/activelearning/extension-guide/) covers:
+Each component has a documented extension interface. The [Extension Guide](https://milaforscience.github.io/activelearning/extension-guide/overview/) covers:
 
 - Adding a custom **Oracle**
 - Adding a custom **Sampler** (including GFlowNet integration)

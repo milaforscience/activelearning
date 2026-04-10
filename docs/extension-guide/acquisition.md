@@ -135,4 +135,4 @@ not apply cost weighting twice.
 - [Surrogate guide](surrogate.md) — what `predict()` returns
 - [Selector guide](selector.md) — how `score()` is called during selection
 - [Extension guide overview](index.md)
-- [Acquisition API](../reference/activelearning/acquisition/index.md)
+- [Acquisition API](../reference/activelearning/acquisition/acquisition.md)

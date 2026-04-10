@@ -51,8 +51,8 @@ Every core component in this loop is designed to be strictly modular. This means
 
     Implement custom surrogates, acquisition functions, samplers, selectors, or novel oracles.
 
-    [:octicons-arrow-right-24: Extension Guide](extension-guide/index.md)
-    · [API Reference](api/index.md)
+    [:octicons-arrow-right-24: Extension Guide](extension-guide/overview.md)
+    · [API Reference](reference/overview.md)
 
 -   :material-flask-outline:{ .lg .middle } **Run Experiments**
 

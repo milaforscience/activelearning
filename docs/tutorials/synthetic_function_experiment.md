@@ -155,5 +155,5 @@ The most useful views to start with:
 This tutorial covers running and monitoring experiments from the checked-in configs. Natural follow-ups include:
 
 - computing derived metrics on logged results (e.g. mean top-10 score, simple regret, inference regret),
-- adapting the configs to your own oracle — see the [Extension Guide](../extension-guide/index.md),
+- adapting the configs to your own oracle — see the [Extension Guide](../extension-guide/overview.md),
 - or reading [Multi-Fidelity Setting](../concepts/multi_fidelity.md) for a deeper treatment of how fidelity costs and confidences propagate through the loop.

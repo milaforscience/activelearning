@@ -45,7 +45,7 @@ a **noop** stating there were no merged PRs this week and stop.
 
 For each merged PR, retrieve its diff. **Ignore** changes to `docs/`, `tests/`, `site/`,
 and `.github/` — focus only on changes to `src/activelearning/` and project config files
-(`pyproject.toml`, `mkdocs.yml`, `Makefile`, `config/`).
+(`pyproject.toml`, `zensical.toml`, `Makefile`, `config/`).
 
 If no such changes exist across all PRs, output a **noop** and stop.
 

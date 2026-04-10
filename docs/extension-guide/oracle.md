@@ -99,4 +99,4 @@ expressed as independent sub-oracles.
 
 - [Sampler guide](sampler.md) — aligning fidelity ids with the sampler
 - [Extension guide overview](index.md)
-- [Oracle API](../reference/activelearning/oracle/index.md)
+- [Oracle API](../reference/activelearning/oracle/oracle.md)

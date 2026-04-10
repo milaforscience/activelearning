@@ -1,0 +1,102 @@
+[project]
+site_name = "Multi-Fidelity Active Learning"
+site_description = "Documentation for the activelearning framework"
+site_url = "https://milaforscience.github.io/activelearning"
+repo_url = "https://github.com/milaforscience/activelearning"
+repo_name = "milaforscience/activelearning"
+docs_dir = "docs"
+extra_css = ["css/custom.css"]
+extra_javascript = [
+    "https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js",
+    "https://unpkg.com/mermaid@11/dist/mermaid.min.js",
+    "js/mermaid-init.js",
+]
+nav = [
+    {"Home" = "index.md"},
+    {"Getting Started" = [
+        {"Installation" = "getting-started/installation.md"},
+        {"Quickstart" = "getting-started/quickstart.md"},
+    ]},
+    {"Introduction" = [
+        {"Framework Overview" = "concepts/overview.md"},
+        {"Active Learning Loop" = "concepts/active_learning_loop.md"},
+        {"Multi-Fidelity Setting" = "concepts/multi_fidelity.md"},
+        {"Runtime and Configuration" = "concepts/runtime_and_configuration.md"},
+        {"Related Work and Positioning" = "concepts/related-work.md"},
+    ]},
+    {"Tutorials" = [
+        {"Running Experiments" = "tutorials/running_experiments.md"},
+        {"Synthetic Function Examples" = "tutorials/synthetic_function_experiment.md"},
+    ]},
+    {"Extension Guide" = [
+        {"Overview" = "extension-guide/overview.md"},
+        {"Adding an Oracle" = "extension-guide/oracle.md"},
+        {"Adding a Sampler" = "extension-guide/sampler.md"},
+        {"Adding a Surrogate" = "extension-guide/surrogate.md"},
+        {"Adding a Selector" = "extension-guide/selector.md"},
+        {"Adding an Acquisition" = "extension-guide/acquisition.md"},
+    ]},
+    {"API Reference" = [
+        {"Overview" = "reference/overview.md"},
+        {"Module Summary" = "reference/summary.md"},
+        {"Configuration" = "reference/activelearning/config.md"},
+        {"Runtime" = "reference/activelearning/runtime.md"},
+        {"Types" = "reference/activelearning/utils/types.md"},
+        {"Dataset" = "reference/activelearning/dataset/overview.md"},
+        {"Surrogate" = "reference/activelearning/surrogate/overview.md"},
+        {"Acquisition" = "reference/activelearning/acquisition/overview.md"},
+        {"Sampler" = "reference/activelearning/sampler/overview.md"},
+        {"Selector" = "reference/activelearning/selector/overview.md"},
+        {"Oracle" = "reference/activelearning/oracle/overview.md"},
+        {"Budget" = "reference/activelearning/budget/overview.md"},
+        {"Logger" = "reference/activelearning/logger/overview.md"},
+    ]},
+    {"Resources" = [
+        {"FAQ" = "resources/faq.md"},
+        {"References and Citation" = "resources/references.md"},
+        {"Contributing" = "contributing.md"},
+    ]},
+]
+
+[project.theme]
+variant = "classic"
+features = [
+    "content.code.copy",
+    "navigation.indexes",
+]
+
+[project.markdown_extensions.admonition]
+
+[project.markdown_extensions.attr_list]
+
+[project.markdown_extensions.md_in_html]
+
+[project.markdown_extensions.pymdownx.arithmatex]
+generic = true
+
+[project.markdown_extensions.pymdownx.details]
+
+[project.markdown_extensions.pymdownx.emoji]
+emoji_index = "zensical.extensions.emoji.twemoji"
+emoji_generator = "zensical.extensions.emoji.to_svg"
+
+[project.markdown_extensions.pymdownx.superfences]
+custom_fences = [
+    { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+
+[project.plugins.mkdocstrings.handlers.python]
+paths = ["src"]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+members = true
+show_source = true
+show_root_heading = true
+show_root_full_path = false
+show_symbol_type_heading = true
+show_symbol_type_toc = true
+docstring_style = "numpy"
+merge_init_into_class = true
+inherited_members = false
+members_order = "source"
+show_if_no_docstring = true

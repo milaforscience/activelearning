@@ -111,4 +111,4 @@ non-BoTorch models should pair with acquisitions that only use `predict()`.
 
 - [Acquisition guide](acquisition.md) — how the acquisition consumes `predict()`
 - [Extension guide overview](index.md)
-- [Surrogate API](../reference/activelearning/surrogate/index.md)
+- [Surrogate API](../reference/activelearning/surrogate/surrogate.md)

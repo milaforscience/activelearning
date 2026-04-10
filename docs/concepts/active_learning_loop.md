@@ -79,6 +79,6 @@ This strict decomposition makes ablation studies and extensions straightforward:
 - Swap the **[selector](../extension-guide/selector.md)** to evaluate different budget allocation policies.
 - Swap the **[oracle](../extension-guide/oracle.md)** to move from benchmark functions to real experimental workflows.
 
-See the [Extension Guide](../extension-guide/index.md) for step-by-step instructions, and the [API Reference](../api/index.md) for the full interface definitions of each component.
+See the [Extension Guide](../extension-guide/overview.md) for step-by-step instructions, and the [API Reference](../reference/overview.md) for the full interface definitions of each component.
 
 To explore the mathematical multi-fidelity parameterisation in depth, proceed to [Multi-Fidelity Setting](multi_fidelity.md).

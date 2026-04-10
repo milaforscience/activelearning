@@ -1,0 +1,50 @@
+---
+search:
+  exclude: true
+---
+
+# `activelearning`
+
+Reference pages available under `activelearning`.
+
+- [`activelearning.acquisition.acquisition`](acquisition/acquisition.md)
+- [`activelearning.acquisition.botorch.botorch_acquisition`](acquisition/botorch/botorch_acquisition.md)
+- [`activelearning.acquisition.botorch.botorch_analytic`](acquisition/botorch/botorch_analytic.md)
+- [`activelearning.acquisition.botorch.botorch_multifidelity`](acquisition/botorch/botorch_multifidelity.md)
+- [`activelearning.acquisition.botorch.candidate_set`](acquisition/botorch/candidate_set.md)
+- [`activelearning.acquisition.config`](acquisition/config.md)
+- [`activelearning.acquisition.dummy_acquisition`](acquisition/dummy_acquisition.md)
+- [`activelearning.active_learning`](active_learning.md)
+- [`activelearning.budget.budget`](budget/budget.md)
+- [`activelearning.budget.config`](budget/config.md)
+- [`activelearning.budget.schedule_config`](budget/schedule_config.md)
+- [`activelearning.config`](config.md)
+- [`activelearning.dataset.config`](dataset/config.md)
+- [`activelearning.dataset.dataset`](dataset/dataset.md)
+- [`activelearning.dataset.list_dataset`](dataset/list_dataset.md)
+- [`activelearning.logger.config`](logger/config.md)
+- [`activelearning.logger.logger`](logger/logger.md)
+- [`activelearning.main`](main.md)
+- [`activelearning.oracle.augmented_function_oracle`](oracle/augmented_function_oracle.md)
+- [`activelearning.oracle.composite_oracle`](oracle/composite_oracle.md)
+- [`activelearning.oracle.config`](oracle/config.md)
+- [`activelearning.oracle.multi_fidelity_oracle`](oracle/multi_fidelity_oracle.md)
+- [`activelearning.oracle.oracle`](oracle/oracle.md)
+- [`activelearning.oracle.plotting`](oracle/plotting.md)
+- [`activelearning.runtime`](runtime.md)
+- [`activelearning.sampler.config`](sampler/config.md)
+- [`activelearning.sampler.hypercube_sampler`](sampler/hypercube_sampler.md)
+- [`activelearning.sampler.pool_score_sampler`](sampler/pool_score_sampler.md)
+- [`activelearning.sampler.pool_uniform_sampler`](sampler/pool_uniform_sampler.md)
+- [`activelearning.sampler.sampler`](sampler/sampler.md)
+- [`activelearning.selector.config`](selector/config.md)
+- [`activelearning.selector.cost_aware_selector`](selector/cost_aware_selector.md)
+- [`activelearning.selector.score_selector`](selector/score_selector.md)
+- [`activelearning.selector.selector`](selector/selector.md)
+- [`activelearning.surrogate.botorch_surrogate`](surrogate/botorch_surrogate.md)
+- [`activelearning.surrogate.config`](surrogate/config.md)
+- [`activelearning.surrogate.dummy_mean_surrogate`](surrogate/dummy_mean_surrogate.md)
+- [`activelearning.surrogate.surrogate`](surrogate/surrogate.md)
+- [`activelearning.utils.config_loader`](utils/config_loader.md)
+- [`activelearning.utils.sampling`](utils/sampling.md)
+- [`activelearning.utils.types`](utils/types.md)

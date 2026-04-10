@@ -5,7 +5,7 @@ standards for the Multi-Fidelity Active Learning framework. It covers environmen
 coding conventions, and pull request preparation.
 
 If you are looking to adapt or extend the framework for your own experiments rather than
-contribute upstream, start with the [Extension Guide](extension-guide/index.md) instead.
+contribute upstream, start with the [Extension Guide](extension-guide/overview.md) instead.
 
 ---
 
@@ -93,8 +93,8 @@ rows = rows[1:]
 ## **3. Docstring Guidelines**
 
 All public classes and methods require a **NumPy-style docstring**. This is the style
-configured for `mkdocstrings` in `mkdocs.yml` and is therefore the authoritative format
-for auto-generated API reference pages.
+configured for `mkdocstrings` in `zensical.toml` and is therefore the authoritative
+format for auto-generated API reference pages.
 
 ### **Full example**
 
@@ -225,17 +225,18 @@ make docs-serve
 ```
 
 This starts a live-reload server at `http://127.0.0.1:8000`. Changes to `.md` files
-and docstrings are reflected immediately.
+and docstrings are reflected immediately. If you add, remove, or rename Python modules,
+run `make docs-sync-api` to refresh the generated `docs/reference/` pages.
 
-### **Build with strict validation**
+### **Build locally**
 
 ```sh
 make docs-build
 ```
 
-Builds the site into `site/` with the same `--strict` flag used in CI (broken links and
-missing references are treated as errors). The `site/` directory is Git-ignored; delete
-it manually or run `make clean` when you no longer need a local build.
+Builds the site into `site/` after regenerating the checked-in API reference pages.
+The `site/` directory is Git-ignored; delete it manually or run `make clean` when you
+no longer need a local build.
 
 ### **Writing docs**
 
@@ -243,7 +244,9 @@ it manually or run `make clean` when you no longer need a local build.
 - API reference pages are auto-generated from docstrings using
   [`mkdocstrings`](https://mkdocstrings.github.io/) — keep docstrings accurate and
   complete rather than duplicating information in hand-written pages.
-- If you add a new top-level page, register it in the `nav:` section of `mkdocs.yml`.
+- The generated API reference pages live under `docs/reference/` and are refreshed by
+  `make docs-sync-api`.
+- If you add a new top-level page, register it in the `nav` section of `zensical.toml`.
 
 ### **Terminology**
 
