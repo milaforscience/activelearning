@@ -1,10 +1,14 @@
-import torch
+from functools import partial
 from typing import Any, Iterable, Optional
+
+import torch
 from omegaconf import DictConfig
-from activelearning.sampler.sampler import Sampler
-from activelearning.sampler.gflownet.logger_wrapper import (
-    RuntimeGFlowNetLoggerWrapper,
+
+from activelearning.sampler.gflownet.logger_wrapper import RuntimeGFlowNetLoggerWrapper
+from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
+    MultiFidelityGFlowNetEnvWrapper,
 )
+from activelearning.sampler.sampler import Sampler
 from activelearning.utils.types import Candidate, Observation
 
 
@@ -29,6 +33,8 @@ class GFlowNetSampler(Sampler):
         Torch device string (e.g. ``"cpu"`` or ``"cuda"``).
     float_precision : int
         Floating-point precision (32 or 64).
+    n_fidelities : int
+        Number of fidelities. By default, 1 (single fidelity).
     """
 
     def __init__(
@@ -37,6 +43,7 @@ class GFlowNetSampler(Sampler):
         conf: DictConfig,
         device: str,
         float_precision: int,
+        n_fidelities: int = 1,
     ) -> None:
         import hydra
 
@@ -45,11 +52,15 @@ class GFlowNetSampler(Sampler):
         self._gflownet_device = device
         self._gflownet_float_precision = float_precision
 
-        self.env_maker = hydra.utils.instantiate(
+        env_base = hydra.utils.instantiate(
             self.conf.env,
             device=self._gflownet_device,
             float_precision=self._gflownet_float_precision,
-            _partial_=True,
+        )
+        self.env_maker = partial(
+            MultiFidelityGFlowNetEnvWrapper,
+            env_base=env_base,
+            n_fidelities=n_fidelities,
         )
         env = self.env_maker()
 
