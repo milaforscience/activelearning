@@ -14,7 +14,7 @@ from activelearning.applications.molecule.selfies_tokenizer import (
 )
 
 BENZENE = "[C][=C][C][=C][C][=C][Ring1][=Branch1]"
-ALANINE = "[C][Branch1][C][N][C][Branch1][C][C][C][=O][O]"
+ALANINE = "[C][C][Branch1][C][N][C][=Branch1][C][=O][O]"
 
 
 @pytest.fixture
