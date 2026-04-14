@@ -18,10 +18,16 @@ class Candidate:
     fidelity : Optional[int]
         Optional fidelity level for multi-fidelity optimization.
         Higher fidelity typically means more accurate but more expensive.
+    metadata : Optional[dict[str, Any]]
+        Domain-specific auxiliary data carried alongside the candidate.
+        Not consumed by the core AL loop but available to user components
+        (e.g., an oracle that needs the original raw string stored under
+        ``metadata["raw"]`` while ``x`` holds the embedding tensor).
     """
 
     x: Any
     fidelity: Optional[int] = None
+    metadata: Optional[dict[str, Any]] = None
 
 
 @dataclass(frozen=True)
@@ -39,11 +45,15 @@ class Observation:
         or categorical label (str, int).
     fidelity : Optional[int]
         Optional fidelity level at which the observation was made.
+    metadata : Optional[dict[str, Any]]
+        Domain-specific auxiliary data carried alongside the observation.
+        See :class:`Candidate` for usage details.
     """
 
     x: Any
     y: Any
     fidelity: Optional[int] = None
+    metadata: Optional[dict[str, Any]] = None
 
 
 def label_candidates(
@@ -69,7 +79,12 @@ def label_candidates(
     if len(candidates_list) != len(labels_list):
         raise ValueError("Length of candidates and labels must match.")
     return [
-        Observation(x=candidate.x, y=label, fidelity=candidate.fidelity)
+        Observation(
+            x=candidate.x,
+            y=label,
+            fidelity=candidate.fidelity,
+            metadata=candidate.metadata,
+        )
         for candidate, label in zip(candidates_list, labels_list)
     ]
 
