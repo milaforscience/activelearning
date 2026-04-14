@@ -39,8 +39,57 @@ class CompositeOracleConfig(BaseModel):
         return CompositeOracle(sub_oracles=[cfg.build() for cfg in self.sub_oracles])
 
 
+class XTBIPEAOracleConfig(BaseModel):
+    """Configuration for :class:`~activelearning.applications.molecule.xtb_oracle.XTBIPEAOracle`.
+
+    Parameters
+    ----------
+    task : str
+        ``"ea"`` (electron affinity) or ``"ip"`` (ionisation potential).
+    fidelity_costs : dict[int, float]
+        Computational cost per sample for each fidelity level.
+    fidelity_confidences : dict[int, float], optional
+        Confidence in ``[0, 1]`` per fidelity.  Defaults to costs normalised by max.
+    gfn_version : int
+        GFN-xTB parametrisation passed to ``--gfn`` (default: 2).
+    ff : str
+        RDKit force field for initial 3-D geometry: ``"mmff"`` or ``"uff"``.
+    correction_factor : float
+        Empirical correction subtracted from adiabatic IP/EA (eV).
+    mol_repr : str
+        Input molecule representation: ``"selfies"`` or ``"smiles"``.
+    """
+
+    type: Literal["XTBIPEAOracle"] = "XTBIPEAOracle"
+    task: str
+    fidelity_costs: dict[int, float]
+    fidelity_confidences: dict[int, float] | None = None
+    gfn_version: int = 2
+    ff: str = "mmff"
+    correction_factor: float = 4.8455
+    mol_repr: str = "selfies"
+
+    def build(self) -> Oracle:
+        from activelearning.applications.molecule.xtb_oracle import XTBIPEAOracle
+
+        return XTBIPEAOracle(
+            task=self.task,
+            fidelity_costs=self.fidelity_costs,
+            fidelity_confidences=self.fidelity_confidences,
+            gfn_version=self.gfn_version,
+            ff=self.ff,
+            correction_factor=self.correction_factor,
+            mol_repr=self.mol_repr,
+        )
+
+
 OracleConfig = Annotated[
-    Union[BraninOracleConfig, Hartmann6DOracleConfig, CompositeOracleConfig],
+    Union[
+        BraninOracleConfig,
+        Hartmann6DOracleConfig,
+        CompositeOracleConfig,
+        XTBIPEAOracleConfig,
+    ],
     Field(discriminator="type"),
 ]
 

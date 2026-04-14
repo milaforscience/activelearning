@@ -1,0 +1,76 @@
+# Molecule IP/EA optimisation with DKL (exact GP variant)
+#
+# The surrogate tokenises SELFIES strings internally; no pre-embed step needed.
+# Compatible with all BoTorch acquisition functions.
+#
+# Prerequisites:
+#   - A molecule pool file (one SELFIES per line) at the path below
+#   - The `xtb` binary on PATH for oracle evaluation
+#   - uv sync --extra molecule
+#
+# Run with:
+#   uv run activelearning config/molecule_dkl_exact.yaml
+
+runtime:
+  device: cpu
+  precision: 64
+
+dataset:
+  type: ListDataset
+
+surrogate:
+  type: ExactSelfiesDKLSurrogate
+  encoder:
+    type: SelfiesTransformerEncoder
+    max_length: 64
+    embed_dim: 64
+    ff_dim: 256
+    num_heads: 8
+    num_layers: 8
+    latent_dim: 64
+    dropout: 0.0
+  training_params:
+    epochs: 50
+    lr: 1.0e-3
+    mask_ratio: 0.125
+    pretrain_epochs: 0
+  standardize_outputs: true
+
+# Use any BoTorch acquisition function; UCB shown here
+acquisition:
+  type: UpperConfidenceBound
+  beta: 2.0
+
+sampler:
+  type: PoolFileSampler
+  # Replace with the path to your molecule pool
+  candidate_pool_file: config/data/molecules.txt
+  num_samples: 1000
+  fidelities:
+    - 1
+    - 2
+    - 3
+
+selector:
+  type: CostAwareSelector
+
+oracle:
+  type: XTBIPEAOracle
+  task: ea
+  fidelity_costs:
+    1: 1.0
+    2: 5.0
+    3: 25.0
+  gfn_version: 1
+  ff: mmff
+
+budget:
+  available_budget: 500.0
+  schedule:
+    type: constant
+    value: 50.0
+
+logger:
+  type: ConsoleLogger
+  project_name: molecule_dkl
+  run_name: molecule-dkl-exact-ea

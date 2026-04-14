@@ -1,0 +1,96 @@
+# Molecule IP/EA optimisation with DKL (variational GP) + paper-faithful MF-MES
+#
+# Reproduces the reference DeepKernelMoleculeRegressor setup:
+#   - VariationalSelfiesDKLSurrogate: encoder + sparse variational GP, trained
+#     jointly with VariationalELBO + MLM loss (ELBO, not MLL).
+#   - qMultiFidelityLowerBoundMaxValueEntropy: paper-faithful MF acquisition.
+#   - FidelityCostUtility: scales information gain by 1/cost so cheap fidelities
+#     are preferred when their gain is comparable.
+#   - TrainDataCandidateSetSpec: candidate set from current observations (latent
+#     feature space after encode_candidates override).
+#   - project(): auto-built to map candidates to max fidelity (3.0).
+#
+# Prerequisites:
+#   - A molecule pool file (one SELFIES per line) at the path below
+#   - The `xtb` binary on PATH for oracle evaluation
+#   - uv sync --extra molecule
+#
+# Run with:
+#   uv run activelearning config/molecule_dkl_variational.yaml
+
+runtime:
+  device: cpu
+  precision: 64
+
+dataset:
+  type: ListDataset
+
+surrogate:
+  type: VariationalSelfiesDKLSurrogate
+  multi_fidelity: true
+  target_fidelity: 3  # max(fidelity_costs) — tells project_to_target_fidelity where to project
+  encoder:
+    type: SelfiesTransformerEncoder
+    max_length: 64
+    embed_dim: 64
+    ff_dim: 256
+    num_heads: 8
+    num_layers: 8
+    latent_dim: 64
+    dropout: 0.0
+  training_params:
+    epochs: 50
+    lr: 1.0e-3
+    mask_ratio: 0.125
+    pretrain_epochs: 0
+  num_inducing: 64
+  standardize_outputs: true
+
+# Paper-faithful MF-MES with cost-aware utility
+acquisition:
+  type: QMultiFidelityLowerBoundMaxValueEntropy
+  candidate_set_spec:
+    type: TrainDataCandidateSetSpec
+  num_fantasies: 16
+  num_mv_samples: 10
+  num_y_samples: 128
+  maximize: true
+  cost_aware_utility:
+    type: FidelityCostUtility
+    fidelity_costs:
+      1: 1.0
+      2: 5.0
+      3: 25.0
+
+sampler:
+  type: PoolFileSampler
+  candidate_pool_file: config/data/molecules.txt
+  num_samples: 1000
+  fidelities:
+    - 1
+    - 2
+    - 3
+
+selector:
+  type: CostAwareSelector
+
+oracle:
+  type: XTBIPEAOracle
+  task: ea
+  fidelity_costs:
+    1: 1.0
+    2: 5.0
+    3: 25.0
+  gfn_version: 1
+  ff: mmff
+
+budget:
+  available_budget: 500.0
+  schedule:
+    type: constant
+    value: 50.0
+
+logger:
+  type: ConsoleLogger
+  project_name: molecule_dkl
+  run_name: molecule-dkl-variational-ea
