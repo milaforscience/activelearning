@@ -1,3 +1,5 @@
+from functools import partial
+
 import pytest
 from gflownet.envs.base import GFlowNetEnv
 from gflownet.envs.choice import Choice
@@ -216,3 +218,29 @@ def test__get_state_base_and_fidelity_returns_expected(env_base, n_fidelities, r
         state_base, fidelity = env.get_state_base_and_fidelity(env.state)
         assert env.env_base.equal(state_base, state_base_expected)
         assert fidelity == fidelity_expected
+
+
+def test__env_maker_creates_independent_env_base_instances():
+    """Each call to env_maker() must produce a wrapper with an independent env_base.
+
+    If env_base is instantiated once and shared across wrappers (e.g. captured in a
+    functools.partial), sampling a trajectory through one wrapper moves env_base.state
+    and corrupts all others. env_maker() must therefore construct a fresh env_base on
+    every call.
+    """
+    env_base = Grid(n_dim=2, length=3)
+
+    env_maker = partial(
+        MultiFidelityGFlowNetEnvWrapper, env_base=env_base, n_fidelities=2
+    )
+
+    env1 = env_maker()
+    env2 = env_maker()
+
+    # Each wrapper must hold its own independent env_base instance.
+    assert env1.env_base is not env2.env_base
+
+    # Advancing env1 must leave env2's base state untouched.
+    initial_state = list(env2.env_base.state)
+    env1.get_random_states(n_states=1)
+    assert env2.env_base.equal(env2.env_base.state, initial_state)
