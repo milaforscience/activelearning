@@ -52,14 +52,15 @@ class GFlowNetSampler(Sampler):
         self._gflownet_device = device
         self._gflownet_float_precision = float_precision
 
-        env_base = hydra.utils.instantiate(
+        env_base_maker = hydra.utils.instantiate(
             self.conf.env,
             device=self._gflownet_device,
             float_precision=self._gflownet_float_precision,
+            _partial=True,
         )
         self.env_maker = partial(
             MultiFidelityGFlowNetEnvWrapper,
-            env_base=env_base,
+            env_base_maker=env_base_maker,
             n_fidelities=n_fidelities,
         )
         env = self.env_maker()
