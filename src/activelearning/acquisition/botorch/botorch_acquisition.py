@@ -109,6 +109,12 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         ------
         TypeError
             If the surrogate is not a ``BoTorchGPSurrogate``.
+
+        Warns
+        -----
+        UserWarning
+            If a multi-fidelity surrogate is paired with a non-multi-fidelity
+            acquisition function.
         """
         if not isinstance(surrogate, BoTorchGPSurrogate):
             raise TypeError(
