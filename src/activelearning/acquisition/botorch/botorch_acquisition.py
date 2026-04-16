@@ -204,13 +204,13 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
             If projection is requested in multi-fidelity mode but required
             fidelity metadata is unavailable.
         """
-        if self._project_to_target_fidelity_fn_override is not None:
-            return self._project_to_target_fidelity_fn_override
-
         if self._botorch_surrogate is None:
             return None
         if not self._botorch_surrogate.is_multi_fidelity():
             return None
+
+        if self._project_to_target_fidelity_fn_override is not None:
+            return self._project_to_target_fidelity_fn_override
 
         fidelity_dim = self._botorch_surrogate.get_fidelity_dimension()
         target_value = self._resolved_target_fidelity_value
