@@ -1,4 +1,4 @@
-from typing import Any, List, Sequence, Tuple
+from typing import Any, List, Sequence, Tuple, Type
 
 from gflownet.envs.base import GFlowNetEnv
 from gflownet.envs.choice import Choice
@@ -64,15 +64,37 @@ class MultiFidelityGFlowNetEnvWrapper(SetFix, MultiFidelityGFlowNetEnvWrapperBas
 
     The wrapper is a SetFix GFlowNet environment whose sub-environments are the
     base environment and a Choice environment to model the discrete fidelity index.
+
+        Parameters
+        ----------
+        env_base : GFlowNetEnv
+        An instance of the base environment.
+    env_fidelity : Choice
+        An instance of a Choice environment to model the choice of fidelity index.
+    idx_base_env : int
+        The sub-environment index corresponding to the base environment. It is set to
+        0, arbitrarily.
+    idx_fidelity : int
+        The sub-environment index corresponding to the fidelity environment. It is set
+        to 1, arbitrarily.
     """
 
     def __init__(
         self,
-        env_base: GFlowNetEnv,
+        env_base_maker: Type[GFlowNetEnv],
         n_fidelities: int,
         **kwargs,
     ) -> None:
-        self.env_base = env_base
+        """Initializes a MultiFidelityGFlowNetEnvWrapper instance.
+
+        Parameters
+        ----------
+        env_base_maker : Type[GFlowNetEnv]
+            An environment maker (partial) to instantiate the base environment.
+        n_fidelities : int
+            The number of possible fidelity indices.
+        """
+        self.env_base = env_base_maker()
         self.env_fidelity = Choice(n_options=n_fidelities)
         self.idx_base_env = 0
         self.idx_fidelity = 1
@@ -90,15 +112,37 @@ class MultiFidelityGFlowNetEnvWrapperFidFirst(
 
     Therefore, the fidelity is sampled first, followed by the actions of the base
     environment.
+
+        Parameters
+        ----------
+        env_base : GFlowNetEnv
+        An instance of the base environment.
+    env_fidelity : Choice
+        An instance of a Choice environment to model the choice of fidelity index.
+    idx_fidelity : int
+        The sub-environment index corresponding to the fidelity environment. It is set
+        to 0 because the fidelity is the first sub-environment.
+    idx_base_env : int
+        The sub-environment index corresponding to the base environment. It is set to
+        1 because the base environment is sampled only after the fidelity.
     """
 
     def __init__(
         self,
-        env_base: GFlowNetEnv,
+        env_base_maker: Type[GFlowNetEnv],
         n_fidelities: int,
         **kwargs,
     ) -> None:
-        self.env_base = env_base
+        """Initializes a MultiFidelityGFlowNetEnvWrapperFidFirst instance.
+
+        Parameters
+        ----------
+        env_base_maker : Type[GFlowNetEnv]
+            An environment maker (partial) to instantiate the base environment.
+        n_fidelities : int
+            The number of possible fidelity indices.
+        """
+        self.env_base = env_base_maker()
         self.env_fidelity = Choice(n_options=n_fidelities)
         self.idx_fidelity = 0
         self.idx_base_env = 1
@@ -116,15 +160,37 @@ class MultiFidelityGFlowNetEnvWrapperFidLast(
 
     Therefore, the actions of the base environment are sampled first, and the fidelity
     is sampled at the end of the trajectory.
+
+        Parameters
+        ----------
+        env_base : GFlowNetEnv
+        An instance of the base environment.
+    env_fidelity : Choice
+        An instance of a Choice environment to model the choice of fidelity index.
+    idx_base_env : int
+        The sub-environment index corresponding to the base environment. It is set to
+        0 because the base environment is sampled first, before the fidelity.
+    idx_fidelity : int
+        The sub-environment index corresponding to the fidelity environment. It is set
+        to 1 because the fidelity is sampled only after the base environment.
     """
 
     def __init__(
         self,
-        env_base: GFlowNetEnv,
+        env_base_maker: Type[GFlowNetEnv],
         n_fidelities: int,
         **kwargs,
     ) -> None:
-        self.env_base = env_base
+        """Initializes a MultiFidelityGFlowNetEnvWrapperFidLast instance.
+
+        Parameters
+        ----------
+        env_base_maker : Type[GFlowNetEnv]
+            An environment maker (partial) to instantiate the base environment.
+        n_fidelities : int
+            The number of possible fidelity indices.
+        """
+        self.env_base = env_base_maker()
         self.env_fidelity = Choice(n_options=n_fidelities)
         self.idx_base_env = 0
         self.idx_fidelity = 1
