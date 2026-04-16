@@ -65,7 +65,7 @@ class MultiFidelityGFlowNetEnvWrapper(SetFix, MultiFidelityGFlowNetEnvWrapperBas
     The wrapper is a SetFix GFlowNet environment whose sub-environments are the
     base environment and a Choice environment to model the discrete fidelity index.
 
-    Parameters
+    Attributes
     ----------
     env_base : GFlowNetEnv
         An instance of the base environment.
@@ -113,7 +113,7 @@ class MultiFidelityGFlowNetEnvWrapperFidFirst(
     Therefore, the fidelity is sampled first, followed by the actions of the base
     environment.
 
-    Parameters
+    Attributes
     ----------
     env_base : GFlowNetEnv
         An instance of the base environment.
@@ -161,7 +161,7 @@ class MultiFidelityGFlowNetEnvWrapperFidLast(
     Therefore, the actions of the base environment are sampled first, and the fidelity
     is sampled at the end of the trajectory.
 
-    Parameters
+    Attributes
     ----------
     env_base : GFlowNetEnv
         An instance of the base environment.
