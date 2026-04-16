@@ -228,10 +228,10 @@ def test__env_maker_creates_independent_env_base_instances():
     and corrupts all others. env_maker() must therefore construct a fresh env_base on
     every call.
     """
-    env_base = Grid(n_dim=2, length=3)
+    env_base = partial(Grid, n_dim=2, length=3)
 
     env_maker = partial(
-        MultiFidelityGFlowNetEnvWrapper, env_base=env_base, n_fidelities=2
+        MultiFidelityGFlowNetEnvWrapper, env_base_maker=env_base, n_fidelities=2
     )
 
     env1 = env_maker()
