@@ -50,10 +50,10 @@ class DummyAcquisition(Acquisition):
         ValueError
             If predict() does not return required "mean" key.
         """
-        candidate_list = list(candidates)
         if self.surrogate is None:
-            return [0.0 for _ in candidate_list]
+            return [0.0 for _ in candidates]
 
+        candidate_list = list(candidates)
         try:
             pred = self.surrogate.predict(candidate_list)
         except NotImplementedError as e:
