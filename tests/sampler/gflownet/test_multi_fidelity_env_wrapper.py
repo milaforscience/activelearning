@@ -137,7 +137,9 @@ def test__base_envs_initialize_properly(env, request):
 )
 def test__env_wrapper_set_initializes_properly(env_base, n_fidelities, request):
     env_base = request.getfixturevalue(env_base)
-    env = MultiFidelityGFlowNetEnvWrapper(env_base=env_base, n_fidelities=n_fidelities)
+    env = MultiFidelityGFlowNetEnvWrapper(
+        env_base_maker=lambda: env_base, n_fidelities=n_fidelities
+    )
     assert isinstance(env, GFlowNetEnv)
 
 
@@ -163,7 +165,9 @@ def test__get_states_base_and_fidelities_returns_expected(
     env_base, n_fidelities, request
 ):
     env_base = request.getfixturevalue(env_base)
-    env = MultiFidelityGFlowNetEnvWrapper(env_base=env_base, n_fidelities=n_fidelities)
+    env = MultiFidelityGFlowNetEnvWrapper(
+        env_base_maker=lambda: env_base, n_fidelities=n_fidelities
+    )
 
     # Sample a batch of random states
     n_states = 10
@@ -207,7 +211,9 @@ def test__get_states_base_and_fidelities_returns_expected(
 )
 def test__get_state_base_and_fidelity_returns_expected(env_base, n_fidelities, request):
     env_base = request.getfixturevalue(env_base)
-    env = MultiFidelityGFlowNetEnvWrapper(env_base=env_base, n_fidelities=n_fidelities)
+    env = MultiFidelityGFlowNetEnvWrapper(
+        env_base_maker=lambda: env_base, n_fidelities=n_fidelities
+    )
 
     n_states = 10
     for _ in range(n_states):

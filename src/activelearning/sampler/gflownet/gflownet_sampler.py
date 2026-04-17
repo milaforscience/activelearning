@@ -1,9 +1,10 @@
-from functools import partial
-from typing import Any, Iterable, Optional
+"""GFlowNet-based sampler for active learning candidate generation."""
 
+import hydra
 import torch
-from omegaconf import DictConfig
-
+from typing import Any, Iterable, Optional
+from omegaconf import DictConfig, OmegaConf
+from gflownet.utils.common import gflownet_from_config
 from activelearning.sampler.gflownet.logger_wrapper import RuntimeGFlowNetLoggerWrapper
 from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
     MultiFidelityGFlowNetEnvWrapper,
@@ -15,142 +16,110 @@ from activelearning.utils.types import Candidate, Observation
 class GFlowNetSampler(Sampler):
     """Sampler that uses a GFlowNet agent to generate candidates.
 
-    At each active-learning iteration the sampler:
-    1. Wraps the current acquisition function in a GFlowNet proxy.
-    2. Builds a GFlowNet agent from the Hydra configs.
-    3. Trains the agent to sample proportionally to the acquisition reward.
-    4. Draws ``n_samples`` forward trajectories and converts the
-       terminating states to ``Candidate`` objects.
+    On each :meth:`sample` call a fresh agent is built via
+    ``gflownet_from_config``, trained, and used to draw ``n_samples`` forward
+    trajectories.  Device and precision come from the runtime context
+    (:meth:`~activelearning.runtime.ALRuntimeMixin.bind_runtime_context`).
 
     Parameters
     ----------
     n_samples : int
-        Number of candidate samples to generate per ``sample()`` call.
+        Candidates to generate per :meth:`sample` call.
     conf : DictConfig
-        Hydra/OmegaConf config tree with keys ``env``, ``policy``,
-        ``agent``, ``logger``, ``proxy``, and optionally ``state_flow``.
-    device : str
-        Torch device string (e.g. ``"cpu"`` or ``"cuda"``).
-    float_precision : int
-        Floating-point precision (32 or 64).
+        GFlowNet config with keys ``env``, ``policy``, ``gflownet``, ``loss``,
+        ``buffer``, ``evaluator``, ``logger``, ``proxy`` — matching the
+        ``gflownet_from_config`` contract.
     n_fidelities : int
-        Number of fidelities. By default, 1 (single fidelity).
+        Fidelity levels.  When > 1 the env is wrapped with
+        :class:`~activelearning.sampler.gflownet.multi_fidelity_env_wrapper.MultiFidelityGFlowNetEnvWrapper`.
     """
 
     def __init__(
         self,
         n_samples: int,
         conf: DictConfig,
-        device: str,
-        float_precision: int,
         n_fidelities: int = 1,
     ) -> None:
-        import hydra
-
         self.n_samples = n_samples
         self.conf = conf
-        self._gflownet_device = device
-        self._gflownet_float_precision = float_precision
+        self.n_fidelities = n_fidelities
 
-        env_base_maker = hydra.utils.instantiate(
-            self.conf.env,
-            device=self._gflownet_device,
-            float_precision=self._gflownet_float_precision,
-            _partial=True,
-        )
-        self.env_maker = partial(
-            MultiFidelityGFlowNetEnvWrapper,
-            env_base_maker=env_base_maker,
-            n_fidelities=n_fidelities,
-        )
-        env = self.env_maker()
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
-        self.forward_policy = hydra.utils.instantiate(
-            self.conf.policy.forward,
-            env=env,
-            device=self._gflownet_device,
-            float_precision=self._gflownet_float_precision,
-        )
-        self.backward_policy = hydra.utils.instantiate(
-            self.conf.policy.backward,
-            env=env,
-            device=self._gflownet_device,
-            float_precision=self._gflownet_float_precision,
-        )
-        self.state_flow = (
-            hydra.utils.instantiate(
-                self.conf.state_flow,
-                env=env,
-                device=self._gflownet_device,
-                float_precision=self._gflownet_float_precision,
-                base=self.forward_policy,
+    def _device_str(self) -> str:
+        """Return the device as a plain string (e.g. ``'cpu'``)."""
+        return str(self.device)
+
+    def _float_precision(self) -> int:
+        """Return floating-point precision as an integer (32 or 64)."""
+        return 32 if self.dtype == torch.float32 else 64
+
+    def _build_agent(self, acquisition: Any) -> Any:
+        """Build a ``GFlowNetAgent`` ready for training.
+
+        Merges runtime device/precision into conf and calls
+        ``gflownet_from_config``.  For multi-fidelity, builds the env as a
+        factory (``_partial_=True``) so each ``env.copy()`` gets a fresh
+        ``env_base``.  Acquisition and runtime logger are injected
+        post-construction.
+
+        Parameters
+        ----------
+        acquisition : Any
+            Acquisition function used as the reward signal.
+
+        Returns
+        -------
+        agent : GFlowNetAgent
+        """
+
+        device = self._device_str()
+        fp = self._float_precision()
+        conf = OmegaConf.merge(self.conf, {"device": device, "float_precision": fp})
+
+        # When env=None, gflownet_from_config instantiates the env from conf.env
+        # using the device/float_precision already merged into conf above.
+        env = None
+        if self.n_fidelities > 1:
+            env_base_maker = hydra.utils.instantiate(
+                conf.env, device=device, float_precision=fp, _partial_=True
             )
-            if self.conf.state_flow is not None
-            else None
-        )
-
-    def _build_logger(self) -> Any:
-        """Build a GFlowNet-compatible logger for the configured runtime."""
-        import hydra
-
-        if self.logger is None:
-            return hydra.utils.instantiate(
-                self.conf.logger,
-                self.conf,
-                _recursive_=False,
+            env = MultiFidelityGFlowNetEnvWrapper(
+                env_base_maker=env_base_maker, n_fidelities=self.n_fidelities
             )
 
-        logger_conf = self.conf.logger
+        agent = gflownet_from_config(conf, env=env)
+        agent.proxy.set_acquisition(acquisition)
 
-        return RuntimeGFlowNetLoggerWrapper(
-            runtime_logger=self.logger,
-            config=self.conf,
-            logger_conf=logger_conf,
-        )
+        if self.logger is not None:
+            agent.logger = RuntimeGFlowNetLoggerWrapper(
+                runtime_logger=self.logger,
+                config=conf,
+                logger_conf=conf.logger,
+            )
 
-    def _build_agent(self, proxy: Any) -> Any:
-        """Assemble and return a ``GFlowNetAgent`` ready for training."""
-        import hydra
+        return agent
 
-        logger = self._build_logger()
-
-        env = self.env_maker()
-        proxy.setup(env)
-
-        loss = hydra.utils.instantiate(
-            self.conf.agent.loss,
-            forward_policy=self.forward_policy,
-            backward_policy=self.backward_policy,
-            state_flow=self.state_flow,
-            device=self._gflownet_device,
-            float_precision=self._gflownet_float_precision,
-        )
-        buffer = hydra.utils.instantiate(
-            self.conf.agent.buffer,
-            env=env,
-            proxy=proxy,
-            datadir=logger.datadir,
-        )
-        evaluator = hydra.utils.instantiate(self.conf.agent.evaluator)
-
-        return hydra.utils.instantiate(
-            self.conf.agent,
-            env_maker=self.env_maker,
-            proxy=proxy,
-            device=self._gflownet_device,
-            float_precision=self._gflownet_float_precision,
-            loss=loss,
-            buffer=buffer,
-            forward_policy=self.forward_policy,
-            backward_policy=self.backward_policy,
-            state_flow=self.state_flow,
-            logger=logger,
-            evaluator=evaluator,
-            _recursive_=False,
-        )
+    # ------------------------------------------------------------------
+    # State conversion
+    # ------------------------------------------------------------------
 
     def _states_to_candidates(self, states: Any, env: Any) -> list[Candidate]:
-        """Convert GFlowNet terminating states to ``Candidate`` objects."""
+        """Convert GFlowNet terminating states to :class:`~activelearning.utils.types.Candidate` objects.
+
+        Parameters
+        ----------
+        states : tensor or list
+            Terminating states from a trajectory batch.
+        env : GFlowNetEnv
+            Environment used to map states to proxy coordinates.
+
+        Returns
+        -------
+        list[Candidate]
+        """
         if torch.is_tensor(states):
             proxy_coords = env.states2proxy(states)
             coords = proxy_coords.detach().cpu().to(torch.float64)
@@ -166,41 +135,41 @@ class GFlowNetSampler(Sampler):
             return []
         return [Candidate(x=tuple(row.tolist())) for row in coords]
 
+    # ------------------------------------------------------------------
+    # Public interface
+    # ------------------------------------------------------------------
+
     def sample(
         self,
         acquisition: Optional[Any] = None,
         observations: Optional[Iterable[Observation]] = None,
     ) -> list[Candidate]:
-        """Train a GFlowNet and sample candidates proportional to the reward.
+        """Train a GFlowNet and return sampled candidates.
 
         Parameters
         ----------
         acquisition : Optional[Any]
-            Acquisition function used as the GFlowNet reward signal.
+            Acquisition function used as the reward signal. Must not be ``None``.
         observations : Optional[Iterable[Observation]]
-            Current observations (unused; reserved for future warm-starting).
+            Unused; reserved for future warm-starting.
 
         Returns
         -------
-        candidates : list[Candidate]
-            ``n_samples`` candidates with continuous proxy coordinates.
+        list[Candidate]
+            ``n_samples`` candidates in proxy coordinates.
+
+        Raises
+        ------
+        ValueError
+            If ``acquisition`` is ``None``.
         """
         if acquisition is None:
             raise ValueError("GFlowNetSampler requires an acquisition function.")
 
-        import hydra
-
-        proxy = hydra.utils.instantiate(
-            self.conf.proxy,
-            acquisition=acquisition,
-            device=self._gflownet_device,
-            float_precision=self._gflownet_float_precision,
-        )
-        agent = self._build_agent(proxy)
+        agent = self._build_agent(acquisition)
         agent.train()
 
         batch, _ = agent.sample_batch(n_forward=self.n_samples, train=False)
         raw_states = batch.get_terminating_states()
 
-        env = self.env_maker()
-        return self._states_to_candidates(raw_states, env)
+        return self._states_to_candidates(raw_states, agent.env)
