@@ -13,14 +13,15 @@ class AcquisitionProxy(Proxy):
     and the AL acquisition interface (Candidate objects → float values).
 
     States arrive in proxy format (continuous coordinates from
-    ``env.states2proxy()``), are converted to ``Candidate`` objects, evaluated
-    by the acquisition function, and returned as a tensor.
+    ``env.states2proxy()``), are converted to ``Candidate`` objects, scored
+    via :meth:`~activelearning.acquisition.acquisition.Acquisition.score`,
+    and returned as a tensor.
 
     Parameters
     ----------
     acquisition : Any
-        An active learning acquisition function compatible with
-        ``Acquisition.__call__(Sequence[Candidate]) -> Sequence[float]``.
+        An active learning acquisition function implementing
+        :meth:`~activelearning.acquisition.acquisition.Acquisition.score`.
         Set to ``None`` at init; must be set via :meth:`set_acquisition`
         before the proxy is used.
     **kwargs
@@ -72,6 +73,6 @@ class AcquisitionProxy(Proxy):
             states_list = [list(s) for s in states]
 
         candidates = [Candidate(x=tuple(s)) for s in states_list]
-        acq_values = self.acquisition(candidates)
+        acq_values = self.acquisition.score(candidates)
 
         return torch.tensor(acq_values, dtype=self.float, device=self.device)
