@@ -24,6 +24,7 @@ def build_augmented_2d_landscape_figure(
     filled_levels: int = 60,
     line_levels: int = 18,
     colormap: str = "viridis",
+    minima: Sequence[tuple[float, float]] | None = None,
 ) -> Figure:
     """Render a generic 2-D augmented-function landscape with queried candidates.
 
@@ -107,7 +108,19 @@ def build_augmented_2d_landscape_figure(
     axis.set_xlabel(axis_labels[0])
     axis.set_ylabel(axis_labels[1])
     axis.set_title(title)
-    if candidates:
+    if minima:
+        min_xs, min_ys = zip(*minima)
+        axis.scatter(
+            min_xs,
+            min_ys,
+            s=120,
+            color="red",
+            marker="x",
+            linewidths=2.0,
+            zorder=5,
+            label="Minima",
+        )
+    if candidates or minima:
         axis.legend(loc="upper right")
     figure.tight_layout()
     return figure

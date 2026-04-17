@@ -286,18 +286,21 @@ def test_direct_update_full_refits_when_partial_updates_disabled(
 
     surrogate.update([single_fidelity_observations[2]])
 
+    train_X, train_Y = surrogate.get_train_data()
     assert surrogate.model is not initial_model
-    assert surrogate._train_X.shape == (3, 2)
-    assert surrogate._train_Y.shape == (3, 1)
+    assert train_X.shape == (3, 2)
+    assert train_Y.shape == (3, 1)
 
 
-def test_train_data_after_multi_output_fit(multi_output_observations):
+def test_get_train_data_after_multi_output_fit(multi_output_observations):
     """Test that multi-output training tensors retain their output width."""
     surrogate = BoTorchGPSurrogate()
     surrogate.fit(multi_output_observations)
 
-    assert surrogate._train_X.shape == (3, 2)
-    assert surrogate._train_Y.shape == (3, 2)
+    train_X, train_Y = surrogate.get_train_data()
+
+    assert train_X.shape == (3, 2)
+    assert train_Y.shape == (3, 2)
 
 
 def test_multi_output_predict_preserves_nested_output_shape(multi_output_observations):

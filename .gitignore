@@ -243,6 +243,8 @@ instance/
 
 # Sphinx documentation
 docs/_build/
+docs_api/_build/
+docs_api/source/activelearning/
 
 # PyBuilder
 .pybuilder/
@@ -277,7 +279,7 @@ venv.bak/
 # Rope project settings
 .ropeproject
 
-# mkdocs documentation
+# generated documentation site
 /site
 
 # mypy
