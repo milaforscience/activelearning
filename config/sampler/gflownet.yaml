@@ -1,7 +1,0 @@
-
-_target_: activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler
-
-defaults:
-  - conf: gflownet
-
-id: gfn

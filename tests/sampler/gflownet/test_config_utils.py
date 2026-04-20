@@ -90,6 +90,22 @@ def test_compose_gflownet_conf_env_target():
     assert conf.env._target_ == "gflownet.envs.grid.Grid"
 
 
+def test_compose_gflownet_conf_env_has_base_fields():
+    """Env must include fields from env/base.yaml (merged via defaults: [base])."""
+    conf = compose_gflownet_conf()
+    # These fields come from env/base.yaml, not grid.yaml
+    assert hasattr(conf.env, "conditional")
+    assert hasattr(conf.env, "continuous")
+    assert hasattr(conf.env, "skip_mask_check")
+
+
+def test_compose_gflownet_conf_env_cell_min_default():
+    """Default grid must use cell_min=-1 matching the original gflownet repo."""
+    conf = compose_gflownet_conf()
+    assert conf.env.cell_min == -1
+    assert conf.env.cell_max == 1
+
+
 def test_compose_gflownet_conf_proxy_target():
     """Default proxy must be the AL AcquisitionProxy."""
     conf = compose_gflownet_conf()
@@ -104,10 +120,32 @@ def test_compose_gflownet_conf_loss_target():
     assert conf.loss._target_ == "gflownet.losses.trajectorybalance.TrajectoryBalance"
 
 
+def test_compose_gflownet_conf_loss_has_base_fields():
+    """Loss must include fields from loss/base.yaml (merged via defaults: [base])."""
+    conf = compose_gflownet_conf()
+    # These fields come from loss/base.yaml
+    assert hasattr(conf.loss, "early_stopping_th")
+    assert hasattr(conf.loss, "ema_alpha")
+
+
 def test_compose_gflownet_conf_gflownet_target():
     """Default gflownet must be GFlowNetAgent."""
     conf = compose_gflownet_conf()
     assert conf.gflownet._target_ == "gflownet.gflownet.GFlowNetAgent"
+
+
+def test_compose_gflownet_conf_gflownet_has_tb_optimizer_keys():
+    """GFlowNet config must include TrajectoryBalance-specific optimizer keys (lr_z_mult, z_dim)."""
+    conf = compose_gflownet_conf()
+    # These come from gflownet/trajectorybalance.yaml merged over gflownet/gflownet.yaml
+    assert hasattr(conf.gflownet.optimizer, "lr_z_mult")
+    assert hasattr(conf.gflownet.optimizer, "z_dim")
+
+
+def test_compose_gflownet_conf_policy_n_hid_default():
+    """Default policy n_hid must be 128, matching the original gflownet repo mlp.yaml."""
+    conf = compose_gflownet_conf()
+    assert conf.policy.forward.n_hid == 128
 
 
 def test_compose_gflownet_conf_no_device_or_float_precision():
@@ -184,9 +222,9 @@ def test_compose_gflownet_conf_no_log_dir_creates_tempdir():
 
 
 def test_compose_gflownet_conf_log_dir_overrides_yaml_default(tmp_path):
-    """log_dir must override whatever logdir.root is specified in logger/default.yaml."""
+    """log_dir must override whatever logdir.root is specified in logger/base.yaml."""
     conf = compose_gflownet_conf(log_dir=str(tmp_path))
-    # Should not be the YAML default ("logs/gflownet" or similar)
+    # Should not be the YAML default ("./logs" or similar)
     assert conf.logger.logdir.root == str(tmp_path)
 
 

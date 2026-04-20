@@ -272,6 +272,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# The GFlowNet environment configs should be tracked
+!config/gflownet/env/
+
 # Spyder project settings
 .spyderproject
 .spyproject

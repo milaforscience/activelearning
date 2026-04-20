@@ -1,0 +1,77 @@
+# GFlowNet-based experiment: Branin 2D grid search, three fidelity levels.
+#
+# Run with:
+#   uv run activelearning config/branin/gflownet_multi_fidelity.yaml
+#
+# GFlowNet component defaults (env, policy, gflownet, loss, buffer, evaluator,
+# logger, proxy) are loaded from config/gflownet/ by compose_gflownet_conf.
+# The `sampler.conf` block below shows only the overrides relative to those
+# defaults, following the active-learning conventions from
+# https://github.com/nikita-0209/mf-al-gfn.
+
+runtime:
+  device: cpu
+  precision: 32
+  seed: 42
+
+dataset:
+  type: ListDataset
+
+surrogate:
+  type: BoTorchGPSurrogate
+
+acquisition:
+  type: QMultiFidelityLowerBoundMaxValueEntropy
+  candidate_set_spec:
+    type: HypercubeCandidateSetSpec
+    bounds:
+      - [-5.0, 10.0]
+      - [0.0, 15.0]
+    n_points: 1000
+    strategy: lhs
+
+sampler:
+  type: GFlowNetGridSampler
+  n_samples: 100
+  n_fidelities: 3
+  # Rescale grid coordinates (cell_min=-1, cell_max=1) to the Branin domain.
+  output_bounds:
+    - [-5.0, 10.0]
+    - [0.0, 15.0]
+  conf:
+    env:
+      n_dim: 2
+      length: 100  # 100 cells per dimension → 0.01 resolution
+    gflownet:
+      # Active-learning optimizer settings (from mf-al-gfn).
+      optimizer:
+        lr: 5.0e-4       # default: 1e-4
+        lr_z_mult: 20    # default: 10
+        n_train_steps: 10  # reduced per round for multi-fidelity cost control
+        batch_size:
+          forward: 16    # default: 10
+    policy:
+      forward:
+        n_hid: 2048      # default: 128
+
+selector:
+  type: CostAwareSelector
+
+oracle:
+  type: BraninOracle
+  fidelity_costs:
+    1: 0.01
+    2: 0.1
+    3: 1.0
+  log_landscape: true
+
+budget:
+  available_budget: 300.0
+  schedule:
+    type: constant
+    value: 30.0
+
+logger:
+  type: ConsoleLogger
+  project_name: activelearning_tutorials
+  run_name: branin-gflownet-multi-fidelity

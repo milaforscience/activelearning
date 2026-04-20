@@ -38,7 +38,7 @@ class GFlowNetSamplerConfig(BaseModel):
     n_samples : int
         Number of candidates to generate per :meth:`~activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler.sample` call.
     n_fidelities : int
-        Number of fidelity levels.  ``1`` means single-fidelity.
+        Number of fidelity levels. ``1`` means single-fidelity.
     log_dir : str or None
         Root directory for GFlowNet logs.  A temporary directory is created
         automatically when ``None``.
