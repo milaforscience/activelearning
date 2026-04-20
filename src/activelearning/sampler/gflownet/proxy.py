@@ -1,9 +1,9 @@
 import torch
 import numpy.typing as npt
-from typing import Any, List, Union
+from typing import Any, List, Optional, Union
 from torchtyping import TensorType
 from gflownet.proxy.base import Proxy
-from activelearning.utils.types import Candidate
+from activelearning.sampler.gflownet.utils import proxy_states_to_candidates
 
 
 class AcquisitionProxy(Proxy):
@@ -16,6 +16,11 @@ class AcquisitionProxy(Proxy):
     ``env.states2proxy()``), are converted to ``Candidate`` objects, scored
     via :meth:`~activelearning.acquisition.acquisition.Acquisition.score`,
     and returned as a tensor.
+
+    For multi-fidelity environments, sub-environment indices are read from the
+    env stored by :meth:`setup`, so the correct ``idx_base_env`` and
+    ``idx_fidelity`` are used regardless of wrapper variant (SetFix, FidFirst,
+    FidLast).
 
     Parameters
     ----------
@@ -32,19 +37,22 @@ class AcquisitionProxy(Proxy):
     def __init__(self, acquisition: Any = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self.acquisition = acquisition
+        self._env: Optional[Any] = None
+
+    def setup(self, env: Any = None) -> None:
+        """Store the environment for multi-fidelity index resolution."""
+        self._env = env
 
     def set_acquisition(self, acquisition: Any) -> None:
-        """Replace the wrapped acquisition function.
-
-        Parameters
-        ----------
-        acquisition : Any
-            The new acquisition callable.
-        """
+        """Replace the wrapped acquisition function."""
         self.acquisition = acquisition
 
     def __call__(self, states: Union[TensorType, List, npt.NDArray]) -> TensorType:
         """Evaluate proxy values for a batch of states in proxy format.
+
+        Handles both single-fidelity (tensor/list of coord vectors) and
+        multi-fidelity (list of dicts produced by a composite env's
+        ``states2proxy``).
 
         Parameters
         ----------
@@ -67,12 +75,6 @@ class AcquisitionProxy(Proxy):
                 "Call set_acquisition() before use."
             )
 
-        if torch.is_tensor(states):
-            states_list = states.detach().cpu().tolist()
-        else:
-            states_list = [list(s) for s in states]
-
-        candidates = [Candidate(x=tuple(s)) for s in states_list]
+        candidates = proxy_states_to_candidates(states, self._env)
         acq_values = self.acquisition.score(candidates)
-
         return torch.tensor(acq_values, dtype=self.float, device=self.device)

@@ -9,28 +9,27 @@ from activelearning.sampler.gflownet.logger_wrapper import RuntimeGFlowNetLogger
 from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
     MultiFidelityGFlowNetEnvWrapper,
 )
+from activelearning.sampler.gflownet.utils import proxy_states_to_candidates
 from activelearning.sampler.sampler import Sampler
 from activelearning.utils.types import Candidate, Observation
 
 
 class GFlowNetSampler(Sampler):
-    """Sampler that uses a GFlowNet agent to generate candidates.
+    """Sampler that trains a GFlowNet agent and returns sampled candidates.
 
-    On each :meth:`sample` call a fresh agent is built via
-    ``gflownet_from_config``, trained, and used to draw ``n_samples`` forward
-    trajectories.  Device and precision come from the runtime context
-    (:meth:`~activelearning.runtime.ALRuntimeMixin.bind_runtime_context`).
+    Each :meth:`sample` call builds a fresh agent via ``gflownet_from_config``,
+    trains it, and draws ``n_samples`` forward trajectories. Device and
+    precision are taken from the runtime context.
 
     Parameters
     ----------
     n_samples : int
-        Candidates to generate per :meth:`sample` call.
+        Number of candidates to generate per :meth:`sample` call.
     conf : DictConfig
-        GFlowNet config with keys ``env``, ``policy``, ``gflownet``, ``loss``,
-        ``buffer``, ``evaluator``, ``logger``, ``proxy`` — matching the
-        ``gflownet_from_config`` contract.
+        GFlowNet config (``env``, ``policy``, ``gflownet``, ``loss``,
+        ``buffer``, ``evaluator``, ``logger``, ``proxy``).
     n_fidelities : int
-        Fidelity levels.  When > 1 the env is wrapped with
+        Number of fidelity levels. When > 1 the env is wrapped with
         :class:`~activelearning.sampler.gflownet.multi_fidelity_env_wrapper.MultiFidelityGFlowNetEnvWrapper`.
     """
 
@@ -57,22 +56,17 @@ class GFlowNetSampler(Sampler):
         return 32 if self.dtype == torch.float32 else 64
 
     def _build_agent(self, acquisition: Any) -> Any:
-        """Build a ``GFlowNetAgent`` ready for training.
+        """Build and return a ``GFlowNetAgent`` ready for training.
 
-        Merges runtime device/precision into conf and calls
-        ``gflownet_from_config``.  For multi-fidelity, builds the env as a
-        factory (``_partial_=True``) so each ``env.copy()`` gets a fresh
-        ``env_base``.  Acquisition and runtime logger are injected
-        post-construction.
+        Merges runtime device/precision into the config, then calls
+        ``gflownet_from_config``. For multi-fidelity, the env is built as a
+        factory so each copy gets a fresh base env. The acquisition function
+        and runtime logger are injected after construction.
 
         Parameters
         ----------
         acquisition : Any
-            Acquisition function used as the reward signal.
-
-        Returns
-        -------
-        agent : GFlowNetAgent
+            Acquisition function used as the GFlowNet reward proxy.
         """
 
         device = self._device_str()
@@ -109,31 +103,20 @@ class GFlowNetSampler(Sampler):
     def _states_to_candidates(self, states: Any, env: Any) -> list[Candidate]:
         """Convert GFlowNet terminating states to :class:`~activelearning.utils.types.Candidate` objects.
 
+        Guards against empty or invalid ``states`` before calling
+        ``env.states2proxy``; delegates the actual conversion to
+        :func:`~activelearning.sampler.gflownet.utils.proxy_states_to_candidates`.
+
         Parameters
         ----------
         states : tensor or list
             Terminating states from a trajectory batch.
         env : GFlowNetEnv
-            Environment used to map states to proxy coordinates.
-
-        Returns
-        -------
-        list[Candidate]
+            The environment used to map states to proxy coordinates.
         """
-        if torch.is_tensor(states):
-            proxy_coords = env.states2proxy(states)
-            coords = proxy_coords.detach().cpu().to(torch.float64)
-        elif isinstance(states, list) and len(states) > 0:
-            proxy_coords = env.states2proxy(states)
-            if torch.is_tensor(proxy_coords):
-                coords = proxy_coords.detach().cpu().to(torch.float64)
-            else:
-                coords = torch.tensor(
-                    [list(s) for s in proxy_coords], dtype=torch.float64
-                )
-        else:
+        if not isinstance(states, (list, torch.Tensor)) or len(states) == 0:
             return []
-        return [Candidate(x=tuple(row.tolist())) for row in coords]
+        return proxy_states_to_candidates(env.states2proxy(states), env)
 
     # ------------------------------------------------------------------
     # Public interface
@@ -144,12 +127,12 @@ class GFlowNetSampler(Sampler):
         acquisition: Optional[Any] = None,
         observations: Optional[Iterable[Observation]] = None,
     ) -> list[Candidate]:
-        """Train a GFlowNet and return sampled candidates.
+        """Train a GFlowNet agent and return sampled candidates.
 
         Parameters
         ----------
         acquisition : Optional[Any]
-            Acquisition function used as the reward signal. Must not be ``None``.
+            Acquisition function used as the GFlowNet reward proxy. Required.
         observations : Optional[Iterable[Observation]]
             Unused; reserved for future warm-starting.
 

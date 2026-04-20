@@ -57,9 +57,15 @@ class RuntimeGFlowNetLoggerWrapper(GFlowNetLogger):
         return key
 
     def _flush_runtime_logger(self, step: int) -> None:
-        """Flush mirrored runtime logs for a specific GFlowNet step."""
+        """Track the most recent GFlowNet step without advancing the AL round counter.
+
+        The runtime logger's step is owned by the outer active-learning loop
+        (via ``logger.log_step(num_rounds)``). Calling ``log_step`` here would
+        set the step counter to a GFlowNet training step number (0-N) and corrupt
+        the round numbering. We only track the step locally so ``log_summary``
+        can reference it later.
+        """
         self._last_step = step
-        self._runtime_logger.log_step(step)
 
     @staticmethod
     def _coerce_log_value(value: Any) -> Any:
