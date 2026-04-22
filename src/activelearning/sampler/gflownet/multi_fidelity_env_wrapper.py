@@ -98,7 +98,11 @@ class MultiFidelityGFlowNetEnvWrapper(SetFix, MultiFidelityGFlowNetEnvWrapperBas
             The number of possible fidelity indices.
         """
         self.env_base = env_base_maker()
-        self.env_fidelity = Choice(n_options=n_fidelities)
+        self.env_fidelity = Choice(
+            n_options=n_fidelities,
+            float_precision=kwargs.get("float_precision", 32),
+            device=kwargs.get("device", "cpu"),
+        )
         self.idx_base_env = 0
         self.idx_fidelity = 1
         super().__init__(subenvs=tuple([self.env_base, self.env_fidelity]), **kwargs)
@@ -146,7 +150,11 @@ class MultiFidelityGFlowNetEnvWrapperFidFirst(
             The number of possible fidelity indices.
         """
         self.env_base = env_base_maker()
-        self.env_fidelity = Choice(n_options=n_fidelities)
+        self.env_fidelity = Choice(
+            n_options=n_fidelities,
+            float_precision=kwargs.get("float_precision", 32),
+            device=kwargs.get("device", "cpu"),
+        )
         self.idx_fidelity = 0
         self.idx_base_env = 1
         super().__init__(subenvs=tuple([self.env_fidelity, self.env_base]), **kwargs)
@@ -194,7 +202,11 @@ class MultiFidelityGFlowNetEnvWrapperFidLast(
             The number of possible fidelity indices.
         """
         self.env_base = env_base_maker()
-        self.env_fidelity = Choice(n_options=n_fidelities)
+        self.env_fidelity = Choice(
+            n_options=n_fidelities,
+            float_precision=kwargs.get("float_precision", 32),
+            device=kwargs.get("device", "cpu"),
+        )
         self.idx_base_env = 0
         self.idx_fidelity = 1
         super().__init__(subenvs=tuple([self.env_base, self.env_fidelity]), **kwargs)

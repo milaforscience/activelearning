@@ -160,4 +160,5 @@ This tutorial covers running and monitoring experiments from the checked-in conf
 
 - computing derived metrics on logged results (e.g. mean top-10 score, simple regret, inference regret),
 - adapting the configs to your own oracle — see the [Extension Guide](../extension-guide/overview.md),
-- or reading [Multi-Fidelity Setting](../concepts/multi_fidelity.md) for a deeper treatment of how fidelity costs and confidences propagate through the loop.
+- reading [Multi-Fidelity Setting](../concepts/multi_fidelity.md) for a deeper treatment of how fidelity costs and confidences propagate through the loop,
+- or replacing the random sampler with a generative model — see the [GFlowNet Sampler](gflownet_sampler.md) tutorial to learn how to configure and evaluate a GFlowNet that learns to sample proportionally to the reward.

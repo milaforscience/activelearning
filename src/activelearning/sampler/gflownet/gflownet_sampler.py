@@ -101,6 +101,8 @@ class GFlowNetSampler(Sampler):
                 fidelity_action=self.fidelity_action,
                 env_base_maker=env_base_maker,
                 n_fidelities=self.n_fidelities,
+                float_precision=fp,
+                device=device,
             )
 
         agent = gflownet_from_config(conf, env=env)

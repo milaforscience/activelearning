@@ -34,7 +34,7 @@ sampler:
   type: GFlowNetGridSampler
   n_samples: 100
   n_fidelities: 3
-  fidelity_action: any  # "any" (SetFix), "first" (Stack fid-first), "last" (Stack fid-last)
+  fidelity_action: first  # "any" (SetFix), "first" (Stack fid-first), "last" (Stack fid-last)
   # Rescale grid coordinates (cell_min=-1, cell_max=1) to the Branin domain.
   output_bounds:
     - [-5.0, 10.0]
@@ -48,7 +48,7 @@ sampler:
       optimizer:
         lr: 5.0e-4       # default: 1e-4
         lr_z_mult: 20    # default: 10
-        n_train_steps: 10  # reduced per round for multi-fidelity cost control
+        n_train_steps: 1000  # reduced per round for multi-fidelity cost control
         batch_size:
           forward: 16    # default: 10
     policy:
