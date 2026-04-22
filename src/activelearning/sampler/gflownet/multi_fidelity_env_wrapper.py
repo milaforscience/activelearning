@@ -1,10 +1,13 @@
-from typing import Any, List, Sequence, Tuple, Type
+from typing import Any, List, Literal, Sequence, Tuple, Type
 
 from gflownet.envs.base import GFlowNetEnv
 from gflownet.envs.choice import Choice
 from gflownet.envs.composite.base import CompositeBase
 from gflownet.envs.composite.setfix import SetFix
 from gflownet.envs.composite.stack import Stack
+
+#: Mapping from ``fidelity_action`` string to the corresponding wrapper class.
+#: Populated at the bottom of this module after all classes are defined.
 
 
 class MultiFidelityGFlowNetEnvWrapperBase(CompositeBase):
@@ -195,3 +198,60 @@ class MultiFidelityGFlowNetEnvWrapperFidLast(
         self.idx_base_env = 0
         self.idx_fidelity = 1
         super().__init__(subenvs=tuple([self.env_base, self.env_fidelity]), **kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Populate the action → class mapping
+# ---------------------------------------------------------------------------
+
+_FIDELITY_ACTION_TO_WRAPPER: dict[str, type] = {
+    "any": MultiFidelityGFlowNetEnvWrapper,
+    "first": MultiFidelityGFlowNetEnvWrapperFidFirst,
+    "last": MultiFidelityGFlowNetEnvWrapperFidLast,
+}
+
+
+def build_multi_fidelity_env_wrapper(
+    fidelity_action: Literal["any", "first", "last"],
+    env_base_maker: Type[GFlowNetEnv],
+    n_fidelities: int,
+    **kwargs: Any,
+) -> MultiFidelityGFlowNetEnvWrapperBase:
+    """Instantiate the appropriate multi-fidelity wrapper for *fidelity_action*.
+
+    Parameters
+    ----------
+    fidelity_action : {"any", "first", "last"}
+        Controls *when* the fidelity choice is made during a trajectory:
+        - ``"any"`` — :class:`MultiFidelityGFlowNetEnvWrapper` (SetFix): fidelity
+          may be chosen at any point interleaved with base-env actions.
+        - ``"first"`` — :class:`MultiFidelityGFlowNetEnvWrapperFidFirst` (Stack):
+          fidelity is chosen before any base-env action.
+        - ``"last"`` — :class:`MultiFidelityGFlowNetEnvWrapperFidLast` (Stack):
+          fidelity is chosen after all base-env actions are complete.
+    env_base_maker : Type[GFlowNetEnv]
+        Callable (partial) that constructs a fresh base environment instance.
+    n_fidelities : int
+        Number of possible fidelity choices.
+    **kwargs
+        Forwarded to the wrapper's ``__init__``.
+
+    Returns
+    -------
+    MultiFidelityGFlowNetEnvWrapperBase
+        A freshly constructed wrapper of the appropriate type.
+
+    Raises
+    ------
+    ValueError
+        If *fidelity_action* is not one of ``"any"``, ``"first"``, ``"last"``.
+    """
+    if fidelity_action not in _FIDELITY_ACTION_TO_WRAPPER:
+        raise ValueError(
+            f"Unknown fidelity_action {fidelity_action!r}. "
+            f"Expected one of {sorted(_FIDELITY_ACTION_TO_WRAPPER)}."
+        )
+    wrapper_cls = _FIDELITY_ACTION_TO_WRAPPER[fidelity_action]
+    return wrapper_cls(
+        env_base_maker=env_base_maker, n_fidelities=n_fidelities, **kwargs
+    )

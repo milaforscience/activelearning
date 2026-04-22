@@ -1,6 +1,6 @@
 """GFlowNet sampler for continuous bounded grid domains."""
 
-from typing import Any, Optional, Sequence
+from typing import Any, Literal, Optional, Sequence
 
 import torch
 from hydra.utils import get_class
@@ -40,6 +40,11 @@ class GFlowNetGridSampler(GFlowNetSampler):
         the native ``[cell_min, cell_max]`` coordinates are returned as-is.
     n_fidelities : int
         Number of fidelity levels. ``1`` means single-fidelity.
+    fidelity_action : {"any", "first", "last"}
+        Controls when fidelity is chosen during a trajectory. Only used when
+        ``n_fidelities > 1``. See
+        :class:`~activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler`
+        for full semantics.
 
     Raises
     ------
@@ -54,8 +59,14 @@ class GFlowNetGridSampler(GFlowNetSampler):
         conf: DictConfig,
         output_bounds: Optional[Sequence[tuple[float, float]]] = None,
         n_fidelities: int = 1,
+        fidelity_action: Literal["any", "first", "last"] = "any",
     ) -> None:
-        super().__init__(n_samples=n_samples, conf=conf, n_fidelities=n_fidelities)
+        super().__init__(
+            n_samples=n_samples,
+            conf=conf,
+            n_fidelities=n_fidelities,
+            fidelity_action=fidelity_action,
+        )
         self._validate_grid_env(conf)
         if output_bounds is not None:
             self._out_lb = torch.tensor(

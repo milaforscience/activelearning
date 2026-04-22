@@ -10,7 +10,15 @@ from gflownet.envs.grid import Grid
 
 from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
     MultiFidelityGFlowNetEnvWrapper,
+    MultiFidelityGFlowNetEnvWrapperFidFirst,
+    MultiFidelityGFlowNetEnvWrapperFidLast,
 )
+
+ALL_WRAPPER_CLASSES = [
+    MultiFidelityGFlowNetEnvWrapper,
+    MultiFidelityGFlowNetEnvWrapperFidFirst,
+    MultiFidelityGFlowNetEnvWrapperFidLast,
+]
 
 
 @pytest.fixture
@@ -115,6 +123,11 @@ def test__base_envs_initialize_properly(env, request):
 
 
 @pytest.mark.parametrize(
+    "wrapper_class",
+    ALL_WRAPPER_CLASSES,
+    ids=lambda c: c.__name__,
+)
+@pytest.mark.parametrize(
     "env_base",
     [
         "env_grid2d",
@@ -135,14 +148,19 @@ def test__base_envs_initialize_properly(env, request):
         10,
     ],
 )
-def test__env_wrapper_set_initializes_properly(env_base, n_fidelities, request):
+def test__env_wrapper_set_initializes_properly(
+    env_base, n_fidelities, wrapper_class, request
+):
     env_base = request.getfixturevalue(env_base)
-    env = MultiFidelityGFlowNetEnvWrapper(
-        env_base_maker=lambda: env_base, n_fidelities=n_fidelities
-    )
+    env = wrapper_class(env_base_maker=lambda: env_base, n_fidelities=n_fidelities)
     assert isinstance(env, GFlowNetEnv)
 
 
+@pytest.mark.parametrize(
+    "wrapper_class",
+    ALL_WRAPPER_CLASSES,
+    ids=lambda c: c.__name__,
+)
 @pytest.mark.parametrize(
     "env_base",
     [
@@ -162,12 +180,10 @@ def test__env_wrapper_set_initializes_properly(env_base, n_fidelities, request):
     ],
 )
 def test__get_states_base_and_fidelities_returns_expected(
-    env_base, n_fidelities, request
+    env_base, n_fidelities, wrapper_class, request
 ):
     env_base = request.getfixturevalue(env_base)
-    env = MultiFidelityGFlowNetEnvWrapper(
-        env_base_maker=lambda: env_base, n_fidelities=n_fidelities
-    )
+    env = wrapper_class(env_base_maker=lambda: env_base, n_fidelities=n_fidelities)
 
     # Sample a batch of random states
     n_states = 10
@@ -192,6 +208,11 @@ def test__get_states_base_and_fidelities_returns_expected(
 
 
 @pytest.mark.parametrize(
+    "wrapper_class",
+    ALL_WRAPPER_CLASSES,
+    ids=lambda c: c.__name__,
+)
+@pytest.mark.parametrize(
     "env_base",
     [
         "env_grid2d",
@@ -209,11 +230,11 @@ def test__get_states_base_and_fidelities_returns_expected(
         3,
     ],
 )
-def test__get_state_base_and_fidelity_returns_expected(env_base, n_fidelities, request):
+def test__get_state_base_and_fidelity_returns_expected(
+    env_base, n_fidelities, wrapper_class, request
+):
     env_base = request.getfixturevalue(env_base)
-    env = MultiFidelityGFlowNetEnvWrapper(
-        env_base_maker=lambda: env_base, n_fidelities=n_fidelities
-    )
+    env = wrapper_class(env_base_maker=lambda: env_base, n_fidelities=n_fidelities)
 
     n_states = 10
     for _ in range(n_states):
@@ -247,6 +268,28 @@ def test__env_maker_creates_independent_env_base_instances():
     assert env1.env_base is not env2.env_base
 
     # Advancing env1 must leave env2's base state untouched.
+    initial_state = list(env2.env_base.state)
+    env1.get_random_states(n_states=1)
+    assert env2.env_base.equal(env2.env_base.state, initial_state)
+
+
+@pytest.mark.parametrize(
+    "wrapper_class",
+    [MultiFidelityGFlowNetEnvWrapperFidFirst, MultiFidelityGFlowNetEnvWrapperFidLast],
+    ids=lambda c: c.__name__,
+)
+def test__env_maker_creates_independent_env_base_instances_stack_variants(
+    wrapper_class,
+):
+    """Same independence guarantee for the two Stack-based variants."""
+    env_base = partial(Grid, n_dim=2, length=3)
+    env_maker = partial(wrapper_class, env_base_maker=env_base, n_fidelities=2)
+
+    env1 = env_maker()
+    env2 = env_maker()
+
+    assert env1.env_base is not env2.env_base
+
     initial_state = list(env2.env_base.state)
     env1.get_random_states(n_states=1)
     assert env2.env_base.equal(env2.env_base.state, initial_state)

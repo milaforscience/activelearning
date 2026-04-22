@@ -1,17 +1,20 @@
 """GFlowNet-based sampler for active learning candidate generation."""
 
+import logging
 import hydra
 import torch
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Literal, Optional
 from omegaconf import DictConfig, OmegaConf
 from gflownet.utils.common import gflownet_from_config
 from activelearning.sampler.gflownet.logger_wrapper import RuntimeGFlowNetLoggerWrapper
 from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
-    MultiFidelityGFlowNetEnvWrapper,
+    build_multi_fidelity_env_wrapper,
 )
 from activelearning.sampler.gflownet.utils import proxy_states_to_candidates
 from activelearning.sampler.sampler import Sampler
 from activelearning.utils.types import Candidate, Observation
+
+logger = logging.getLogger(__name__)
 
 
 class GFlowNetSampler(Sampler):
@@ -29,8 +32,15 @@ class GFlowNetSampler(Sampler):
         GFlowNet config (``env``, ``policy``, ``gflownet``, ``loss``,
         ``buffer``, ``evaluator``, ``logger``, ``proxy``).
     n_fidelities : int
-        Number of fidelity levels. When > 1 the env is wrapped with
-        :class:`~activelearning.sampler.gflownet.multi_fidelity_env_wrapper.MultiFidelityGFlowNetEnvWrapper`.
+        Number of fidelity levels. When > 1 the env is wrapped with a
+        multi-fidelity wrapper chosen by *fidelity_action*.
+    fidelity_action : {"any", "first", "last"}
+        Controls when fidelity is chosen during a trajectory. Only used when
+        ``n_fidelities > 1``.
+        - ``"any"`` *(default)* — fidelity may be chosen at any point,
+          interleaved with base-env actions (SetFix wrapper).
+        - ``"first"`` — fidelity is chosen before any base-env action (Stack).
+        - ``"last"`` — fidelity is chosen after all base-env actions (Stack).
     """
 
     def __init__(
@@ -38,10 +48,17 @@ class GFlowNetSampler(Sampler):
         n_samples: int,
         conf: DictConfig,
         n_fidelities: int = 1,
+        fidelity_action: Literal["any", "first", "last"] = "any",
     ) -> None:
         self.n_samples = n_samples
         self.conf = conf
         self.n_fidelities = n_fidelities
+        self.fidelity_action = fidelity_action
+        if n_fidelities == 1 and fidelity_action != "any":
+            logger.warning(
+                "fidelity_action=%r has no effect when n_fidelities=1.",
+                fidelity_action,
+            )
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -80,8 +97,10 @@ class GFlowNetSampler(Sampler):
             env_base_maker = hydra.utils.instantiate(
                 conf.env, device=device, float_precision=fp, _partial_=True
             )
-            env = MultiFidelityGFlowNetEnvWrapper(
-                env_base_maker=env_base_maker, n_fidelities=self.n_fidelities
+            env = build_multi_fidelity_env_wrapper(
+                fidelity_action=self.fidelity_action,
+                env_base_maker=env_base_maker,
+                n_fidelities=self.n_fidelities,
             )
 
         agent = gflownet_from_config(conf, env=env)

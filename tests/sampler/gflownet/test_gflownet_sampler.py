@@ -1,12 +1,17 @@
 """Tests for GFlowNetSampler."""
 
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 import pytest
 import torch
 
 from activelearning.runtime import RuntimeContext
 from activelearning.sampler.gflownet.gflownet_sampler import GFlowNetSampler
+from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
+    MultiFidelityGFlowNetEnvWrapper,
+    MultiFidelityGFlowNetEnvWrapperFidFirst,
+    MultiFidelityGFlowNetEnvWrapperFidLast,
+)
 from activelearning.utils.types import Candidate
 
 
@@ -53,6 +58,132 @@ class TestGFlowNetSamplerInstantiation:
         conf, _ = gflownet_conf_2d
         sampler = GFlowNetSampler(n_samples=3, conf=conf)
         assert sampler.n_fidelities == 1
+
+    def test_default_fidelity_action_is_any(self, gflownet_conf_2d):
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=3, conf=conf)
+        assert sampler.fidelity_action == "any"
+
+    @pytest.mark.parametrize("action", ["any", "first", "last"])
+    def test_fidelity_action_is_stored(self, gflownet_conf_2d, action):
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=3, conf=conf, fidelity_action=action)
+        assert sampler.fidelity_action == action
+
+    @pytest.mark.parametrize("action", ["first", "last"])
+    def test_warns_when_fidelity_action_set_with_single_fidelity(
+        self, gflownet_conf_2d, action, caplog
+    ):
+        import logging
+
+        conf, _ = gflownet_conf_2d
+        with caplog.at_level(
+            logging.WARNING,
+            logger="activelearning.sampler.gflownet.gflownet_sampler",
+        ):
+            GFlowNetSampler(
+                n_samples=3, conf=conf, n_fidelities=1, fidelity_action=action
+            )
+        assert any("fidelity_action" in r.message for r in caplog.records)
+
+    def test_no_warning_when_fidelity_action_any_with_single_fidelity(
+        self, gflownet_conf_2d, caplog
+    ):
+        import logging
+
+        conf, _ = gflownet_conf_2d
+        with caplog.at_level(
+            logging.WARNING,
+            logger="activelearning.sampler.gflownet.gflownet_sampler",
+        ):
+            GFlowNetSampler(
+                n_samples=3, conf=conf, n_fidelities=1, fidelity_action="any"
+            )
+        assert not caplog.records
+
+    def test_no_warning_when_fidelity_action_set_with_multi_fidelity(
+        self, gflownet_conf_2d, caplog
+    ):
+        import logging
+
+        conf, _ = gflownet_conf_2d
+        with caplog.at_level(
+            logging.WARNING,
+            logger="activelearning.sampler.gflownet.gflownet_sampler",
+        ):
+            GFlowNetSampler(
+                n_samples=3, conf=conf, n_fidelities=2, fidelity_action="first"
+            )
+        assert not caplog.records
+
+
+# ---------------------------------------------------------------------------
+# fidelity_action → wrapper class selection
+# ---------------------------------------------------------------------------
+
+
+class TestGFlowNetSamplerFidelityActionWrapperSelection:
+    """Verify that _build_agent selects the right wrapper class for each action.
+
+    These tests patch ``build_multi_fidelity_env_wrapper`` and
+    ``gflownet_from_config`` so no actual GFlowNet training occurs.
+    """
+
+    _EXPECTED_WRAPPER = {
+        "any": MultiFidelityGFlowNetEnvWrapper,
+        "first": MultiFidelityGFlowNetEnvWrapperFidFirst,
+        "last": MultiFidelityGFlowNetEnvWrapperFidLast,
+    }
+
+    @pytest.mark.parametrize("action", ["any", "first", "last"])
+    def test_correct_wrapper_class_is_instantiated(self, gflownet_conf_2d, action):
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(
+            n_samples=2, conf=conf, n_fidelities=2, fidelity_action=action
+        )
+        sampler.bind_runtime_context(RuntimeContext())
+
+        wrapper_target = self._EXPECTED_WRAPPER[action]
+        captured: list = []
+
+        def _fake_build(fidelity_action, env_base_maker, n_fidelities, **kwargs):
+            instance = wrapper_target(
+                env_base_maker=env_base_maker, n_fidelities=n_fidelities
+            )
+            captured.append(instance)
+            return instance
+
+        mock_agent = Mock()
+        mock_agent.proxy = Mock()
+        mock_agent.env = Mock()
+        mock_agent.logger = Mock()
+
+        with (
+            patch(
+                "activelearning.sampler.gflownet.gflownet_sampler.build_multi_fidelity_env_wrapper",
+                side_effect=_fake_build,
+            ),
+            patch(
+                "activelearning.sampler.gflownet.gflownet_sampler.gflownet_from_config",
+                return_value=mock_agent,
+            ),
+        ):
+            sampler._build_agent(acquisition=Mock())
+
+        assert len(captured) == 1
+        assert isinstance(captured[0], wrapper_target)
+
+    def test_invalid_fidelity_action_raises(self, gflownet_conf_2d):
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(
+            n_samples=2,
+            conf=conf,
+            n_fidelities=2,
+            fidelity_action="bad",  # type: ignore[arg-type]
+        )
+        sampler.bind_runtime_context(RuntimeContext())
+        with pytest.raises(ValueError, match="fidelity_action"):
+            sampler._build_agent(acquisition=Mock())
 
 
 # ---------------------------------------------------------------------------
@@ -158,3 +289,40 @@ class TestGFlowNetSamplerRuntimeLogger:
         sampler.sample(acquisition=_ConstantAcquisition())
 
         runtime_logger.end.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Config round-trip
+# ---------------------------------------------------------------------------
+
+
+class TestGFlowNetSamplerConfigRoundTrip:
+    """Verify that GFlowNetSamplerConfig correctly passes fidelity_action to the sampler."""
+
+    def test_default_fidelity_action_in_config_is_any(self):
+        from activelearning.sampler.config import GFlowNetSamplerConfig
+
+        cfg = GFlowNetSamplerConfig(n_samples=3)
+        assert cfg.fidelity_action == "any"
+
+    @pytest.mark.parametrize("action", ["any", "first", "last"])
+    def test_config_stores_fidelity_action(self, action):
+        from activelearning.sampler.config import GFlowNetSamplerConfig
+
+        cfg = GFlowNetSamplerConfig(n_samples=3, fidelity_action=action)
+        assert cfg.fidelity_action == action
+
+    @pytest.mark.parametrize("action", ["any", "first", "last"])
+    def test_config_build_passes_fidelity_action_to_sampler(
+        self, gflownet_conf_2d, action
+    ):
+        from activelearning.sampler.config import GFlowNetSamplerConfig
+
+        conf_dict, _ = gflownet_conf_2d
+        # Convert the OmegaConf DictConfig to a plain dict for the `conf` field.
+        from omegaconf import OmegaConf
+
+        conf_raw = OmegaConf.to_container(conf_dict, resolve=True)
+        cfg = GFlowNetSamplerConfig(n_samples=3, fidelity_action=action, conf=conf_raw)
+        sampler = cfg.build()
+        assert sampler.fidelity_action == action

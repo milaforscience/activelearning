@@ -6,6 +6,8 @@ from activelearning.sampler.gflownet.config_utils import compose_gflownet_conf
 from activelearning.sampler.gflownet.grid_sampler import GFlowNetGridSampler
 from activelearning.sampler.gflownet.gflownet_sampler import GFlowNetSampler
 
+_FidelityAction = Literal["any", "first", "last"]
+
 
 class HypercubeSamplerConfig(BaseModel):
     type: Literal["HypercubeSampler"] = "HypercubeSampler"
@@ -51,6 +53,7 @@ class GFlowNetSamplerConfig(BaseModel):
     type: Literal["GFlowNetSampler"] = "GFlowNetSampler"
     n_samples: int = Field(gt=0)
     n_fidelities: int = 1
+    fidelity_action: _FidelityAction = "any"
     log_dir: str | None = None
     conf: dict[str, Any] | None = None
 
@@ -59,6 +62,7 @@ class GFlowNetSamplerConfig(BaseModel):
             n_samples=self.n_samples,
             conf=compose_gflownet_conf(conf_overrides=self.conf, log_dir=self.log_dir),
             n_fidelities=self.n_fidelities,
+            fidelity_action=self.fidelity_action,
         )
 
 
@@ -87,6 +91,7 @@ class GFlowNetGridSamplerConfig(GFlowNetSamplerConfig):
             conf=compose_gflownet_conf(conf_overrides=self.conf, log_dir=self.log_dir),
             output_bounds=self.output_bounds,
             n_fidelities=self.n_fidelities,
+            fidelity_action=self.fidelity_action,
         )
 
 
