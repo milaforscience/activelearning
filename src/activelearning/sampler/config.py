@@ -52,7 +52,7 @@ class GFlowNetSamplerConfig(BaseModel):
 
     type: Literal["GFlowNetSampler"] = "GFlowNetSampler"
     n_samples: int = Field(gt=0)
-    n_fidelities: int = 1
+    n_fidelities: int = Field(default=1, ge=1)
     fidelity_action: _FidelityAction = "any"
     log_dir: str | None = None
     conf: dict[str, Any] | None = None
