@@ -1,0 +1,83 @@
+# GFlowNet-based experiment: Hartmann 6D grid search, single fidelity.
+#
+# Run with:
+#   uv run activelearning config/hartmann/gflownet_single_fidelity.yaml
+#
+# GFlowNet component defaults (env, policy, gflownet, loss, buffer, evaluator,
+# logger, proxy) are loaded from config/gflownet/ by compose_gflownet_conf.
+# The `sampler.conf` block below shows only the overrides relative to those
+# defaults, following the active-learning conventions from
+# https://github.com/nikita-0209/mf-al-gfn.
+
+runtime:
+  device: cpu
+  precision: 32
+  seed: 42
+
+dataset:
+  type: ListDataset
+
+surrogate:
+  type: BoTorchGPSurrogate
+
+acquisition:
+  type: QMultiFidelityLowerBoundMaxValueEntropy
+  candidate_set_spec:
+    type: HypercubeCandidateSetSpec
+    bounds:
+      - [0.0, 1.0]
+      - [0.0, 1.0]
+      - [0.0, 1.0]
+      - [0.0, 1.0]
+      - [0.0, 1.0]
+      - [0.0, 1.0]
+    n_points: 1000
+    strategy: lhs
+
+sampler:
+  type: GFlowNetGridSampler
+  n_samples: 100
+  n_fidelities: 1
+  # Rescale grid coordinates (cell_min=-1, cell_max=1) to the Hartmann [0,1]^6 domain.
+  output_bounds:
+    - [0.0, 1.0]
+    - [0.0, 1.0]
+    - [0.0, 1.0]
+    - [0.0, 1.0]
+    - [0.0, 1.0]
+    - [0.0, 1.0]
+  conf:
+    env:
+      n_dim: 6
+      length: 20  # 20 cells per dimension → 0.05 resolution
+    gflownet:
+      # Active-learning optimizer settings (from mf-al-gfn hartmann config).
+      random_action_prob: 0.001  # default: 0.0
+      optimizer:
+        lr: 5.0e-4       # default: 1e-4
+        lr_z_mult: 20    # default: 10
+        n_train_steps: 10000  # default: 5000
+        batch_size:
+          forward: 32    # default: 10; larger for 6D
+    policy:
+      forward:
+        n_hid: 2048      # default: 128
+
+selector:
+  type: CostAwareSelector
+
+oracle:
+  type: Hartmann6DOracle
+  fidelity_costs:
+    1: 1.0
+
+budget:
+  available_budget: 100.0
+  schedule:
+    type: constant
+    value: 10.0
+
+logger:
+  type: ConsoleLogger
+  project_name: activelearning_tutorials
+  run_name: hartmann-gflownet-single-fidelity
