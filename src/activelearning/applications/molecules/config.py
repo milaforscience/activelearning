@@ -1,4 +1,4 @@
-"""Configuration classes for molecule-specific components.
+"""Configuration classes for molecules-specific components.
 
 Encoder configs are declared here (not inside surrogate/config.py) so they can
 be shared by both DKL surrogate variants without circular imports.
@@ -9,10 +9,10 @@ encoder selection.
 from __future__ import annotations
 from typing import Annotated, Literal, Optional, Union
 from pydantic import BaseModel, Field, model_validator
-from activelearning.applications.molecule.selfies_transformer_encoder import (
+from activelearning.applications.molecules.selfies_transformer_encoder import (
     SelfiesTransformerEncoder,
 )
-from activelearning.applications.molecule.selfies_tokenizer import (
+from activelearning.applications.molecules.selfies_tokenizer import (
     SELFIES_VOCAB_SMALL,
     SelfiesTokenizer,
 )
@@ -24,7 +24,7 @@ from activelearning.applications.molecule.selfies_tokenizer import (
 
 
 class SelfiesTransformerEncoderConfig(BaseModel):
-    """Configuration for :class:`~activelearning.applications.molecule.encoder.SelfiesTransformerEncoder`.
+    """Configuration for :class:`~activelearning.applications.molecules.encoder.SelfiesTransformerEncoder`.
 
     All fields mirror the encoder constructor; changing them via YAML enables
     easy hyperparameter search (e.g. latent_dim sweep for benchmarking).
@@ -32,7 +32,7 @@ class SelfiesTransformerEncoderConfig(BaseModel):
     Parameters
     ----------
     vocab : list[str]
-        SELFIES alphabet.  Defaults to :data:`~activelearning.applications.molecule.tokenizer.SELFIES_VOCAB_SMALL`.
+        SELFIES alphabet.  Defaults to :data:`~activelearning.applications.molecules.tokenizer.SELFIES_VOCAB_SMALL`.
     max_length : int
         Base sequence length (special tokens added internally).
     embed_dim : int
@@ -44,7 +44,7 @@ class SelfiesTransformerEncoderConfig(BaseModel):
     num_layers : int
         Number of Transformer encoder layers.
     latent_dim : int
-        Output dimensionality of the pooled molecule vector.
+        Output dimensionality of the pooled molecules vector.
     dropout : float
         Dropout applied throughout the encoder.
     """
@@ -118,9 +118,9 @@ class SelfiesTrainingConfig(BaseModel):
 
 
 class ExactSelfiesDKLSurrogateConfig(BaseModel):
-    """Configuration for :class:`~activelearning.applications.molecule.dkl_surrogate.ExactSelfiesDKLSurrogate`.
+    """Configuration for :class:`~activelearning.applications.molecules.dkl_surrogate.ExactSelfiesDKLSurrogate`.
 
-    Uses a BoTorch ``SingleTaskGP`` with a :class:`~activelearning.applications.molecule.kernel.SelfiesKernel`
+    Uses a BoTorch ``SingleTaskGP`` with a :class:`~activelearning.applications.molecules.kernel.SelfiesKernel`
     as the covariance module.  Compatible with all BoTorch acquisition functions.
 
     Parameters
@@ -153,7 +153,7 @@ class ExactSelfiesDKLSurrogateConfig(BaseModel):
         return self
 
     def build(self) -> object:
-        from activelearning.applications.molecule.dkl_surrogate import (
+        from activelearning.applications.molecules.dkl_surrogate import (
             ExactSelfiesDKLSurrogate,
         )
 
@@ -167,7 +167,7 @@ class ExactSelfiesDKLSurrogateConfig(BaseModel):
 
 
 class VariationalSelfiesDKLSurrogateConfig(BaseModel):
-    """Configuration for :class:`~activelearning.applications.molecule.dkl_surrogate.VariationalSelfiesDKLSurrogate`.
+    """Configuration for :class:`~activelearning.applications.molecules.dkl_surrogate.VariationalSelfiesDKLSurrogate`.
 
     Uses a sparse variational GP head (``ApproximateGP + VariationalELBO``),
     mirroring the reference ``DeepKernelMoleculeRegressor`` implementation.
@@ -206,7 +206,7 @@ class VariationalSelfiesDKLSurrogateConfig(BaseModel):
         return self
 
     def build(self) -> object:
-        from activelearning.applications.molecule.dkl_surrogate import (
+        from activelearning.applications.molecules.dkl_surrogate import (
             VariationalSelfiesDKLSurrogate,
         )
 

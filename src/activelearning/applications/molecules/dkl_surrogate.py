@@ -1,4 +1,4 @@
-"""Deep Kernel Learning surrogates for SELFIES molecule optimisation.
+"""Deep Kernel Learning surrogates for SELFIES molecules optimisation.
 
 Two variants are provided, both inheriting from :class:`BoTorchGPSurrogate`:
 
@@ -29,10 +29,10 @@ from botorch.models.model import Model
 from gpytorch.mlls import ExactMarginalLogLikelihood, VariationalELBO
 from torch.optim import Adam
 
-from activelearning.applications.molecule.selfies_transformer_encoder import (
+from activelearning.applications.molecules.selfies_transformer_encoder import (
     SelfiesTransformerEncoder,
 )
-from activelearning.applications.molecule.selfies_kernel import SelfiesKernel
+from activelearning.applications.molecules.selfies_kernel import SelfiesKernel
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
 from activelearning.utils.types import Candidate, Observation
 

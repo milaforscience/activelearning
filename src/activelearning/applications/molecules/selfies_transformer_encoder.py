@@ -2,7 +2,7 @@
 
 Pipeline:
     token IDs → nn.Embedding → positional encoding → Transformer encoder
-    → masked-mean pool → latent molecule vector
+    → masked-mean pool → latent molecules vector
 
 The encoder also exposes an MLM head so it can be trained jointly with:
 - masked language modelling (MLM) loss on masked SELFIES tokens
@@ -18,7 +18,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from activelearning.applications.molecule.selfies_tokenizer import SelfiesTokenizer
+from activelearning.applications.molecules.selfies_tokenizer import SelfiesTokenizer
 
 
 class PositionalEncoding(nn.Module):
@@ -65,10 +65,10 @@ class PositionalEncoding(nn.Module):
 
 
 class MaskedMeanPool(nn.Module):
-    """Pool token features into one vector per molecule via masked mean + projection.
+    """Pool token features into one vector per molecules via masked mean + projection.
 
     The mask excludes padding and special tokens so the pooled vector
-    represents only meaningful molecule tokens.
+    represents only meaningful molecules tokens.
 
     Parameters
     ----------
@@ -83,7 +83,7 @@ class MaskedMeanPool(nn.Module):
         self.proj = nn.Linear(input_dim, output_dim)
 
     def forward(self, token_features: Tensor, mask: Tensor) -> Tensor:
-        """Pool token features into one vector per molecule.
+        """Pool token features into one vector per molecules.
 
         Parameters
         ----------
@@ -131,7 +131,7 @@ class SelfiesTransformerEncoder(nn.Module):
     num_layers : int
         Number of Transformer encoder layers.
     latent_dim : int
-        Output dimensionality of the pooled molecule vector.
+        Output dimensionality of the pooled molecules vector.
     dropout : float
         Dropout rate applied throughout.
     """
@@ -209,7 +209,7 @@ class SelfiesTransformerEncoder(nn.Module):
         return x, keep_mask
 
     def forward(self, token_batch: Tensor) -> Tensor:
-        """Encode a batch of token sequences to molecule latent vectors.
+        """Encode a batch of token sequences to molecules latent vectors.
 
         Parameters
         ----------

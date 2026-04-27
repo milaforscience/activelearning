@@ -3,7 +3,7 @@
 import pytest
 import torch
 
-from activelearning.applications.molecule.selfies_tokenizer import (
+from activelearning.applications.molecules.selfies_tokenizer import (
     SELFIES_VOCAB_SMALL,
     SelfiesTokenizer,
 )

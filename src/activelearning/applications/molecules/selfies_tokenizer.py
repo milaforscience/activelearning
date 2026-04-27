@@ -7,7 +7,7 @@ import torch
 from torch import Tensor
 
 # Small SELFIES vocabulary covering the common organic fragments
-# used by the molecule experiments in this repo.
+# used by the molecules experiments in this repo.
 SELFIES_VOCAB_SMALL: list[str] = [
     "[#Branch1]",
     "[#Branch2]",

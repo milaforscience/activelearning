@@ -4,9 +4,9 @@
 # Compatible with all BoTorch acquisition functions.
 #
 # Prerequisites:
-#   - A molecule pool file (one SELFIES per line) at the path below
+#   - A molecules pool file (one SELFIES per line) at the path below
 #   - The `xtb` binary on PATH for oracle evaluation
-#   - uv sync --extra molecule
+#   - uv sync --extra molecules
 #
 # Run with:
 #   uv run activelearning config/molecule_dkl_exact.yaml
@@ -43,7 +43,7 @@ acquisition:
 
 sampler:
   type: PoolFileSampler
-  # Replace with the path to your molecule pool
+  # Replace with the path to your molecules pool
   candidate_pool_file: config/data/molecules.txt
   num_samples: 1000
   fidelities:
@@ -73,4 +73,4 @@ budget:
 logger:
   type: ConsoleLogger
   project_name: molecule_dkl
-  run_name: molecule-dkl-exact-ea
+  run_name: molecules-dkl-exact-ea

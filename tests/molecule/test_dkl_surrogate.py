@@ -4,11 +4,11 @@ import math
 import pytest
 import torch
 
-from activelearning.applications.molecule.config import (
+from activelearning.applications.molecules.config import (
     SelfiesTrainingConfig,
     SelfiesTransformerEncoderConfig,
 )
-from activelearning.applications.molecule.dkl_surrogate import (
+from activelearning.applications.molecules.dkl_surrogate import (
     ExactSelfiesDKLSurrogate,
     VariationalSelfiesDKLSurrogate,
 )
@@ -268,7 +268,7 @@ class TestVariationalSelfiesDKLSurrogate:
         self, var_surrogate: VariationalSelfiesDKLSurrogate
     ):
         """get_model() must return the BoTorch-compatible adapter after fitting."""
-        from activelearning.applications.molecule.dkl_surrogate import (
+        from activelearning.applications.molecules.dkl_surrogate import (
             _VariationalBoTorchAdapter,
         )
 
@@ -506,7 +506,7 @@ class TestSelfiesKernelBatchDims:
 
     def test_kernel_3d_input_no_fidelity(self):
         """Kernel must work when BoTorch adds a q-dimension."""
-        from activelearning.applications.molecule.selfies_kernel import SelfiesKernel
+        from activelearning.applications.molecules.selfies_kernel import SelfiesKernel
         import gpytorch
 
         encoder = ENCODER_CFG.build()
@@ -521,7 +521,7 @@ class TestSelfiesKernelBatchDims:
 
     def test_kernel_3d_input_with_fidelity(self):
         """Kernel must correctly split fidelity from last column with 3-D input."""
-        from activelearning.applications.molecule.selfies_kernel import SelfiesKernel
+        from activelearning.applications.molecules.selfies_kernel import SelfiesKernel
         import gpytorch
 
         encoder = ENCODER_CFG.build()
@@ -544,7 +544,7 @@ class TestSelfiesKernelBatchDims:
 
 class TestDKLSurrogateConfigs:
     def test_exact_config_builds(self):
-        from activelearning.applications.molecule.config import (
+        from activelearning.applications.molecules.config import (
             ExactSelfiesDKLSurrogateConfig,
         )
 
@@ -553,7 +553,7 @@ class TestDKLSurrogateConfigs:
         assert isinstance(surrogate, ExactSelfiesDKLSurrogate)
 
     def test_variational_config_builds(self):
-        from activelearning.applications.molecule.config import (
+        from activelearning.applications.molecules.config import (
             VariationalSelfiesDKLSurrogateConfig,
         )
 

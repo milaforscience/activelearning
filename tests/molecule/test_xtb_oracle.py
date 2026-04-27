@@ -4,7 +4,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from activelearning.applications.molecule.xtb_oracle import (
+from activelearning.applications.molecules.xtb_oracle import (
     XTBIPEAOracle,
     hartree_to_ev,
     _decode_to_smiles,
@@ -179,7 +179,7 @@ class TestXTBIPEAOracleQuery:
         import torch
 
         candidates = [Candidate(x=torch.zeros(4), fidelity=1)]
-        with pytest.raises(ValueError, match="molecule string"):
+        with pytest.raises(ValueError, match="molecules string"):
             oracle.query(candidates)
 
     def test_query_multiple_candidates(self, oracle: XTBIPEAOracle):
@@ -225,11 +225,11 @@ class TestXTBScoreFidelityRouting:
         fake_log = MagicMock(spec=Path)
 
         rdkit_patch = patch(
-            "activelearning.applications.molecule.xtb_oracle._write_best_rdkit_xyz",
+            "activelearning.applications.molecules.xtb_oracle._write_best_rdkit_xyz",
             return_value=fake_xyz,
         )
         opt_patch = patch(
-            "activelearning.applications.molecule.xtb_oracle._run_xtb_optimize",
+            "activelearning.applications.molecules.xtb_oracle._run_xtb_optimize",
             return_value=(fake_xyz, fake_log),
         )
         vertical_patch = patch.object(
@@ -364,11 +364,11 @@ class TestIonicChargeRouting:
         fake_xyz = MagicMock(spec=Path)
         fake_log = MagicMock(spec=Path)
         rdkit_p = patch(
-            "activelearning.applications.molecule.xtb_oracle._write_best_rdkit_xyz",
+            "activelearning.applications.molecules.xtb_oracle._write_best_rdkit_xyz",
             return_value=fake_xyz,
         )
         opt_p = patch(
-            "activelearning.applications.molecule.xtb_oracle._run_xtb_optimize",
+            "activelearning.applications.molecules.xtb_oracle._run_xtb_optimize",
             return_value=(fake_xyz, fake_log),
         )
         adiab_p = patch.object(oracle, "_adiabatic_score", return_value=1.0)
@@ -398,11 +398,11 @@ class TestIonicChargeRouting:
         fake_xyz = MagicMock(spec=Path)
         fake_log = MagicMock(spec=Path)
         rdkit_p = patch(
-            "activelearning.applications.molecule.xtb_oracle._write_best_rdkit_xyz",
+            "activelearning.applications.molecules.xtb_oracle._write_best_rdkit_xyz",
             return_value=fake_xyz,
         )
         opt_p = patch(
-            "activelearning.applications.molecule.xtb_oracle._run_xtb_optimize",
+            "activelearning.applications.molecules.xtb_oracle._run_xtb_optimize",
             return_value=(fake_xyz, fake_log),
         )
         vert_p = patch.object(oracle, "_vertical_score", return_value=1.0)

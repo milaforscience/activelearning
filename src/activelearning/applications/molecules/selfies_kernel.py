@@ -9,7 +9,7 @@ treated as a fidelity scalar (e.g. 1.0, 2.0, 3.0) that is concatenated to
 the encoder's latent output before the base kernel is applied.  This mirrors
 the reference ``DeepKernelMoleculeRegressor.build_features()`` design.
 
-This design means :class:`~activelearning.applications.molecule.dkl_surrogate.ExactSelfiesDKLSurrogate`
+This design means :class:`~activelearning.applications.molecules.dkl_surrogate.ExactSelfiesDKLSurrogate`
 can be used with *any* BoTorch acquisition function without modification.
 """
 
@@ -19,13 +19,13 @@ import gpytorch
 import torch
 from torch import Tensor
 
-from activelearning.applications.molecule.selfies_transformer_encoder import (
+from activelearning.applications.molecules.selfies_transformer_encoder import (
     SelfiesTransformerEncoder,
 )
 
 
 class SelfiesKernel(gpytorch.kernels.Kernel):
-    """Covariance kernel for molecule sequences.
+    """Covariance kernel for molecules sequences.
 
     Computes k(x₁, x₂) by encoding token-ID sequences through a
     :class:`SelfiesTransformerEncoder` and then applying a base kernel on

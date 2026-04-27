@@ -17,7 +17,7 @@ or download the standalone binary from https://github.com/grimme-lab/xtb/release
 
 Dependencies
 ------------
-uv sync --extra molecule   # includes selfies, rdkit
+uv sync --extra molecules   # includes selfies, rdkit
 """
 
 from __future__ import annotations
@@ -74,7 +74,7 @@ def hartree_to_ev(hartree: float) -> float:
 
 
 def _decode_to_smiles(molecule: str, mol_repr: str = "selfies") -> str:
-    """Decode a molecule string to SMILES.
+    """Decode a molecules string to SMILES.
 
     Parameters
     ----------
@@ -95,7 +95,7 @@ def _decode_to_smiles(molecule: str, mol_repr: str = "selfies") -> str:
     else:
         raise ValueError(f"Unsupported molecular representation: {mol_repr!r}")
     if not smiles:
-        raise ValueError(f"Failed to decode molecule: {molecule!r}")
+        raise ValueError(f"Failed to decode molecules: {molecule!r}")
     return smiles
 
 
@@ -111,7 +111,7 @@ def _write_best_rdkit_xyz(
     Parameters
     ----------
     smiles : str
-        SMILES string of the molecule.
+        SMILES string of the molecules.
     xyz_path : Path
         Destination path for the XYZ file.
     conformer_cfg : ConformerConfig
@@ -336,7 +336,7 @@ class XTBIPEAOracle(MultiFidelityOracle):
     conformer_cfg : ConformerConfig, optional
         RDKit conformer generation settings.
     mol_repr : str
-        Input molecule representation: ``"selfies"`` or ``"smiles"``.
+        Input molecules representation: ``"selfies"`` or ``"smiles"``.
     """
 
     def __init__(
@@ -403,18 +403,18 @@ class XTBIPEAOracle(MultiFidelityOracle):
     # ------------------------------------------------------------------
 
     def _extract_molecule_string(self, candidate: Candidate) -> str:
-        """Return the molecule string from a candidate."""
+        """Return the molecules string from a candidate."""
         if isinstance(candidate.x, str):
             return candidate.x
         if candidate.metadata is not None and "raw" in candidate.metadata:
             return str(candidate.metadata["raw"])
         raise ValueError(
-            "Cannot extract molecule string: candidate.x is not a string and "
+            "Cannot extract molecules string: candidate.x is not a string and "
             "candidate.metadata does not contain a 'raw' key."
         )
 
     def _xtb_score(self, molecule: str, fidelity: int) -> float:
-        """Evaluate a single molecule at the given fidelity level.
+        """Evaluate a single molecules at the given fidelity level.
 
         Follows the MF-GFN paper fidelity ladder:
         1 → vertical score on MMFF geometry

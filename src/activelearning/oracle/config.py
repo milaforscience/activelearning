@@ -40,7 +40,7 @@ class CompositeOracleConfig(BaseModel):
 
 
 class XTBIPEAOracleConfig(BaseModel):
-    """Configuration for :class:`~activelearning.applications.molecule.xtb_oracle.XTBIPEAOracle`.
+    """Configuration for :class:`~activelearning.applications.molecules.xtb_oracle.XTBIPEAOracle`.
 
     Parameters
     ----------
@@ -57,7 +57,7 @@ class XTBIPEAOracleConfig(BaseModel):
     correction_factor : float
         Empirical correction subtracted from adiabatic IP/EA (eV).
     mol_repr : str
-        Input molecule representation: ``"selfies"`` or ``"smiles"``.
+        Input molecules representation: ``"selfies"`` or ``"smiles"``.
     """
 
     type: Literal["XTBIPEAOracle"] = "XTBIPEAOracle"
@@ -70,7 +70,7 @@ class XTBIPEAOracleConfig(BaseModel):
     mol_repr: str = "selfies"
 
     def build(self) -> Oracle:
-        from activelearning.applications.molecule.xtb_oracle import XTBIPEAOracle
+        from activelearning.applications.molecules.xtb_oracle import XTBIPEAOracle
 
         return XTBIPEAOracle(
             task=self.task,

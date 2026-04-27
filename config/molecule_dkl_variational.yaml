@@ -11,9 +11,9 @@
 #   - project(): auto-built to map candidates to max fidelity (3.0).
 #
 # Prerequisites:
-#   - A molecule pool file (one SELFIES per line) at the path below
+#   - A molecules pool file (one SELFIES per line) at the path below
 #   - The `xtb` binary on PATH for oracle evaluation
-#   - uv sync --extra molecule
+#   - uv sync --extra molecules
 #
 # Run with:
 #   uv run activelearning config/molecule_dkl_variational.yaml
@@ -93,4 +93,4 @@ budget:
 logger:
   type: ConsoleLogger
   project_name: molecule_dkl
-  run_name: molecule-dkl-variational-ea
+  run_name: molecules-dkl-variational-ea
