@@ -1,3 +1,5 @@
+import math
+
 import pytest
 
 from activelearning.dataset.list_dataset import ListDataset
@@ -60,6 +62,55 @@ def test_add_observations_multiple_times(dataset):
     assert observations[1].y == 20.0
     assert observations[2].x == 3
     assert observations[2].y == 30.0
+
+
+def test_add_observations_filters_nan_targets(dataset):
+    """NaN-valued observations are dropped at insertion time."""
+    dataset.add_observations(
+        [
+            Observation(x=1, y=10.0),
+            Observation(x=2, y=float("nan")),
+            Observation(x=3, y=30.0),
+        ]
+    )
+
+    observations = dataset.get_observations_iterable()
+    latest = dataset.get_latest_observations_iterable()
+
+    assert len(observations) == 2
+    assert [obs.x for obs in observations] == [1, 3]
+    assert latest == observations
+
+
+def test_add_observations_filters_infinite_targets(dataset):
+    """Infinite scalar targets are dropped for the same reason as NaNs."""
+    dataset.add_observations(
+        [
+            Observation(x=1, y=float("inf")),
+            Observation(x=2, y=float("-inf")),
+        ]
+    )
+
+    assert dataset.get_observations_iterable() == []
+    assert dataset.get_latest_observations_iterable() == []
+
+
+def test_add_observations_preserves_non_scalar_targets(dataset):
+    """Structured targets are kept because the dataset only filters scalar failures."""
+    dataset.add_observations(
+        [
+            Observation(x=1, y=[float("nan"), 1.0]),
+            Observation(x=2, y={"score": float("inf")}),
+        ]
+    )
+
+    observations = dataset.get_observations_iterable()
+
+    assert len(observations) == 2
+    assert len(observations[0].y) == 2
+    assert math.isnan(observations[0].y[0])
+    assert observations[0].y[1] == 1.0
+    assert observations[1].y == {"score": float("inf")}
 
 
 def test_get_latest_observations_empty_dataset(dataset):

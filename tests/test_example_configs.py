@@ -71,3 +71,25 @@ def test_aim_logging_overlay_parses_when_merged_with_base_config() -> None:
     assert config.runtime.seed == 42
     assert config.logger is not None
     assert config.logger.type == "MultiLogger"
+
+
+def test_molecule_dkl_exact_gflownet_config_parses() -> None:
+    """Ensure the SELFIES GFlowNet molecule config matches the current schema."""
+    config_path = REPOSITORY_ROOT / "config" / "molecule_dkl_exact_gflownet.yaml"
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "GFlowNetSampler"
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.acquisition.type == "UpperConfidenceBound"
+
+
+def test_molecule_dkl_variational_gflownet_config_parses() -> None:
+    """Ensure the variational SELFIES GFlowNet molecule config matches the schema."""
+    config_path = REPOSITORY_ROOT / "config" / "molecule_dkl_variational_gflownet.yaml"
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "GFlowNetSampler"
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"

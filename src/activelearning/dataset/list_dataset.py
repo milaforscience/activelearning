@@ -1,8 +1,30 @@
+import logging
+import math
 import heapq
 from typing import Sequence
 
 from activelearning.dataset.dataset import Dataset
 from activelearning.utils.types import Observation
+
+logger = logging.getLogger(__name__)
+
+
+def _has_finite_scalar_target(observation: Observation) -> bool:
+    """Return ``True`` unless ``observation.y`` is a scalar non-finite value.
+
+    The dataset layer accepts arbitrary target payloads, including scalars,
+    vectors, tensors, strings, and other structured objects. This helper keeps
+    that contract by filtering only the narrow case where ``y`` behaves like a
+    scalar and converts to a float that is ``NaN`` or infinite. Targets that
+    cannot be interpreted as scalars are preserved unchanged.
+    """
+    value = observation.y
+    if value is None:
+        return True
+    try:
+        return math.isfinite(float(value))
+    except (TypeError, ValueError):
+        return True
 
 
 class ListDataset(Dataset):
@@ -14,15 +36,23 @@ class ListDataset(Dataset):
         self._latest_end_idx = 0
 
     def add_observations(self, observations: Sequence[Observation]) -> None:
-        """Add new observations to the dataset by appending to the list of records.
+        """Add new observations to the dataset by appending valid records.
 
         Parameters
         ----------
         observations : Sequence[Observation]
             Sequence of observations to add.
         """
+        valid_observations = [
+            obs for obs in observations if _has_finite_scalar_target(obs)
+        ]
+        dropped = len(observations) - len(valid_observations)
+        if dropped > 0:
+            logger.warning(
+                "Dropping %d observations with non-finite scalar targets.", dropped
+            )
         self._latest_start_idx = len(self._records)
-        self._records.extend(observations)
+        self._records.extend(valid_observations)
         self._latest_end_idx = len(self._records)
 
     def get_observations_iterable(self) -> list[Observation]:

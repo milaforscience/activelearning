@@ -49,6 +49,17 @@ class _FidelityCapturingAcquisition:
         return [1.0] * len(candidates)
 
 
+class _StringCapturingAcquisition:
+    """Records candidate proxy values to verify string inputs are preserved."""
+
+    def __init__(self) -> None:
+        self.seen: list[object] = []
+
+    def score(self, candidates: list[Candidate]) -> list[float]:
+        self.seen.extend(c.x for c in candidates)
+        return [1.0] * len(candidates)
+
+
 class _StubMFEnv(MultiFidelityGFlowNetEnvWrapperBase):
     """Minimal MF env stub; bypasses parent __init__."""
 
@@ -168,6 +179,12 @@ class TestAcquisitionProxyCallSingleFidelity:
     def test_list_of_sequences_input(self):
         result = self.proxy([[0.1, 0.2], [0.3, 0.4]])
         assert result.shape == (2,)
+
+    def test_list_of_strings_preserves_candidate_proxy_value(self):
+        acq = _StringCapturingAcquisition()
+        self.proxy.set_acquisition(acq)
+        self.proxy(["[C][=O][N]"])
+        assert acq.seen == ["[C][=O][N]"]
 
 
 # ---------------------------------------------------------------------------

@@ -22,6 +22,7 @@ uv sync --extra molecules   # includes selfies, rdkit
 
 from __future__ import annotations
 
+import logging
 import re
 import shutil
 import subprocess
@@ -31,7 +32,7 @@ from tempfile import TemporaryDirectory
 from typing import Any, List, Optional, Sequence
 
 import selfies as sf
-from rdkit import Chem
+from rdkit import Chem, rdBase
 from rdkit.Chem import AllChem
 
 from activelearning.oracle.multi_fidelity_oracle import MultiFidelityOracle
@@ -39,6 +40,8 @@ from activelearning.utils.types import Candidate, Observation
 
 # CODATA 2018 Hartree → eV
 _HARTREE_TO_EV: float = 27.2114
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +89,8 @@ def _decode_to_smiles(molecule: str, mol_repr: str = "selfies") -> str:
     Returns
     -------
     str
-        SMILES string.
+        SMILES string. May be empty when a syntactically valid SELFIES string
+        collapses to the empty molecule during decoding.
     """
     if mol_repr == "selfies":
         smiles = sf.decoder(molecule)
@@ -94,8 +98,6 @@ def _decode_to_smiles(molecule: str, mol_repr: str = "selfies") -> str:
         smiles = molecule
     else:
         raise ValueError(f"Unsupported molecular representation: {mol_repr!r}")
-    if not smiles:
-        raise ValueError(f"Failed to decode molecules: {molecule!r}")
     return smiles
 
 
@@ -124,18 +126,21 @@ def _write_best_rdkit_xyz(
     Path
         The written XYZ file path (same as ``xyz_path``).
     """
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
-        raise ValueError(f"Invalid SMILES: {smiles!r}")
-    Chem.SanitizeMol(mol)
-    mol_h = Chem.AddHs(mol)
-    AllChem.EmbedMultipleConfs(
-        mol_h,
-        numConfs=conformer_cfg.num_conf,
-        pruneRmsThresh=conformer_cfg.prune_rms_thresh,
-        maxAttempts=conformer_cfg.max_attempts,
-        useRandomCoords=conformer_cfg.random_coords,
-    )
+    # RDKit emits atom-typing and sanitization diagnostics directly to stderr.
+    # Suppress those here and surface compact Python exceptions instead.
+    with rdBase.BlockLogs():
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            raise ValueError(f"Invalid SMILES: {smiles!r}")
+        Chem.SanitizeMol(mol)
+        mol_h = Chem.AddHs(mol)
+        AllChem.EmbedMultipleConfs(
+            mol_h,
+            numConfs=conformer_cfg.num_conf,
+            pruneRmsThresh=conformer_cfg.prune_rms_thresh,
+            maxAttempts=conformer_cfg.max_attempts,
+            useRandomCoords=conformer_cfg.random_coords,
+        )
 
     num_conf = mol_h.GetNumConformers()
     if num_conf == 0:
@@ -144,20 +149,36 @@ def _write_best_rdkit_xyz(
     ff_name = ff.lower()
     energies: List[float] = []
     if ff_name == "mmff":
-        mp = AllChem.MMFFGetMoleculeProperties(mol_h, mmffVariant="MMFF94")
+        with rdBase.BlockLogs():
+            has_params = AllChem.MMFFHasAllMoleculeParams(mol_h)
+            mp = AllChem.MMFFGetMoleculeProperties(mol_h, mmffVariant="MMFF94")
+        if not has_params or mp is None:
+            raise RuntimeError(f"MMFF parameters unavailable for {smiles!r}")
         for conf_id in range(num_conf):
-            AllChem.MMFFOptimizeMolecule(mol_h, confId=conf_id, maxIters=1000)
-            energies.append(
-                AllChem.MMFFGetMoleculeForceField(
+            with rdBase.BlockLogs():
+                AllChem.MMFFOptimizeMolecule(mol_h, confId=conf_id, maxIters=1000)
+                force_field = AllChem.MMFFGetMoleculeForceField(
                     mol_h, mp, confId=conf_id
-                ).CalcEnergy()
-            )
+                )
+            if force_field is None:
+                raise RuntimeError(
+                    f"MMFF force field construction failed for {smiles!r}"
+                )
+            energies.append(force_field.CalcEnergy())
     elif ff_name == "uff":
+        with rdBase.BlockLogs():
+            has_params = AllChem.UFFHasAllMoleculeParams(mol_h)
+        if not has_params:
+            raise RuntimeError(f"UFF parameters unavailable for {smiles!r}")
         for conf_id in range(num_conf):
-            AllChem.UFFOptimizeMolecule(mol_h, confId=conf_id, maxIters=1000)
-            energies.append(
-                AllChem.UFFGetMoleculeForceField(mol_h, confId=conf_id).CalcEnergy()
-            )
+            with rdBase.BlockLogs():
+                AllChem.UFFOptimizeMolecule(mol_h, confId=conf_id, maxIters=1000)
+                force_field = AllChem.UFFGetMoleculeForceField(mol_h, confId=conf_id)
+            if force_field is None:
+                raise RuntimeError(
+                    f"UFF force field construction failed for {smiles!r}"
+                )
+            energies.append(force_field.CalcEnergy())
     else:
         raise ValueError(f"Unsupported force field: {ff!r}")
 
@@ -337,6 +358,13 @@ class XTBIPEAOracle(MultiFidelityOracle):
         RDKit conformer generation settings.
     mol_repr : str
         Input molecules representation: ``"selfies"`` or ``"smiles"``.
+    Notes
+    -----
+    SELFIES strings that decode to the empty molecule and molecules that fail
+    during RDKit/MMFF or xtb processing return ``NaN``. The dataset layer
+    filters these failed evaluations before surrogate fitting, matching the
+    original MF-GFN behavior where geometry-construction failures were treated
+    as invalid molecules.
     """
 
     def __init__(
@@ -436,35 +464,58 @@ class XTBIPEAOracle(MultiFidelityOracle):
         if fidelity not in {1, 2, 3}:
             raise ValueError(f"fidelity must be 1, 2, or 3, got {fidelity!r}")
 
-        smiles = _decode_to_smiles(molecule, mol_repr=self._mol_repr)
+        try:
+            smiles = _decode_to_smiles(molecule, mol_repr=self._mol_repr)
+            if smiles == "":
+                logger.warning(
+                    "Returning NaN for molecule %r at fidelity %d: decoded to the "
+                    "empty molecule.",
+                    molecule,
+                    fidelity,
+                )
+                return float("nan")
 
-        with TemporaryDirectory(prefix="xtb_mol_") as tmp:
-            workdir = Path(tmp)
-            neutral_xyz = _write_best_rdkit_xyz(
-                smiles=smiles,
-                xyz_path=workdir / "neutral_mmff.xyz",
-                conformer_cfg=self._conformer_cfg,
-                ff=self._ff,
+            with TemporaryDirectory(prefix="xtb_mol_") as tmp:
+                workdir = Path(tmp)
+                neutral_xyz = _write_best_rdkit_xyz(
+                    smiles=smiles,
+                    xyz_path=workdir / "neutral_mmff.xyz",
+                    conformer_cfg=self._conformer_cfg,
+                    ff=self._ff,
+                )
+
+                if fidelity == 1:
+                    return self._vertical_score(neutral_xyz)
+
+                # Fidelity 2+: optimise the neutral geometry with xtb
+                neutral_xtb_xyz, neutral_log = _run_xtb_optimize(
+                    neutral_xyz, gfn_version=self._gfn_version
+                )
+                if fidelity == 2:
+                    return self._vertical_score(neutral_xtb_xyz)
+
+                # Fidelity 3: also optimise the ionic geometry
+                ionic_charge = -1 if self._task == "ea" else 1
+                ionic_xtb_xyz, ionic_log = _run_xtb_optimize(
+                    neutral_xtb_xyz,
+                    gfn_version=self._gfn_version,
+                    charge=ionic_charge,
+                )
+                return self._adiabatic_score(neutral_log, ionic_log)
+        except Exception as exc:
+            logger.warning(
+                "Returning NaN for molecule %r at fidelity %d: %s.",
+                molecule,
+                fidelity,
+                exc,
             )
-
-            if fidelity == 1:
-                return self._vertical_score(neutral_xyz)
-
-            # Fidelity 2+: optimise the neutral geometry with xtb
-            neutral_xtb_xyz, neutral_log = _run_xtb_optimize(
-                neutral_xyz, gfn_version=self._gfn_version
+            logger.debug(
+                "Detailed oracle failure for molecule %r at fidelity %d.",
+                molecule,
+                fidelity,
+                exc_info=True,
             )
-            if fidelity == 2:
-                return self._vertical_score(neutral_xtb_xyz)
-
-            # Fidelity 3: also optimise the ionic geometry
-            ionic_charge = -1 if self._task == "ea" else 1
-            ionic_xtb_xyz, ionic_log = _run_xtb_optimize(
-                neutral_xtb_xyz,
-                gfn_version=self._gfn_version,
-                charge=ionic_charge,
-            )
-            return self._adiabatic_score(neutral_log, ionic_log)
+            return float("nan")
 
     def _vertical_score(self, xyz_path: Path) -> float:
         """Run ``xtb --vip``/``--vea`` and parse the result.

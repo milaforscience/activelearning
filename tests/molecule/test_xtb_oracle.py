@@ -1,15 +1,19 @@
 """Tests for XTBIPEAOracle (xtb subprocess calls are mocked)."""
 
+import math
+
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from activelearning.applications.molecules.xtb_oracle import (
+    ConformerConfig,
     XTBIPEAOracle,
     hartree_to_ev,
     _decode_to_smiles,
     _parse_vertical_ipea,
     _parse_total_energy,
+    _write_best_rdkit_xyz,
 )
 from activelearning.utils.types import Candidate, Observation
 
@@ -52,11 +56,30 @@ class TestHelpers:
         with pytest.raises(ValueError, match="Unsupported"):
             _decode_to_smiles("C", mol_repr="inchi")
 
-    def test_decode_selfies_decodes_to_empty_raises(self):
-        """ValueError is raised when the selfies library returns an empty SMILES."""
+    def test_decode_selfies_decodes_to_empty_string(self):
+        """An empty decode is returned as an empty SMILES string."""
         with patch("selfies.decoder", return_value=""):
-            with pytest.raises(ValueError, match="Failed to decode"):
-                _decode_to_smiles("[C]", mol_repr="selfies")
+            assert _decode_to_smiles("[C]", mol_repr="selfies") == ""
+
+    def test_write_best_rdkit_xyz_mmff_failure_is_clean(self, tmp_path):
+        """Unsupported MMFF parameterization should raise a descriptive error."""
+        with (
+            patch(
+                "activelearning.applications.molecules.xtb_oracle.AllChem.MMFFHasAllMoleculeParams",
+                return_value=False,
+            ),
+            patch(
+                "activelearning.applications.molecules.xtb_oracle.AllChem.MMFFGetMoleculeProperties",
+                return_value=None,
+            ),
+        ):
+            with pytest.raises(RuntimeError, match="MMFF parameters unavailable"):
+                _write_best_rdkit_xyz(
+                    smiles="C",
+                    xyz_path=tmp_path / "methane.xyz",
+                    conformer_cfg=ConformerConfig(num_conf=1),
+                    ff="mmff",
+                )
 
 
 # ---------------------------------------------------------------------------
@@ -274,6 +297,55 @@ class TestXTBScoreFidelityRouting:
     def test_bad_fidelity_raises(self, oracle):
         with pytest.raises(ValueError, match="fidelity"):
             oracle._xtb_score(BENZENE_SELFIES, fidelity=99)
+
+    def test_empty_decoded_molecule_returns_nan_without_xtb(self, oracle):
+        with (
+            patch(
+                "activelearning.applications.molecules.xtb_oracle.sf.decoder",
+                return_value="",
+            ),
+            patch(
+                "activelearning.applications.molecules.xtb_oracle._write_best_rdkit_xyz"
+            ) as rdkit_mock,
+            patch.object(oracle, "_vertical_score") as vertical_mock,
+            patch(
+                "activelearning.applications.molecules.xtb_oracle._run_xtb_optimize"
+            ) as optimize_mock,
+        ):
+            result = oracle._xtb_score("[Ring1]", fidelity=1)
+
+        rdkit_mock.assert_not_called()
+        vertical_mock.assert_not_called()
+        optimize_mock.assert_not_called()
+        assert math.isnan(result)
+
+    def test_rdkit_geometry_failure_returns_nan(self, oracle):
+        with patch(
+            "activelearning.applications.molecules.xtb_oracle._write_best_rdkit_xyz",
+            side_effect=AttributeError("mmff failure"),
+        ):
+            result = oracle._xtb_score(BENZENE_SELFIES, fidelity=1)
+
+        assert math.isnan(result)
+
+    def test_rdkit_geometry_failure_logs_compact_warning(self, oracle, caplog):
+        with (
+            caplog.at_level("WARNING"),
+            patch(
+                "activelearning.applications.molecules.xtb_oracle._write_best_rdkit_xyz",
+                side_effect=RuntimeError("MMFF parameters unavailable for 'B=O'"),
+            ),
+        ):
+            result = oracle._xtb_score("[B][=O]", fidelity=1)
+
+        assert math.isnan(result)
+        warning_record = next(
+            record
+            for record in caplog.records
+            if "Returning NaN for molecule" in record.message
+        )
+        assert "MMFF parameters unavailable" in warning_record.message
+        assert warning_record.exc_info is None
 
 
 # ---------------------------------------------------------------------------

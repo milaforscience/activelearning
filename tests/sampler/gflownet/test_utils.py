@@ -72,8 +72,10 @@ class TestProxyStatesToCandidatesGuards:
     def test_none(self):
         assert proxy_states_to_candidates(None, _plain_env()) == []
 
-    def test_non_list_non_tensor(self):
-        assert proxy_states_to_candidates("invalid", _plain_env()) == []
+    def test_scalar_proxy_value_is_treated_as_single_candidate(self):
+        result = proxy_states_to_candidates("invalid", _plain_env())
+        assert len(result) == 1
+        assert result[0].x == "invalid"
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +91,11 @@ class TestProxyStatesToCandidatesSingleFidelity:
         assert result[0].x == pytest.approx((0.1, 0.2), abs=1e-6)
         assert result[1].x == pytest.approx((0.3, 0.4), abs=1e-6)
 
+    def test_1d_tensor_is_treated_as_single_candidate(self):
+        result = proxy_states_to_candidates(torch.tensor([0.1, 0.2]), _plain_env())
+        assert len(result) == 1
+        assert result[0].x == pytest.approx((0.1, 0.2), abs=1e-6)
+
     def test_list_of_1d_tensors(self):
         coords = [torch.tensor([0.5, 0.6]), torch.tensor([0.7, 0.8])]
         result = proxy_states_to_candidates(coords, _plain_env())
@@ -100,6 +107,30 @@ class TestProxyStatesToCandidatesSingleFidelity:
         result = proxy_states_to_candidates([[0.1, 0.9], [0.2, 0.8]], _plain_env())
         assert len(result) == 2
         assert result[0].x == pytest.approx((0.1, 0.9), abs=1e-6)
+
+    def test_flat_plain_sequence_is_treated_as_single_candidate(self):
+        result = proxy_states_to_candidates((0.1, 0.9), _plain_env())
+        assert len(result) == 1
+        assert result[0].x == pytest.approx((0.1, 0.9), abs=1e-6)
+
+    def test_list_of_strings_preserves_string_proxy_value(self):
+        result = proxy_states_to_candidates(["[C][=O][N]"], _plain_env())
+        assert len(result) == 1
+        assert result[0].x == "[C][=O][N]"
+        assert isinstance(result[0].x, str)
+
+    def test_mapping_proxy_value_is_preserved(self):
+        result = proxy_states_to_candidates({"bits": [1, 0, 1]}, _plain_env())
+        assert len(result) == 1
+        assert result[0].x == {"bits": [1, 0, 1]}
+
+    def test_list_of_mappings_is_treated_as_batch(self):
+        result = proxy_states_to_candidates(
+            [{"bits": [1, 0]}, {"bits": [0, 1]}], _plain_env()
+        )
+        assert len(result) == 2
+        assert result[0].x == {"bits": [1, 0]}
+        assert result[1].x == {"bits": [0, 1]}
 
     def test_no_fidelity_set(self):
         result = proxy_states_to_candidates(torch.tensor([[1.0, 2.0]]), _plain_env())
@@ -147,6 +178,14 @@ class TestProxyStatesToCandidatesMultiFidelity:
         env = _StubMFEnv(proxy_return=proxy, idx_base_env=0, idx_fidelity=1)
         result = proxy_states_to_candidates(proxy, env)
         assert result[0].fidelity == 3
+
+    def test_preserves_string_proxy_value_for_base_env(self):
+        proxy = [{0: "[C][=O][N]", 1: torch.tensor([2], dtype=torch.float32)}]
+        env = _StubMFEnv(proxy_return=proxy, idx_base_env=0, idx_fidelity=1)
+        result = proxy_states_to_candidates(proxy, env)
+        assert result[0].x == "[C][=O][N]"
+        assert isinstance(result[0].x, str)
+        assert result[0].fidelity == 2
 
     def test_returns_candidate_objects(self):
         proxy = _make_mf_proxy([[0.0, 1.0]], fidelities=[0])
