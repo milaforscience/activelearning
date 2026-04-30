@@ -2,7 +2,7 @@
 
 Some acquisition functions — such as Max-Value Entropy Search (MES) variants —
 require a discrete set of candidate points to approximate the distribution of
-the optimum.  The quality of this approximation depends on how well the
+the optimum. The quality of this approximation depends on how well the
 candidate set covers the search space.
 
 A :class:`CandidateSetSpec` encapsulates the logic for constructing this set.
@@ -62,6 +62,7 @@ class CandidateSetSpec(ABC):
         observations : Iterable[Observation]
             The current set of observations.
         """
+        return None
 
     @abstractmethod
     def build(
