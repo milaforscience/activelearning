@@ -204,7 +204,7 @@ class TrainDataCandidateSetSpec(CandidateSetSpec):
     **discrete** domains where the observed inputs form a natural support set.
 
     Call :meth:`update` with the current observations before calling
-    :meth:`build`.  In the library, acquisitions that hold a
+    :meth:`build`. In the library, acquisitions that hold a
     :class:`TrainDataCandidateSetSpec` do this automatically.
 
     Notes
