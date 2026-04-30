@@ -30,12 +30,13 @@ from typing import Iterable, Literal, Optional
 
 import torch
 
+from activelearning.runtime import ALRuntimeMixin
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
 from activelearning.utils.sampling import latin_hypercube
 from activelearning.utils.types import Candidate, Observation
 
 
-class CandidateSetSpec(ABC):
+class CandidateSetSpec(ABC, ALRuntimeMixin):
     """Base class for candidate-set construction strategies.
 
     A :class:`CandidateSetSpec` defines how to produce the discrete set of
@@ -99,7 +100,7 @@ class HypercubeCandidateSetSpec(CandidateSetSpec):
     """Build a candidate set by sampling from a bounded hypercube.
 
     Generates points by uniform or Latin Hypercube Sampling within the
-    specified feature bounds.  Suitable for **continuous** domains.
+    specified feature bounds. Suitable for **continuous** domains.
 
     In multi-fidelity mode, the target fidelity value is appended as the
     last column of the returned tensor.
@@ -152,8 +153,8 @@ class HypercubeCandidateSetSpec(CandidateSetSpec):
         """Return ``(n_points, n_dims)`` samples in ``[0, 1]^d``."""
         n_dims = len(self.bounds)
         if self.strategy == "lhs":
-            return latin_hypercube(self.n_points, n_dims)
-        return torch.rand(self.n_points, n_dims, dtype=torch.float64)
+            return latin_hypercube(self.n_points, n_dims, dtype=self.dtype)
+        return torch.rand(self.n_points, n_dims, dtype=self.dtype)
 
     # ------------------------------------------------------------------
     # Public API
@@ -182,13 +183,13 @@ class HypercubeCandidateSetSpec(CandidateSetSpec):
             Tensor of shape ``(n_points, d)`` or ``(n_points, d + 1)`` when
             ``target_fidelity_value`` is provided.
         """
-        lowers = torch.tensor([lo for lo, _ in self.bounds], dtype=torch.float64)
-        ranges = torch.tensor([hi - lo for lo, hi in self.bounds], dtype=torch.float64)
+        lowers = torch.tensor([lo for lo, _ in self.bounds], dtype=self.dtype)
+        ranges = torch.tensor([hi - lo for lo, hi in self.bounds], dtype=self.dtype)
         feature_points = lowers + self._sample_unit() * ranges  # (N, d)
 
         if target_fidelity_value is not None:
             fid_col = torch.full(
-                (self.n_points, 1), target_fidelity_value, dtype=torch.float64
+                (self.n_points, 1), target_fidelity_value, dtype=self.dtype
             )
             return torch.cat([feature_points, fid_col], dim=-1)
 
