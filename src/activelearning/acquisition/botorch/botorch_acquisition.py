@@ -121,7 +121,7 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
                 f"{self.__class__.__name__} requires a BoTorchGPSurrogate, "
                 f"but received {type(surrogate).__name__}."
             )
-        if surrogate._is_multi_fidelity and not self._supports_multi_fidelity:
+        if surrogate.is_multi_fidelity and not self._supports_multi_fidelity:
             warnings.warn(
                 f"{type(self).__name__} is not a multi-fidelity acquisition function "
                 "and will not account for fidelity costs or structure. "
@@ -206,7 +206,7 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         """
         if self._botorch_surrogate is None:
             return None
-        if not self._botorch_surrogate.is_multi_fidelity():
+        if not self._botorch_surrogate.is_multi_fidelity:
             return None
 
         if self._project_to_target_fidelity_fn_override is not None:
