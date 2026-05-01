@@ -71,6 +71,8 @@ oracle:
     1: 1.0
   gfn_version: 2
   ff: mmff
+  log_molecule_visualizations: true
+  molecule_visualization_limit: 25
 
 budget:
   available_budget: 3.0

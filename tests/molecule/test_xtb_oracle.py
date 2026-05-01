@@ -2,10 +2,14 @@
 
 import math
 
+import numpy as np
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+from activelearning.applications.molecules.plotting import (
+    build_xtb_query_molecule_figure,
+)
 from activelearning.applications.molecules.xtb_oracle import (
     ConformerConfig,
     XTBIPEAOracle,
@@ -15,6 +19,8 @@ from activelearning.applications.molecules.xtb_oracle import (
     _parse_total_energy,
     _write_best_rdkit_xyz,
 )
+from activelearning.oracle.config import XTBIPEAOracleConfig
+from activelearning.runtime import RuntimeContext
 from activelearning.utils.types import Candidate, Observation
 
 BENZENE_SELFIES = "[C][=C][C][=C][C][=C][Ring1][=Branch1]"
@@ -131,10 +137,34 @@ class TestXTBIPEAOracleConstruction:
     def test_valid_construction(self):
         oracle = XTBIPEAOracle(task="ea", fidelity_costs={1: 1.0, 2: 5.0, 3: 25.0})
         assert oracle is not None
+        assert oracle.log_molecule_visualizations is False
+        assert oracle._molecule_visualization_limit == 25
 
     def test_bad_task_raises(self):
         with pytest.raises(ValueError, match="task"):
             XTBIPEAOracle(task="free_energy", fidelity_costs={1: 1.0})
+
+    def test_bad_visualization_limit_raises(self):
+        with pytest.raises(ValueError, match="molecule_visualization_limit"):
+            XTBIPEAOracle(
+                task="ea",
+                fidelity_costs={1: 1.0},
+                molecule_visualization_limit=0,
+            )
+
+    def test_config_build_passes_visualization_options(self):
+        config = XTBIPEAOracleConfig(
+            task="ip",
+            fidelity_costs={1: 1.0},
+            log_molecule_visualizations=True,
+            molecule_visualization_limit=7,
+        )
+
+        oracle = config.build()
+
+        assert isinstance(oracle, XTBIPEAOracle)
+        assert oracle.log_molecule_visualizations is True
+        assert oracle._molecule_visualization_limit == 7
 
     def test_default_confidences_normalised(self):
         oracle = XTBIPEAOracle(task="ip", fidelity_costs={1: 1.0, 2: 10.0})
@@ -228,6 +258,207 @@ class TestXTBIPEAOracleQuery:
         assert obs[1].fidelity == 2
         assert obs[0].y == pytest.approx(1.0)
         assert obs[1].y == pytest.approx(3.5)
+
+    def test_query_does_not_log_visualization_by_default(self, oracle: XTBIPEAOracle):
+        logger = MagicMock()
+        oracle.bind_runtime_context(RuntimeContext(logger=logger))
+
+        with (
+            patch.object(oracle, "_xtb_score", return_value=2.5),
+            patch(
+                "activelearning.applications.molecules.xtb_oracle."
+                "build_xtb_query_molecule_figure"
+            ) as build_figure,
+        ):
+            oracle.query([Candidate(x=BENZENE_SELFIES, fidelity=1)])
+
+        build_figure.assert_not_called()
+        logger.log_figure.assert_not_called()
+
+    def test_query_visualization_without_logger_is_noop(self):
+        oracle = XTBIPEAOracle(
+            task="ea",
+            fidelity_costs={1: 1.0},
+            log_molecule_visualizations=True,
+        )
+
+        with (
+            patch.object(oracle, "_xtb_score", return_value=2.5),
+            patch(
+                "activelearning.applications.molecules.xtb_oracle."
+                "build_xtb_query_molecule_figure"
+            ) as build_figure,
+        ):
+            oracle.query([Candidate(x=BENZENE_SELFIES, fidelity=1)])
+
+        build_figure.assert_not_called()
+
+    def test_query_logs_visualization_when_enabled(self):
+        oracle = XTBIPEAOracle(
+            task="ea",
+            fidelity_costs={1: 1.0},
+            log_molecule_visualizations=True,
+            molecule_visualization_limit=7,
+        )
+        logger = MagicMock()
+        oracle.bind_runtime_context(RuntimeContext(logger=logger))
+        candidates = [Candidate(x=BENZENE_SELFIES, fidelity=1)]
+        figure = MagicMock()
+
+        with (
+            patch.object(oracle, "_xtb_score", return_value=2.5),
+            patch(
+                "activelearning.applications.molecules.xtb_oracle."
+                "build_xtb_query_molecule_figure",
+                return_value=figure,
+            ) as build_figure,
+            patch(
+                "activelearning.applications.molecules.xtb_oracle.plt.close"
+            ) as close,
+        ):
+            observations = oracle.query(candidates)
+
+        build_figure.assert_called_once_with(
+            candidates=candidates,
+            observations=observations,
+            task="ea",
+            mol_repr="selfies",
+            limit=7,
+        )
+        logger.log_figure.assert_called_once_with("xtb_ea_query_molecules", figure)
+        close.assert_called_once_with(figure)
+
+
+class TestXTBMoleculeVisualization:
+    class _FakeGridImage:
+        """Small array-like image test double returned by RDKit drawing."""
+
+        size = (260, 220)
+
+        def __array__(self, dtype=None):
+            image = np.zeros((220, 260, 3), dtype=np.uint8)
+            if dtype is not None:
+                return image.astype(dtype)
+            return image
+
+    def test_query_grid_is_capped_and_score_ranked(self):
+        candidates = [
+            Candidate(x="C", fidelity=1),
+            Candidate(x="CC", fidelity=1),
+            Candidate(x="CCC", fidelity=2),
+        ]
+        observations = [
+            Observation(x="C", y=1.0, fidelity=1),
+            Observation(x="CC", y=3.0, fidelity=1),
+            Observation(x="CCC", y=2.0, fidelity=2),
+        ]
+        captured: dict[str, object] = {}
+
+        def fake_grid(*args, **kwargs):
+            captured["molecules"] = args[0]
+            captured["legends"] = kwargs["legends"]
+            captured["mols_per_row"] = kwargs["molsPerRow"]
+            return self._FakeGridImage()
+
+        with patch(
+            "activelearning.applications.molecules.plotting.Draw.MolsToGridImage",
+            side_effect=fake_grid,
+        ):
+            figure = build_xtb_query_molecule_figure(
+                candidates,
+                observations,
+                task="ip",
+                mol_repr="smiles",
+                limit=2,
+            )
+
+        try:
+            legends = captured["legends"]
+            assert len(captured["molecules"]) == 2
+            assert captured["mols_per_row"] == 5
+            assert legends[0].startswith("#2 IP@fid=1: 3.000 eV")
+            assert legends[1].startswith("#3 IP@fid=2: 2.000 eV")
+            assert figure.axes[0].get_title() == "xTB IP queried molecules (top 2 of 3)"
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close(figure)
+
+    def test_query_grid_is_score_ranked_without_capping(self):
+        candidates = [
+            Candidate(x="C", fidelity=1),
+            Candidate(x="CC", fidelity=1),
+            Candidate(x="CCC", fidelity=2),
+        ]
+        observations = [
+            Observation(x="C", y=1.0, fidelity=1),
+            Observation(x="CC", y=3.0, fidelity=1),
+            Observation(x="CCC", y=2.0, fidelity=2),
+        ]
+        captured: dict[str, object] = {}
+
+        def fake_grid(*args, **kwargs):
+            captured["molecules"] = args[0]
+            captured["legends"] = kwargs["legends"]
+            return self._FakeGridImage()
+
+        with patch(
+            "activelearning.applications.molecules.plotting.Draw.MolsToGridImage",
+            side_effect=fake_grid,
+        ):
+            figure = build_xtb_query_molecule_figure(
+                candidates,
+                observations,
+                task="ea",
+                mol_repr="smiles",
+            )
+
+        try:
+            legends = captured["legends"]
+            assert len(captured["molecules"]) == 3
+            assert legends[0].startswith("#2 EA@fid=1: 3.000 eV")
+            assert legends[1].startswith("#3 EA@fid=2: 2.000 eV")
+            assert legends[2].startswith("#1 EA@fid=1: 1.000 eV")
+            assert figure.axes[0].get_title() == "xTB EA queried molecules"
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close(figure)
+
+    def test_query_grid_labels_invalid_molecules(self):
+        candidates = [Candidate(x="[Ring1]", fidelity=1)]
+        observations = [Observation(x="[Ring1]", y=math.nan, fidelity=1)]
+        captured: dict[str, object] = {}
+
+        def fake_grid(*args, **kwargs):
+            captured["legends"] = kwargs["legends"]
+            return self._FakeGridImage()
+
+        with (
+            patch(
+                "activelearning.applications.molecules.plotting.sf.decoder",
+                return_value="",
+            ),
+            patch(
+                "activelearning.applications.molecules.plotting.Draw.MolsToGridImage",
+                side_effect=fake_grid,
+            ),
+        ):
+            figure = build_xtb_query_molecule_figure(
+                candidates,
+                observations,
+                task="ea",
+                mol_repr="selfies",
+            )
+
+        try:
+            legend = captured["legends"][0]
+            assert "EA@fid=1: nan" in legend
+            assert "invalid: empty molecule" in legend
+        finally:
+            import matplotlib.pyplot as plt
+
+            plt.close(figure)
 
 
 # ---------------------------------------------------------------------------

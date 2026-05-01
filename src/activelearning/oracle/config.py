@@ -58,6 +58,10 @@ class XTBIPEAOracleConfig(BaseModel):
         Empirical correction subtracted from adiabatic IP/EA (eV).
     mol_repr : str
         Input molecules representation: ``"selfies"`` or ``"smiles"``.
+    log_molecule_visualizations : bool
+        Whether to log queried molecule visualizations when a logger is bound.
+    molecule_visualization_limit : int
+        Maximum number of queried molecules to display in each logged grid.
     """
 
     type: Literal["XTBIPEAOracle"] = "XTBIPEAOracle"
@@ -68,6 +72,8 @@ class XTBIPEAOracleConfig(BaseModel):
     ff: str = "mmff"
     correction_factor: float = 4.8455
     mol_repr: str = "selfies"
+    log_molecule_visualizations: bool = False
+    molecule_visualization_limit: int = Field(default=25, ge=1)
 
     def build(self) -> Oracle:
         from activelearning.applications.molecules.xtb_oracle import XTBIPEAOracle
@@ -80,6 +86,8 @@ class XTBIPEAOracleConfig(BaseModel):
             ff=self.ff,
             correction_factor=self.correction_factor,
             mol_repr=self.mol_repr,
+            log_molecule_visualizations=self.log_molecule_visualizations,
+            molecule_visualization_limit=self.molecule_visualization_limit,
         )
 
 

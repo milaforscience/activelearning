@@ -31,12 +31,16 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, List, Optional, Sequence
 
+import matplotlib.pyplot as plt
 import selfies as sf
 from rdkit import Chem, rdBase
 from rdkit.Chem import AllChem
 
 from activelearning.oracle.multi_fidelity_oracle import MultiFidelityOracle
 from activelearning.utils.types import Candidate, Observation
+from activelearning.applications.molecules.plotting import (
+    build_xtb_query_molecule_figure,
+)
 
 # CODATA 2018 Hartree → eV
 _HARTREE_TO_EV: float = 27.2114
@@ -358,6 +362,12 @@ class XTBIPEAOracle(MultiFidelityOracle):
         RDKit conformer generation settings.
     mol_repr : str
         Input molecules representation: ``"selfies"`` or ``"smiles"``.
+    log_molecule_visualizations : bool
+        Whether to log a 2-D RDKit grid of queried molecules when a runtime
+        logger is bound.
+    molecule_visualization_limit : int
+        Maximum number of queried molecules to include in each logged grid.
+        Large query batches are ranked by score and capped to this limit.
     Notes
     -----
     SELFIES strings that decode to the empty molecule and molecules that fail
@@ -377,9 +387,13 @@ class XTBIPEAOracle(MultiFidelityOracle):
         correction_factor: float = 4.8455,
         conformer_cfg: Optional[ConformerConfig] = None,
         mol_repr: str = "selfies",
+        log_molecule_visualizations: bool = False,
+        molecule_visualization_limit: int = 25,
     ) -> None:
         if task not in {"ea", "ip"}:
             raise ValueError(f"task must be 'ea' or 'ip', got {task!r}")
+        if molecule_visualization_limit < 1:
+            raise ValueError("molecule_visualization_limit must be at least 1.")
 
         self._task = task
         self._gfn_version = gfn_version
@@ -387,6 +401,8 @@ class XTBIPEAOracle(MultiFidelityOracle):
         self._correction_factor = correction_factor
         self._conformer_cfg = conformer_cfg or ConformerConfig()
         self._mol_repr = mol_repr
+        self.log_molecule_visualizations = log_molecule_visualizations
+        self._molecule_visualization_limit = molecule_visualization_limit
 
         max_cost = max(fidelity_costs.values())
         confidences = fidelity_confidences or {
@@ -424,6 +440,8 @@ class XTBIPEAOracle(MultiFidelityOracle):
                     metadata=candidate.metadata,
                 )
             )
+        if self.log_molecule_visualizations:
+            self._log_query_molecule_visualizations(candidates, observations)
         return observations
 
     # ------------------------------------------------------------------
@@ -440,6 +458,27 @@ class XTBIPEAOracle(MultiFidelityOracle):
             "Cannot extract molecules string: candidate.x is not a string and "
             "candidate.metadata does not contain a 'raw' key."
         )
+
+    def _log_query_molecule_visualizations(
+        self,
+        candidates: Sequence[Candidate],
+        observations: Sequence[Observation],
+    ) -> None:
+        """Log a capped RDKit grid of queried molecules, if a logger is bound."""
+        if self.logger is None:
+            return
+
+        figure = build_xtb_query_molecule_figure(
+            candidates=candidates,
+            observations=observations,
+            task=self._task,
+            mol_repr=self._mol_repr,
+            limit=self._molecule_visualization_limit,
+        )
+        try:
+            self.logger.log_figure(f"xtb_{self._task}_query_molecules", figure)
+        finally:
+            plt.close(figure)
 
     def _xtb_score(self, molecule: str, fidelity: int) -> float:
         """Evaluate a single molecules at the given fidelity level.
