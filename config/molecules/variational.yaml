@@ -16,7 +16,7 @@
 #   - uv sync --extra molecules
 #
 # Run with:
-#   uv run activelearning config/molecule_dkl_variational.yaml
+#   uv run activelearning config/molecules/variational.yaml
 
 runtime:
   device: cpu

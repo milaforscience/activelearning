@@ -1,5 +1,6 @@
 """GFlowNet-based sampler for active learning candidate generation."""
 
+from dataclasses import replace
 import logging
 import hydra
 import torch
@@ -41,6 +42,9 @@ class GFlowNetSampler(Sampler):
           interleaved with base-env actions (SetFix wrapper).
         - ``"first"`` — fidelity is chosen before any base-env action (Stack).
         - ``"last"`` — fidelity is chosen after all base-env actions (Stack).
+    fixed_fidelity : int, optional
+        Stamps the same fidelity onto every sampled candidate. Intended for
+        single-fidelity tutorial runs that still query a multi-fidelity oracle.
     """
 
     def __init__(
@@ -49,11 +53,15 @@ class GFlowNetSampler(Sampler):
         conf: DictConfig,
         n_fidelities: int = 1,
         fidelity_action: Literal["any", "first", "last"] = "any",
+        fixed_fidelity: int | None = None,
     ) -> None:
+        if fixed_fidelity is not None and n_fidelities != 1:
+            raise ValueError("fixed_fidelity is only supported when n_fidelities=1.")
         self.n_samples = n_samples
         self.conf = conf
         self.n_fidelities = n_fidelities
         self.fidelity_action = fidelity_action
+        self.fixed_fidelity = fixed_fidelity
         if n_fidelities == 1 and fidelity_action != "any":
             logger.warning(
                 "fidelity_action=%r has no effect when n_fidelities=1.",
@@ -139,6 +147,14 @@ class GFlowNetSampler(Sampler):
             return []
         return proxy_states_to_candidates(env.states2proxy(states), env)
 
+    def _apply_fixed_fidelity(self, candidates: list[Candidate]) -> list[Candidate]:
+        """Stamp a fixed fidelity onto sampled candidates when configured."""
+        if self.fixed_fidelity is None:
+            return candidates
+        return [
+            replace(candidate, fidelity=self.fixed_fidelity) for candidate in candidates
+        ]
+
     # ------------------------------------------------------------------
     # Public interface
     # ------------------------------------------------------------------
@@ -176,4 +192,5 @@ class GFlowNetSampler(Sampler):
         batch, _ = agent.sample_batch(n_forward=self.n_samples, train=False)
         raw_states = batch.get_terminating_states()
 
-        return self._states_to_candidates(raw_states, agent.env)
+        candidates = self._states_to_candidates(raw_states, agent.env)
+        return self._apply_fixed_fidelity(candidates)

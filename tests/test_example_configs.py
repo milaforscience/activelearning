@@ -74,22 +74,48 @@ def test_aim_logging_overlay_parses_when_merged_with_base_config() -> None:
 
 
 def test_molecule_dkl_exact_gflownet_config_parses() -> None:
-    """Ensure the SELFIES GFlowNet molecule config matches the current schema."""
-    config_path = REPOSITORY_ROOT / "config" / "molecule_dkl_exact_gflownet.yaml"
+    """Ensure the SELFIES GFlowNet molecule tutorial config matches the schema."""
+    config_path = REPOSITORY_ROOT / "config" / "molecules" / "gflownet_exact.yaml"
 
     config = load_and_parse(config_path, ActiveLearningConfig)
 
     assert config.sampler.type == "GFlowNetSampler"
+    assert config.sampler.fixed_fidelity == 1
+    assert config.selector.type == "TopKAcquisitionSelector"
     assert config.oracle.type == "XTBIPEAOracle"
     assert config.acquisition.type == "UpperConfidenceBound"
 
 
 def test_molecule_dkl_variational_gflownet_config_parses() -> None:
-    """Ensure the variational SELFIES GFlowNet molecule config matches the schema."""
-    config_path = REPOSITORY_ROOT / "config" / "molecule_dkl_variational_gflownet.yaml"
+    """Ensure the variational SELFIES GFlowNet molecule tutorial config matches the schema."""
+    config_path = REPOSITORY_ROOT / "config" / "molecules" / "gflownet_variational.yaml"
 
     config = load_and_parse(config_path, ActiveLearningConfig)
 
     assert config.sampler.type == "GFlowNetSampler"
+    assert config.sampler.fixed_fidelity == 1
+    assert config.selector.type == "TopKAcquisitionSelector"
     assert config.oracle.type == "XTBIPEAOracle"
-    assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
+    assert config.acquisition.type == "UpperConfidenceBound"
+
+
+def test_molecule_dkl_exact_pool_config_parses() -> None:
+    """Ensure the exact DKL pool-based molecule example matches the schema."""
+    config_path = REPOSITORY_ROOT / "config" / "molecules" / "exact.yaml"
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "PoolFileSampler"
+    assert config.surrogate.type == "ExactSelfiesDKLSurrogate"
+    assert config.oracle.type == "XTBIPEAOracle"
+
+
+def test_molecule_dkl_variational_pool_config_parses() -> None:
+    """Ensure the variational DKL pool-based molecule example matches the schema."""
+    config_path = REPOSITORY_ROOT / "config" / "molecules" / "variational.yaml"
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "PoolFileSampler"
+    assert config.surrogate.type == "VariationalSelfiesDKLSurrogate"
+    assert config.oracle.type == "XTBIPEAOracle"

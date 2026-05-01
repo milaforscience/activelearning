@@ -64,11 +64,21 @@ class TestGFlowNetSamplerInstantiation:
         sampler = GFlowNetSampler(n_samples=3, conf=conf)
         assert sampler.fidelity_action == "any"
 
+    def test_instantiation_stores_fixed_fidelity(self, gflownet_conf_2d):
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=3, conf=conf, fixed_fidelity=1)
+        assert sampler.fixed_fidelity == 1
+
     @pytest.mark.parametrize("action", ["any", "first", "last"])
     def test_fidelity_action_is_stored(self, gflownet_conf_2d, action):
         conf, _ = gflownet_conf_2d
         sampler = GFlowNetSampler(n_samples=3, conf=conf, fidelity_action=action)
         assert sampler.fidelity_action == action
+
+    def test_fixed_fidelity_requires_single_fidelity(self, gflownet_conf_2d):
+        conf, _ = gflownet_conf_2d
+        with pytest.raises(ValueError, match="fixed_fidelity"):
+            GFlowNetSampler(n_samples=3, conf=conf, n_fidelities=2, fixed_fidelity=1)
 
     @pytest.mark.parametrize("action", ["first", "last"])
     def test_warns_when_fidelity_action_set_with_single_fidelity(
@@ -259,6 +269,12 @@ class TestGFlowNetSamplerSmokeTest:
         candidates = sampler.sample(acquisition=_ConstantAcquisition())
         assert all(len(c.x) == 2 for c in candidates)
 
+    def test_sample_applies_fixed_fidelity(self, gflownet_conf_2d):
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=3, conf=conf, fixed_fidelity=1)
+        candidates = sampler.sample(acquisition=_ConstantAcquisition())
+        assert all(candidate.fidelity == 1 for candidate in candidates)
+
 
 # ---------------------------------------------------------------------------
 # Runtime logger integration
@@ -326,3 +342,14 @@ class TestGFlowNetSamplerConfigRoundTrip:
         cfg = GFlowNetSamplerConfig(n_samples=3, fidelity_action=action, conf=conf_raw)
         sampler = cfg.build()
         assert sampler.fidelity_action == action
+
+    def test_config_build_passes_fixed_fidelity_to_sampler(self, gflownet_conf_2d):
+        from activelearning.sampler.config import GFlowNetSamplerConfig
+
+        conf_dict, _ = gflownet_conf_2d
+        from omegaconf import OmegaConf
+
+        conf_raw = OmegaConf.to_container(conf_dict, resolve=True)
+        cfg = GFlowNetSamplerConfig(n_samples=3, fixed_fidelity=1, conf=conf_raw)
+        sampler = cfg.build()
+        assert sampler.fixed_fidelity == 1

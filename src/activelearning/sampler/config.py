@@ -70,6 +70,10 @@ class GFlowNetSamplerConfig(BaseModel):
         Number of candidates to generate per :meth:`~activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler.sample` call.
     n_fidelities : int
         Number of fidelity levels. ``1`` means single-fidelity.
+    fixed_fidelity : int or None
+        If set, stamp this fidelity onto every sampled candidate. This keeps
+        the sampler single-fidelity while still letting downstream multi-fidelity
+        components consume the candidates.
     log_dir : str or None
         Root directory for GFlowNet logs.  A temporary directory is created
         automatically when ``None``.
@@ -83,6 +87,7 @@ class GFlowNetSamplerConfig(BaseModel):
     n_samples: int = Field(gt=0)
     n_fidelities: int = 1
     fidelity_action: _FidelityAction = "any"
+    fixed_fidelity: int | None = Field(default=None, gt=0)
     log_dir: str | None = None
     conf: dict[str, Any] | None = None
 
@@ -92,6 +97,7 @@ class GFlowNetSamplerConfig(BaseModel):
             conf=compose_gflownet_conf(conf_overrides=self.conf, log_dir=self.log_dir),
             n_fidelities=self.n_fidelities,
             fidelity_action=self.fidelity_action,
+            fixed_fidelity=self.fixed_fidelity,
         )
 
 

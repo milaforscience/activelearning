@@ -44,6 +44,20 @@ def test_observation_creation(observation_x, observation_y, fidelity):
     assert observation.fidelity == fidelity
 
 
+def test_candidate_creation_with_metadata():
+    """Metadata should be stored unchanged on Candidate."""
+    metadata = {"raw": "[C][O]"}
+    candidate = Candidate(x=42, metadata=metadata)
+    assert candidate.metadata == metadata
+
+
+def test_observation_creation_with_metadata():
+    """Metadata should be stored unchanged on Observation."""
+    metadata = {"raw": "[C][O]"}
+    observation = Observation(x=10, y=5.5, metadata=metadata)
+    assert observation.metadata == metadata
+
+
 def test_candidate_immutability(candidate_x, fidelity):
     """Test that Candidate instances are frozen and cannot be modified."""
     candidate = Candidate(x=candidate_x, fidelity=fidelity)
@@ -73,6 +87,13 @@ def test_label_candidates(fidelity):
     assert observations[0] == Observation(x=1, y=10.0, fidelity=fidelity)
     assert observations[1] == Observation(x=2, y=20.0, fidelity=fidelity)
     assert observations[2] == Observation(x=3, y=30.0, fidelity=fidelity)
+
+
+def test_label_candidates_preserves_metadata():
+    """Candidate metadata should be copied to the resulting observations."""
+    metadata = {"raw": "[C][O]"}
+    observations = label_candidates([Candidate(x=1, metadata=metadata)], [10.0])
+    assert observations == [Observation(x=1, y=10.0, metadata=metadata)]
 
 
 def test_observations_to_tensors_empty_mapping_raises_key_error():
@@ -105,3 +126,20 @@ def test_candidates_to_tensor_missing_mapping_raises_value_error():
 
     with pytest.raises(ValueError, match="no fidelity_confidences mapping"):
         candidates_to_tensor(candidates)
+
+
+def test_observations_to_tensors_ignores_metadata():
+    """Metadata should not affect tensor conversion."""
+    X, y, fidelities = observations_to_tensors(
+        [Observation(x=1, y=10.0, metadata={"raw": "[C][O]"})]
+    )
+    assert X.tolist() == [1.0]
+    assert y.tolist() == [10.0]
+    assert fidelities == []
+
+
+def test_candidates_to_tensor_ignores_metadata():
+    """Metadata should not affect candidate tensor conversion."""
+    X, fidelities = candidates_to_tensor([Candidate(x=1, metadata={"raw": "[C][O]"})])
+    assert X.tolist() == [1.0]
+    assert fidelities == []

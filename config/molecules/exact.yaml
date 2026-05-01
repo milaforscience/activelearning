@@ -9,7 +9,7 @@
 #   - uv sync --extra molecules
 #
 # Run with:
-#   uv run activelearning config/molecule_dkl_exact.yaml
+#   uv run activelearning config/molecules/exact.yaml
 
 runtime:
   device: cpu
