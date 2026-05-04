@@ -226,6 +226,10 @@ class TestRunXTB:
 
 
 class TestXTBIPEAOracleConstructionValidation:
+    def test_empty_fidelity_costs_raises(self):
+        with pytest.raises(ValueError, match="fidelity_costs"):
+            XTBIPEAOracle(task="ea", fidelity_costs={})
+
     def test_bad_task_raises(self):
         with pytest.raises(ValueError, match="task"):
             XTBIPEAOracle(task="free_energy", fidelity_costs={1: 1.0})
@@ -309,6 +313,22 @@ class TestXTBIPEAOracleConstructionValidation:
             task="ea", fidelity_costs={1: 1.0}, fidelity_confidences={1: 0.8}
         )
         assert oracle.get_fidelity_confidences()[1] == pytest.approx(0.8)
+
+    def test_missing_custom_confidence_key_raises(self):
+        with pytest.raises(ValueError, match="missing keys"):
+            XTBIPEAOracle(
+                task="ea",
+                fidelity_costs={1: 1.0, 2: 5.0},
+                fidelity_confidences={1: 0.8},
+            )
+
+    def test_extra_custom_confidence_key_raises(self):
+        with pytest.raises(ValueError, match="unexpected keys"):
+            XTBIPEAOracle(
+                task="ea",
+                fidelity_costs={1: 1.0},
+                fidelity_confidences={1: 0.8, 2: 0.9},
+            )
 
     def test_get_costs(self):
         oracle = XTBIPEAOracle(task="ea", fidelity_costs={1: 1.0, 2: 5.0})

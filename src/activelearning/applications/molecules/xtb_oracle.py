@@ -426,6 +426,8 @@ class XTBIPEAOracle(MultiFidelityOracle):
     ) -> None:
         if task not in {"ea", "ip"}:
             raise ValueError(f"task must be 'ea' or 'ip', got {task!r}")
+        if not fidelity_costs:
+            raise ValueError("fidelity_costs must define at least one fidelity.")
         if molecule_visualization_limit < 1:
             raise ValueError("molecule_visualization_limit must be at least 1.")
 
@@ -441,10 +443,9 @@ class XTBIPEAOracle(MultiFidelityOracle):
         self.log_molecule_visualizations = log_molecule_visualizations
         self._molecule_visualization_limit = molecule_visualization_limit
 
-        max_cost = max(fidelity_costs.values())
-        confidences = fidelity_confidences or {
-            fid: cost / max_cost for fid, cost in fidelity_costs.items()
-        }
+        confidences = self._resolve_fidelity_confidences(
+            fidelity_costs, fidelity_confidences
+        )
 
         fidelity_configs: dict[int, dict[str, Any]] = {
             fid: {
@@ -620,6 +621,29 @@ class XTBIPEAOracle(MultiFidelityOracle):
                 f"Got: {invalid_counts}."
             )
         return dict(per_fidelity_num_conformers)
+
+    @staticmethod
+    def _resolve_fidelity_confidences(
+        fidelity_costs: dict[int, float],
+        fidelity_confidences: Optional[dict[int, float]],
+    ) -> dict[int, float]:
+        if fidelity_confidences is None:
+            max_cost = max(fidelity_costs.values())
+            return {fid: cost / max_cost for fid, cost in fidelity_costs.items()}
+
+        missing_fidelities = sorted(set(fidelity_costs) - set(fidelity_confidences))
+        extra_fidelities = sorted(set(fidelity_confidences) - set(fidelity_costs))
+        if missing_fidelities or extra_fidelities:
+            message_parts = []
+            if missing_fidelities:
+                message_parts.append(f"missing keys {missing_fidelities}")
+            if extra_fidelities:
+                message_parts.append(f"unexpected keys {extra_fidelities}")
+            raise ValueError(
+                "fidelity_confidences must have exactly the same fidelity keys as "
+                f"fidelity_costs; got {' and '.join(message_parts)}."
+            )
+        return dict(fidelity_confidences)
 
     def _conformer_cfg_for_fidelity(self, fidelity: int) -> ConformerConfig:
         num_conformers = self._per_fidelity_num_conformers.get(fidelity)
