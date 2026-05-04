@@ -631,8 +631,114 @@ class TestQBatchScore:
 
 
 # ===================================================================
-# cost_fn post-processing
+# score_with_pending() — BoTorchAcquisitionBase
 # ===================================================================
+
+
+class TestScoreWithPending:
+    """Tests for score_with_pending() and supports_pending_scoring."""
+
+    def test_supports_pending_scoring_is_true(self) -> None:
+        """All BoTorch acquisitions report supports_pending_scoring=True."""
+        assert StubAnalytic().supports_pending_scoring is True
+        assert StubQBatch().supports_pending_scoring is True
+
+    def test_empty_candidates_returns_empty(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+        candidates: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_qbatch import (
+            QExpectedImprovement,
+        )
+
+        acq = QExpectedImprovement()
+        acq.update(fitted_surrogate, single_fidelity_observations)
+        assert acq.score_with_pending([], candidates) == []
+
+    def test_empty_pending_falls_back_to_score(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+        candidates: list[Candidate],
+    ) -> None:
+        """When pending is empty, score_with_pending returns the same as score()."""
+        from activelearning.acquisition.botorch.botorch_qbatch import (
+            QExpectedImprovement,
+        )
+
+        acq = QExpectedImprovement()
+        acq.update(fitted_surrogate, single_fidelity_observations)
+        assert acq.score_with_pending(candidates, []) == acq.score(candidates)
+
+    def test_returns_uniform_before_update(
+        self,
+        candidates: list[Candidate],
+    ) -> None:
+        """Returns [1.0] for every candidate before update(), matching score()."""
+        from activelearning.acquisition.botorch.botorch_qbatch import (
+            QExpectedImprovement,
+        )
+
+        acq = QExpectedImprovement()
+        scores = acq.score_with_pending(candidates, [candidates[0]])
+        assert scores == [1.0] * len(candidates)
+
+    def test_returns_one_score_per_candidate(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+        candidates: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_qbatch import (
+            QExpectedImprovement,
+        )
+
+        acq = QExpectedImprovement()
+        acq.update(fitted_surrogate, single_fidelity_observations)
+        pending = [candidates[0]]
+        remaining = candidates[1:]
+        scores = acq.score_with_pending(remaining, pending)
+        assert len(scores) == len(remaining)
+
+    def test_x_pending_is_cleared_after_call(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+        candidates: list[Candidate],
+    ) -> None:
+        """The BoTorch acqf's X_pending must be None after score_with_pending returns."""
+        from activelearning.acquisition.botorch.botorch_qbatch import (
+            QExpectedImprovement,
+        )
+
+        acq = QExpectedImprovement()
+        acq.update(fitted_surrogate, single_fidelity_observations)
+        acq.score_with_pending(candidates[1:], [candidates[0]])
+        assert acq._botorch_acqf.X_pending is None  # type: ignore[union-attr]
+
+    def test_x_pending_is_cleared_even_on_error(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+        candidates: list[Candidate],
+    ) -> None:
+        """X_pending must be reset even when _score_encoded raises."""
+        from activelearning.acquisition.botorch.botorch_qbatch import (
+            QExpectedImprovement,
+        )
+
+        acq = QExpectedImprovement()
+        acq.update(fitted_surrogate, single_fidelity_observations)
+
+        def raise_on_call(X: Any) -> list[float]:
+            raise RuntimeError("simulated scoring failure")
+
+        acq._score_encoded = raise_on_call  # type: ignore[method-assign]
+        with pytest.raises(RuntimeError, match="simulated scoring failure"):
+            acq.score_with_pending(candidates[1:], [candidates[0]])
+        assert acq._botorch_acqf.X_pending is None  # type: ignore[union-attr]
 
 
 class TestCostWeightingPostProcessing:
