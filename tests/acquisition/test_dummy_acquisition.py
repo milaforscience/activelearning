@@ -37,7 +37,7 @@ def test_initialization(beta):
 def test_scoring_without_surrogate(test_candidates):
     """Test that scoring without a surrogate returns zeros."""
     acquisition = DummyAcquisition()
-    acq_values = acquisition(test_candidates)
+    acq_values = acquisition.score(test_candidates)
 
     assert len(acq_values) == len(test_candidates)
     assert all(acq_value == 0.0 for acq_value in acq_values)
@@ -51,7 +51,7 @@ def test_scoring_with_surrogate(beta, surrogate, observations):
 
     # Query known candidates
     candidates = [Candidate(x=1), Candidate(x=2)]
-    acq_values = acquisition(candidates)
+    acq_values = acquisition.score(candidates)
 
     assert len(acq_values) == 2
     # Known candidates: mean + beta * low_std (0.1)
@@ -67,7 +67,7 @@ def test_scoring_unknown_candidates(beta, surrogate, observations):
 
     # Query unknown candidate (higher std)
     candidates = [Candidate(x=999)]
-    acq_values = acquisition(candidates)
+    acq_values = acquisition.score(candidates)
 
     # Unknown candidates get mean_score + beta * 1.0
     expected_mean = 15.0  # (10 + 20) / 2
@@ -82,3 +82,9 @@ def test_surrogate_update(surrogate):
 
     acq.update(surrogate)
     assert acq.surrogate is surrogate
+
+
+def test_supports_singleton_scoring():
+    """Test that DummyAcquisition declares singleton scoring support."""
+    acq = DummyAcquisition()
+    assert acq.supports_singleton_scoring is True
