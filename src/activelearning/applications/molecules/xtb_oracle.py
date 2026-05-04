@@ -26,7 +26,7 @@ import logging
 import re
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, List, Optional, Sequence
@@ -67,8 +67,9 @@ class ConformerConfig:
 
     Parameters
     ----------
-    num_conf : int
-        Number of conformers to generate.
+    num_conformers : int
+        Default number of conformers to generate before selecting the
+        lowest-energy starting geometry.
     max_attempts : int
         Maximum embedding attempts.
     random_coords : bool
@@ -77,10 +78,14 @@ class ConformerConfig:
         RMSD threshold below which duplicate conformers are pruned.
     """
 
-    num_conf: int = 2
+    num_conformers: int = 2
     max_attempts: int = 100
     random_coords: bool = True
     prune_rms_thresh: float = 1.5
+
+    def __post_init__(self) -> None:
+        if self.num_conformers < 1:
+            raise ValueError("num_conformers must be at least 1.")
 
 
 def hartree_to_ev(hartree: float) -> float:
@@ -148,14 +153,14 @@ def _write_best_rdkit_xyz(
         mol_h = Chem.AddHs(mol)
         AllChem.EmbedMultipleConfs(
             mol_h,
-            numConfs=conformer_cfg.num_conf,
+            numConfs=conformer_cfg.num_conformers,
             pruneRmsThresh=conformer_cfg.prune_rms_thresh,
             maxAttempts=conformer_cfg.max_attempts,
             useRandomCoords=conformer_cfg.random_coords,
         )
 
-    num_conf = mol_h.GetNumConformers()
-    if num_conf == 0:
+    num_conformers_generated = mol_h.GetNumConformers()
+    if num_conformers_generated == 0:
         raise RuntimeError(f"RDKit failed to generate conformers for {smiles!r}")
 
     ff_name = ff.lower()
@@ -166,7 +171,7 @@ def _write_best_rdkit_xyz(
             mp = AllChem.MMFFGetMoleculeProperties(mol_h, mmffVariant="MMFF94")
         if not has_params or mp is None:
             raise RuntimeError(f"MMFF parameters unavailable for {smiles!r}")
-        for conf_id in range(num_conf):
+        for conf_id in range(num_conformers_generated):
             with rdBase.BlockLogs():
                 AllChem.MMFFOptimizeMolecule(mol_h, confId=conf_id, maxIters=1000)
                 force_field = AllChem.MMFFGetMoleculeForceField(
@@ -182,7 +187,7 @@ def _write_best_rdkit_xyz(
             has_params = AllChem.UFFHasAllMoleculeParams(mol_h)
         if not has_params:
             raise RuntimeError(f"UFF parameters unavailable for {smiles!r}")
-        for conf_id in range(num_conf):
+        for conf_id in range(num_conformers_generated):
             with rdBase.BlockLogs():
                 AllChem.UFFOptimizeMolecule(mol_h, confId=conf_id, maxIters=1000)
                 force_field = AllChem.UFFGetMoleculeForceField(mol_h, confId=conf_id)
@@ -367,7 +372,10 @@ class XTBIPEAOracle(MultiFidelityOracle):
         Empirical correction subtracted from adiabatic IP/EA (eV).
         Default 4.8455 matches the MF-GFN paper (GFN2-xTB).
     conformer_cfg : ConformerConfig, optional
-        RDKit conformer generation settings.
+        Global/default RDKit conformer generation settings.
+    per_fidelity_num_conformers : dict[int, int], optional
+        Optional per-fidelity override for ``conformer_cfg.num_conformers``.
+        Unlisted fidelities fall back to the global/default setting.
     mol_repr : str
         Input molecules representation: ``"selfies"`` or ``"smiles"``.
     log_molecule_visualizations : bool
@@ -394,6 +402,7 @@ class XTBIPEAOracle(MultiFidelityOracle):
         ff: str = "mmff",
         correction_factor: float = 4.8455,
         conformer_cfg: Optional[ConformerConfig] = None,
+        per_fidelity_num_conformers: Optional[dict[int, int]] = None,
         mol_repr: str = "selfies",
         log_molecule_visualizations: bool = False,
         molecule_visualization_limit: int = 25,
@@ -408,6 +417,9 @@ class XTBIPEAOracle(MultiFidelityOracle):
         self._ff = ff
         self._correction_factor = correction_factor
         self._conformer_cfg = conformer_cfg or ConformerConfig()
+        self._per_fidelity_num_conformers = self._validate_per_fidelity_num_conformers(
+            per_fidelity_num_conformers, fidelity_costs
+        )
         self._mol_repr = mol_repr
         self.log_molecule_visualizations = log_molecule_visualizations
         self._molecule_visualization_limit = molecule_visualization_limit
@@ -524,10 +536,11 @@ class XTBIPEAOracle(MultiFidelityOracle):
 
             with TemporaryDirectory(prefix="xtb_mol_") as tmp:
                 workdir = Path(tmp)
+                conformer_cfg = self._conformer_cfg_for_fidelity(fidelity)
                 neutral_xyz = _write_best_rdkit_xyz(
                     smiles=smiles,
                     xyz_path=workdir / "neutral_mmff.xyz",
-                    conformer_cfg=self._conformer_cfg,
+                    conformer_cfg=conformer_cfg,
                     ff=self._ff,
                 )
 
@@ -563,6 +576,39 @@ class XTBIPEAOracle(MultiFidelityOracle):
                 exc_info=True,
             )
             return float("nan")
+
+    @staticmethod
+    def _validate_per_fidelity_num_conformers(
+        per_fidelity_num_conformers: Optional[dict[int, int]],
+        fidelity_costs: dict[int, float],
+    ) -> dict[int, int]:
+        if per_fidelity_num_conformers is None:
+            return {}
+        unknown_fidelities = sorted(
+            set(per_fidelity_num_conformers) - set(fidelity_costs)
+        )
+        if unknown_fidelities:
+            raise ValueError(
+                "per_fidelity_num_conformers contains unsupported fidelities: "
+                f"{unknown_fidelities}."
+            )
+        invalid_counts = {
+            fidelity: count
+            for fidelity, count in per_fidelity_num_conformers.items()
+            if count < 1
+        }
+        if invalid_counts:
+            raise ValueError(
+                "per_fidelity_num_conformers must contain positive integers. "
+                f"Got: {invalid_counts}."
+            )
+        return dict(per_fidelity_num_conformers)
+
+    def _conformer_cfg_for_fidelity(self, fidelity: int) -> ConformerConfig:
+        num_conformers = self._per_fidelity_num_conformers.get(fidelity)
+        if num_conformers is None:
+            return self._conformer_cfg
+        return replace(self._conformer_cfg, num_conformers=num_conformers)
 
     def _vertical_score(self, xyz_path: Path) -> float:
         """Run ``xtb --vip``/``--vea`` and parse the result.

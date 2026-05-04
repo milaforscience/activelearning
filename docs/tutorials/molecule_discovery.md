@@ -73,6 +73,12 @@ The three xTB fidelities trade cost for accuracy:
 | `2` | xTB-optimise the neutral geometry, then compute vertical IP/EA. | `3.5` |
 | `3` | Optimise neutral and ionic geometries, then compute adiabatic IP/EA. | `7.0` |
 
+The oracle also controls how many RDKit conformers are generated before xTB
+starts. `oracle.num_conformers` is the global/default count, and
+`oracle.per_fidelity_num_conformers` can override that default for specific
+fidelities. This only changes the RDKit starting-geometry search; it does not
+change the definition of the xTB fidelity itself.
+
 !!! warning "External dependency"
     The Python `molecules` extra installs SELFIES and RDKit, but the `xtb` executable must be installed separately and available on your `PATH`. Check this before running a molecule experiment:
 

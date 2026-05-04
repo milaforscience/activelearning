@@ -5,6 +5,7 @@ import math
 import numpy as np
 import pytest
 from pathlib import Path
+from pydantic import ValidationError
 from unittest.mock import patch, MagicMock
 
 from activelearning.applications.molecules.plotting import (
@@ -83,7 +84,7 @@ class TestHelpers:
                 _write_best_rdkit_xyz(
                     smiles="C",
                     xyz_path=tmp_path / "methane.xyz",
-                    conformer_cfg=ConformerConfig(num_conf=1),
+                    conformer_cfg=ConformerConfig(num_conformers=1),
                     ff="mmff",
                 )
 
@@ -134,6 +135,10 @@ class TestParsers:
 
 
 class TestXTBIPEAOracleConstruction:
+    def test_conformer_config_rejects_non_positive_num_conformers(self):
+        with pytest.raises(ValueError, match="num_conformers"):
+            ConformerConfig(num_conformers=0)
+
     def test_valid_construction(self):
         oracle = XTBIPEAOracle(task="ea", fidelity_costs={1: 1.0, 2: 5.0, 3: 25.0})
         assert oracle is not None
@@ -165,6 +170,52 @@ class TestXTBIPEAOracleConstruction:
         assert isinstance(oracle, XTBIPEAOracle)
         assert oracle.log_molecule_visualizations is True
         assert oracle._molecule_visualization_limit == 7
+
+    def test_config_build_passes_conformer_options(self):
+        config = XTBIPEAOracleConfig(
+            task="ea",
+            fidelity_costs={1: 1.0, 2: 5.0, 3: 25.0},
+            num_conformers=3,
+            per_fidelity_num_conformers={1: 1, 3: 4},
+        )
+
+        oracle = config.build()
+
+        assert isinstance(oracle, XTBIPEAOracle)
+        assert oracle._conformer_cfg.num_conformers == 3
+        assert oracle._per_fidelity_num_conformers == {1: 1, 3: 4}
+
+    def test_config_defaults_to_global_num_conformers(self):
+        config = XTBIPEAOracleConfig(task="ea", fidelity_costs={1: 1.0})
+
+        oracle = config.build()
+
+        assert oracle._conformer_cfg.num_conformers == 2
+        assert oracle._per_fidelity_num_conformers == {}
+
+    def test_config_rejects_non_positive_per_fidelity_num_conformers(self):
+        with pytest.raises(ValidationError, match="per_fidelity_num_conformers"):
+            XTBIPEAOracleConfig(
+                task="ea",
+                fidelity_costs={1: 1.0, 2: 5.0},
+                per_fidelity_num_conformers={1: 0},
+            )
+
+    def test_config_rejects_unknown_per_fidelity_num_conformers(self):
+        with pytest.raises(ValidationError, match="unsupported fidelities"):
+            XTBIPEAOracleConfig(
+                task="ea",
+                fidelity_costs={1: 1.0, 2: 5.0},
+                per_fidelity_num_conformers={3: 4},
+            )
+
+    def test_config_rejects_extra_fields(self):
+        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+            XTBIPEAOracleConfig(
+                task="ea",
+                fidelity_costs={1: 1.0},
+                unexpected_field=True,
+            )
 
     def test_default_confidences_normalised(self):
         oracle = XTBIPEAOracle(task="ip", fidelity_costs={1: 1.0, 2: 10.0})
@@ -509,6 +560,34 @@ class TestXTBScoreFidelityRouting:
         opt_mock.assert_called_once()
         vert_mock.assert_called_once()
         assert result == pytest.approx(2.0)
+
+    def test_per_fidelity_conformer_override_is_used(self):
+        oracle = XTBIPEAOracle(
+            task="ea",
+            fidelity_costs={1: 1.0, 2: 5.0, 3: 25.0},
+            conformer_cfg=ConformerConfig(num_conformers=3),
+            per_fidelity_num_conformers={1: 1, 3: 4},
+        )
+        rdkit_p, opt_p, vert_p, adiab_p = self._mock_xtb_helpers(oracle)
+        with rdkit_p as rdkit_mock, opt_p, vert_p, adiab_p:
+            oracle._xtb_score(BENZENE_SELFIES, fidelity=3)
+
+        conformer_cfg = rdkit_mock.call_args.kwargs["conformer_cfg"]
+        assert conformer_cfg.num_conformers == 4
+
+    def test_unlisted_fidelity_uses_global_num_conformers(self):
+        oracle = XTBIPEAOracle(
+            task="ea",
+            fidelity_costs={1: 1.0, 2: 5.0, 3: 25.0},
+            conformer_cfg=ConformerConfig(num_conformers=3),
+            per_fidelity_num_conformers={1: 1, 3: 4},
+        )
+        rdkit_p, opt_p, vert_p, adiab_p = self._mock_xtb_helpers(oracle)
+        with rdkit_p as rdkit_mock, opt_p, vert_p, adiab_p:
+            oracle._xtb_score(BENZENE_SELFIES, fidelity=2)
+
+        conformer_cfg = rdkit_mock.call_args.kwargs["conformer_cfg"]
+        assert conformer_cfg.num_conformers == 3
 
     def test_fidelity3_calls_two_opts_then_adiabatic(self, oracle):
         rdkit_p, opt_p, vert_p, adiab_p = self._mock_xtb_helpers(oracle)

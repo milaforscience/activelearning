@@ -83,7 +83,8 @@ oracle:
     1: 1.0
     2: 3.5
     3: 7.0
-  per_fidelity_num_conf:
+  # Optional overrides; unlisted fidelities fall back to num_conformers (default: 2).
+  per_fidelity_num_conformers:
     1: 1
     2: 2
     3: 4
