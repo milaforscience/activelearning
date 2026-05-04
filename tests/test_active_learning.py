@@ -169,7 +169,7 @@ def test_active_learning_stops_when_selector_returns_empty(
 ):
     """Test loop terminates when selector returns no candidates."""
     empty_selector = Mock()
-    empty_selector.return_value = []
+    empty_selector.select.return_value = []
 
     dataset_out, cost, num_iter = active_learning(
         dataset=dataset,
@@ -264,14 +264,14 @@ class RuntimeLoggingSampler(PoolScoreSampler):
 class RuntimeLoggingSelector(TopKAcquisitionSelector):
     """Selector test double that emits metrics through the bound runtime logger."""
 
-    def __call__(
+    def select(
         self,
         candidates: Sequence[Candidate],
         acquisition: Optional[DummyAcquisition] = None,
         cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
         round_budget: Optional[float] = None,
     ) -> list[Candidate]:
-        selected = super().__call__(
+        selected = super().select(
             candidates,
             acquisition=acquisition,
             cost_fn=cost_fn,

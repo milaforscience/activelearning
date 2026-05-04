@@ -50,7 +50,7 @@ def varying_cost_fn():
 def test_raises_without_acquisition(selector, candidates, uniform_cost_fn):
     """Test that selector raises ValueError when acquisition is None."""
     with pytest.raises(ValueError, match="Acquisition function is required"):
-        selector(
+        selector.select(
             candidates, acquisition=None, cost_fn=uniform_cost_fn, round_budget=100.0
         )
 
@@ -58,7 +58,7 @@ def test_raises_without_acquisition(selector, candidates, uniform_cost_fn):
 def test_raises_without_cost_fn(selector, candidates, mock_acquisition):
     """Test that selector raises ValueError when cost_fn is None."""
     with pytest.raises(ValueError, match="Cost function is required"):
-        selector(
+        selector.select(
             candidates, acquisition=mock_acquisition, cost_fn=None, round_budget=100.0
         )
 
@@ -66,7 +66,7 @@ def test_raises_without_cost_fn(selector, candidates, mock_acquisition):
 def test_raises_without_budget(selector, candidates, mock_acquisition, uniform_cost_fn):
     """Test that selector raises ValueError when round_budget is None."""
     with pytest.raises(ValueError, match="Budget is required"):
-        selector(
+        selector.select(
             candidates,
             acquisition=mock_acquisition,
             cost_fn=uniform_cost_fn,
@@ -76,7 +76,7 @@ def test_raises_without_budget(selector, candidates, mock_acquisition, uniform_c
 
 def test_empty_candidates(selector, mock_acquisition, uniform_cost_fn):
     """Test selector returns empty list for empty candidates."""
-    result = selector(
+    result = selector.select(
         [], acquisition=mock_acquisition, cost_fn=uniform_cost_fn, round_budget=100.0
     )
     assert result == []
@@ -94,7 +94,7 @@ def test_selects_by_utility_cost_ratio(selector, candidates):
     def cost_fn(c):
         return [10.0, 5.0, 2.0, 1.0, 1.0]
 
-    selected = selector(
+    selected = selector.select(
         candidates, acquisition=acquisition, cost_fn=cost_fn, round_budget=100.0
     )
 
@@ -126,7 +126,7 @@ def test_stops_when_budget_exhausted(selector, candidates):
 
     # Budget is 3.0 - should select candidates 0 (cost 1) and 1 (cost 1), total 2.0
     # Cannot add candidate 2 (cost 2) as 2+2=4 > 3
-    selected = selector(
+    selected = selector.select(
         candidates, acquisition=acquisition, cost_fn=cost_fn, round_budget=3.0
     )
 
@@ -144,7 +144,7 @@ def test_uniform_costs_varying_utilities(selector, candidates, uniform_cost_fn):
     acquisition.score.return_value = [10.0, 20.0, 30.0, 40.0, 50.0]
 
     # Budget 12.0 allows 2 candidates (2 * 5.0 = 10.0)
-    selected = selector(
+    selected = selector.select(
         candidates, acquisition=acquisition, cost_fn=uniform_cost_fn, round_budget=12.0
     )
 
@@ -163,7 +163,7 @@ def test_varying_costs_uniform_utilities(selector, candidates, varying_cost_fn):
     acquisition.score.return_value = [100.0, 100.0, 100.0, 100.0, 100.0]
 
     # Budget 6.0 allows candidates 0 (cost 1), 1 (cost 2), 2 (cost 3) = 6.0 total
-    selected = selector(
+    selected = selector.select(
         candidates, acquisition=acquisition, cost_fn=varying_cost_fn, round_budget=6.0
     )
 
@@ -183,7 +183,7 @@ def test_zero_cost_candidate(selector):
     def cost_fn(c):
         return [0.0, 5.0, 10.0]  # First candidate has zero cost
 
-    selected = selector(
+    selected = selector.select(
         candidates, acquisition=acquisition, cost_fn=cost_fn, round_budget=15.0
     )
 
@@ -203,14 +203,14 @@ def test_negative_cost_candidate(selector):
         return [-5.0, 5.0, 10.0]  # First candidate has negative cost
 
     with pytest.raises(ValueError, match="negative cost"):
-        selector(
+        selector.select(
             candidates, acquisition=acquisition, cost_fn=cost_fn, round_budget=15.0
         )
 
 
 def test_zero_budget(selector, candidates, mock_acquisition, uniform_cost_fn):
     """Test that zero budget results in no selections."""
-    selected = selector(
+    selected = selector.select(
         candidates,
         acquisition=mock_acquisition,
         cost_fn=uniform_cost_fn,
@@ -231,7 +231,7 @@ def test_exact_budget_fit(selector):
         return [5.0, 5.0, 5.0]
 
     # Budget exactly 15.0 = 3 candidates * 5.0
-    selected = selector(
+    selected = selector.select(
         candidates, acquisition=acquisition, cost_fn=cost_fn, round_budget=15.0
     )
 
@@ -252,7 +252,7 @@ def test_greedy_not_optimal(selector):
     # Budget 10.0 - greedy by ratio picks candidate 1 first (ratio 9/5=1.8),
     # then cannot fit candidate 0 (cost 6.0) in the remaining budget.
     # The true max-utility feasible set is candidate 0 alone (utility 10.0 > 9.0).
-    selected = selector(
+    selected = selector.select(
         candidates, acquisition=acquisition, cost_fn=cost_fn, round_budget=10.0
     )
 

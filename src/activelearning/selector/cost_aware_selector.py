@@ -12,7 +12,7 @@ class CostAwareSelector(Selector):
     budget is exhausted. Does not require a fixed number of samples.
     """
 
-    def __call__(
+    def select(
         self,
         candidates: Sequence[Candidate],
         acquisition: Optional[Acquisition] = None,

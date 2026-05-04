@@ -358,6 +358,117 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
             return raw_scores
         return cost_weighting(raw_scores, cand_list)
 
+    @property
+    def supports_pending_scoring(self) -> bool:
+        """Whether this acquisition supports pending-aware singleton scoring.
+
+        Always ``True`` for BoTorch acquisitions: all BoTorch acquisition
+        functions expose ``set_X_pending()``, which is used by
+        :meth:`score_with_pending` to condition on already-selected candidates
+        without rebuilding the acquisition object.
+        """
+        return True
+
+    def score_with_pending(
+        self,
+        candidates: Iterable[Candidate],
+        pending_candidates: Iterable[Candidate],
+        cost_weighting: Optional[
+            Callable[[list[float], list[Candidate]], list[float]]
+        ] = None,
+    ) -> list[float]:
+        """Score candidates conditioned on a set of pending (already-selected) candidates.
+
+        Intended for pending-aware greedy batch construction: at each step the
+        already-selected candidates are passed as ``pending_candidates`` so the
+        acquisition accounts for their expected information gain before scoring
+        the remainder.
+
+        Internally this calls ``set_X_pending(X_pending)`` on the live BoTorch
+        acquisition object, where ``X_pending`` has shape ``(P, d)`` — the full
+        model-space dimensionality including the fidelity column in multi-fidelity
+        mode. For each candidate ``X`` with shape ``(N, 1, d)``, BoTorch
+        broadcasts the pending tensor and evaluates a q-batch of size ``1 + P``,
+        so each score reflects the marginal value of the candidate *given* the
+        pending observations.
+
+        The pending state is always restored to its previous value via
+        ``try/finally``, so the stored acquisition is left unchanged after the
+        call, regardless of whether scoring raises.
+
+        Falls back to :meth:`score` when ``pending_candidates`` is empty.
+        Returns a constant score of ``1.0`` for every candidate when the
+        acquisition has not yet been coupled to a fitted surrogate, consistent
+        with :meth:`score` behaviour on the first round.
+
+        .. warning::
+            **Entropy-search acquisitions (qMES, qMFMES)** override
+            ``set_X_pending`` to fit a full fantasy GP on the pending points.
+            Each call to this method therefore triggers a GP fantasization step,
+            which can be expensive when selecting large batches with a greedy
+            loop. For cheaper acquisitions (qEI, qNEI, qKG, qUCB, etc.),
+            ``set_X_pending`` is a simple attribute assignment and the overhead
+            is negligible.
+
+        .. note::
+            **Multi-fidelity mode**: ``encode_candidates`` requires every
+            candidate — including those in ``pending_candidates`` — to have a
+            ``fidelity`` value set. Passing candidates without fidelity in MF
+            mode will raise a ``ValueError``.
+
+        Parameters
+        ----------
+        candidates : Iterable[Candidate]
+            Candidates to score.
+        pending_candidates : Iterable[Candidate]
+            Candidates that have already been selected in the current batch but
+            not yet observed. The acquisition will condition on these.
+            In multi-fidelity mode every pending candidate must carry a
+            ``fidelity`` value.
+        cost_weighting : callable, optional
+            If provided, called as ``cost_weighting(raw_scores, candidates)``
+            after scoring.
+
+        Returns
+        -------
+        result : list[float]
+            Acquisition scores in the same order as ``candidates``.
+            All ``1.0`` when called before ``update()``.
+
+        Raises
+        ------
+        ValueError
+            If the surrogate was fitted in multi-fidelity mode and any candidate
+            in ``pending_candidates`` does not carry a fidelity value.
+        """
+        cand_list = list(candidates)
+        if not cand_list:
+            return []
+
+        pending_list = list(pending_candidates)
+        if not pending_list:
+            return self.score(cand_list, cost_weighting)
+
+        if self._botorch_acqf is None:
+            return [1.0] * len(cand_list)
+
+        assert self._botorch_surrogate is not None  # type: ignore[union-attr]
+
+        X = self._botorch_surrogate.encode_candidates(cand_list).unsqueeze(1)
+        X_pending = self._botorch_surrogate.encode_candidates(pending_list)
+
+        botorch_acqf = self._botorch_acqf
+        previous_pending = botorch_acqf.X_pending
+        botorch_acqf.set_X_pending(X_pending)
+        try:
+            raw_scores = self._score_encoded(X)
+        finally:
+            botorch_acqf.set_X_pending(previous_pending)
+
+        if cost_weighting is None:
+            return raw_scores
+        return cost_weighting(raw_scores, cand_list)
+
 
 class AnalyticBoTorchAcquisition(BoTorchAcquisitionBase):
     """Intermediate base class for analytic BoTorch acquisition functions.

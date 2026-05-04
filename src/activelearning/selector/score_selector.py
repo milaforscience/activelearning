@@ -17,7 +17,7 @@ class TopKAcquisitionSelector(Selector):
     def __init__(self, num_samples: int) -> None:
         self.num_samples = num_samples
 
-    def __call__(
+    def select(
         self,
         candidates: Sequence[Candidate],
         acquisition: Optional[Acquisition] = None,

@@ -106,7 +106,7 @@ def active_learning(
         round_budget = budget.get_round_budget(num_rounds)
 
         # Pass acquisition, cost_fn, and round budget to selector for cost-aware selection
-        selected_samples = selector(
+        selected_samples = selector.select(
             samples,
             acquisition=acquisition,
             cost_fn=oracle.get_costs,

@@ -13,7 +13,7 @@ class Selector(ABC, ALRuntimeMixin):
     """
 
     @abstractmethod
-    def __call__(
+    def select(
         self,
         candidates: Sequence[Candidate],
         acquisition: Optional[Any] = None,
@@ -35,6 +35,7 @@ class Selector(ABC, ALRuntimeMixin):
         round_budget : Optional[float]
             Budget limit for this round (optional).
             Required by cost-aware selectors.
+
         Returns
         -------
         result : Sequence[Candidate]

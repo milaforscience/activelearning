@@ -40,7 +40,7 @@ def test_top_k_selection_by_score(
     selector, acquisition_with_surrogate, test_candidates
 ):
     """Test that selector returns top-k candidates by acquisition score."""
-    selected = selector(test_candidates, acquisition=acquisition_with_surrogate)
+    selected = selector.select(test_candidates, acquisition=acquisition_with_surrogate)
 
     expected_length = min(selector.num_samples, len(test_candidates))
     assert len(selected) == expected_length
@@ -51,7 +51,7 @@ def test_correct_ordering_highest_first(acquisition_with_surrogate):
     """Test that selected candidates are ordered by score (highest first)."""
     selector = TopKAcquisitionSelector(num_samples=3)
     candidates = [Candidate(x=1), Candidate(x=5), Candidate(x=10)]
-    selected = selector(candidates, acquisition=acquisition_with_surrogate)
+    selected = selector.select(candidates, acquisition=acquisition_with_surrogate)
 
     # Get acquisition values to verify ordering
     acq_values = acquisition_with_surrogate.score(selected)
@@ -65,7 +65,7 @@ def test_num_samples_exceeds_candidates_length(acquisition_with_surrogate):
     """Test that requesting more samples than candidates returns all."""
     selector = TopKAcquisitionSelector(num_samples=10)
     candidates = [Candidate(x=i) for i in range(5)]
-    selected = selector(candidates, acquisition=acquisition_with_surrogate)
+    selected = selector.select(candidates, acquisition=acquisition_with_surrogate)
 
     assert len(selected) == 5
 
@@ -86,7 +86,7 @@ def test_selection_with_varied_scores():
 
     selector = TopKAcquisitionSelector(num_samples=2)
     candidates = [Candidate(x=1), Candidate(x=2), Candidate(x=3), Candidate(x=4)]
-    selected = selector(candidates, acquisition=acquisition)
+    selected = selector.select(candidates, acquisition=acquisition)
 
     # Top 2 should be x=3 (200.0) and x=1 (100.0)
     assert len(selected) == 2
