@@ -37,13 +37,14 @@ class PositionalEncoding(nn.Module):
     def __init__(self, embed_dim: int, max_len: int, dropout: float = 0.0) -> None:
         super().__init__()
         self.dropout = nn.Dropout(dropout)
+        positional_dtype = torch.get_default_dtype()
 
-        position = torch.arange(max_len, dtype=torch.float32).unsqueeze(1)
+        position = torch.arange(max_len, dtype=positional_dtype).unsqueeze(1)
         div_term = torch.exp(
-            torch.arange(0, embed_dim, 2, dtype=torch.float32)
+            torch.arange(0, embed_dim, 2, dtype=positional_dtype)
             * (-math.log(10000.0) / embed_dim)
         )
-        pe = torch.zeros(max_len, 1, embed_dim)
+        pe = torch.zeros(max_len, 1, embed_dim, dtype=positional_dtype)
         pe[:, 0, 0::2] = torch.sin(position * div_term)
         # Odd embed_dim leaves one more sine slot than cosine slot.
         pe[:, 0, 1::2] = torch.cos(position * div_term[: pe[:, 0, 1::2].shape[1]])

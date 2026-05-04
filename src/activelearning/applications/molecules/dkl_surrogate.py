@@ -18,6 +18,11 @@ the surrogate appends the BoTorch-facing **fidelity confidence** from
 ``set_fidelity_confidences()`` as the last column of the feature tensor before
 the GP. This keeps the fidelity coordinate in the continuous space used by
 BoTorch's multi-fidelity helpers such as ``project_to_target_fidelity``.
+
+Floating-point tensors in the SELFIES DKL stack follow ``RuntimeContext.dtype``
+(``torch.float64`` by default). Token IDs remain integer tensors inside the
+encoder/tokenizer path and are only cast to the runtime floating dtype where
+BoTorch / GPyTorch expect floating inputs.
 """
 
 from __future__ import annotations
@@ -35,6 +40,7 @@ from activelearning.applications.molecules.selfies_transformer_encoder import (
     SelfiesTransformerEncoder,
 )
 from activelearning.applications.molecules.selfies_kernel import SelfiesKernel
+from activelearning.runtime import RuntimeContext
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
 from activelearning.utils.types import Candidate, Observation
 
@@ -94,10 +100,7 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
                 "target_fidelity must be set when multi_fidelity=True. "
                 "Set it to the maximum fidelity level (e.g. max(fidelity_costs))."
             )
-        # GPyTorch requires float64 throughout: Cholesky solves inside the GP
-        # are numerically unstable at float32.  The encoder must match the GP's
-        # dtype so its output flows directly into the kernel without a cast.
-        self._encoder = encoder.double()
+        self._encoder = encoder
         self._training = training_params
         self._include_fidelity: bool = multi_fidelity
 
@@ -108,6 +111,25 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         # the correct value even before the first fit() call.
         self._is_multi_fidelity = multi_fidelity
 
+    def bind_runtime_context(self, runtime_context: RuntimeContext) -> None:
+        """Move the DKL stack onto the shared runtime device and dtype."""
+        super().bind_runtime_context(runtime_context)
+        self._apply_runtime_context()
+
+    def _apply_runtime_context(self) -> None:
+        """Apply the currently bound runtime device/dtype to all learnable modules."""
+        self._encoder = self._encoder.to(device=self.device, dtype=self.dtype)
+        if self.model is not None:
+            self.model = self.model.to(device=self.device, dtype=self.dtype)
+        if getattr(self, "_gp_model", None) is not None:
+            self._gp_model = self._gp_model.to(device=self.device, dtype=self.dtype)
+        if getattr(self, "_likelihood", None) is not None:
+            self._likelihood = self._likelihood.to(device=self.device, dtype=self.dtype)
+        if getattr(self, "_botorch_adapter", None) is not None:
+            self._botorch_adapter = self._botorch_adapter.to(
+                device=self.device, dtype=self.dtype
+            )
+
     def fit(self, observations: Iterable[Observation]) -> None:
         obs_list = list(observations)
         if not obs_list:
@@ -117,6 +139,7 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         )
         self._train_Y = self._prepare_targets(self._train_Y)
         self._build_model(self._train_X, self._train_Y)
+        self._apply_runtime_context()
         self._remove_noise_prior()
         self._joint_train(self._make_mll(len(obs_list)))
 
@@ -163,8 +186,8 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         """Run the joint MLM + GP Adam training loop."""
         optimizer = self._make_optimizer()
         all_params = [p for group in optimizer.param_groups for p in group["params"]]
-        train_X = self._train_X.to(self.device)
-        targets = self._train_Y.squeeze(-1).to(self.device)
+        train_X = self._train_X.to(device=self.device, dtype=self.dtype)
+        targets = self._train_Y.squeeze(-1).to(device=self.device, dtype=self.dtype)
         # MLM only sees token IDs -- strip the fidelity column when present
         mlm_tokens = (
             train_X[:, :-1].long() if self._include_fidelity else train_X.long()
@@ -195,18 +218,18 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
     def _parse_observations(
         self, observations: Iterable[Observation]
     ) -> tuple[torch.Tensor, torch.Tensor, bool]:
-        """Tokenise SELFIES strings to float64 token-ID tensors."""
+        """Tokenise SELFIES strings to runtime-dtype token-ID tensors."""
         obs_list = list(observations)
         if not obs_list:
             raise ValueError("Cannot parse an empty observation iterable.")
         tokens = self._tokenize_with_fidelity(obs_list)
-        train_Y = torch.as_tensor(
-            [o.y for o in obs_list], dtype=torch.float64
-        ).unsqueeze(-1)
+        train_Y = torch.as_tensor([o.y for o in obs_list], dtype=self.dtype).unsqueeze(
+            -1
+        )
         return tokens, train_Y, self._include_fidelity
 
     def encode_candidates(self, candidates: Iterable[Candidate]) -> torch.Tensor:
-        """Tokenise candidates to float64 token-ID tensors.
+        """Tokenise candidates to runtime-dtype token-ID tensors.
 
         Appends the encoded fidelity confidence as the last column when
         ``multi_fidelity=True``.
@@ -232,7 +255,7 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
                     else self.get_target_fidelity_value()
                     for item in items
                 ],
-                dtype=torch.float64,
+                dtype=self.dtype,
                 device=self.device,
             ).unsqueeze(-1)
             tokens = torch.cat([tokens, fidelities], dim=-1)
@@ -253,7 +276,7 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         max_len = self._encoder.max_length - 2  # tokenizer adds [CLS] + [EOS]
         return self._encoder.tokenizer.batch_from_selfies(
             strings, max_length=max_len, device=self.device
-        ).to(torch.float64)
+        ).to(dtype=self.dtype)
 
     def _extract_molecule_string(self, item: Candidate | Observation) -> str:
         """Extract the SELFIES string from a candidate or observation."""
@@ -351,7 +374,7 @@ class ExactSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
         return ExactMarginalLogLikelihood(self.model.likelihood, self.model)
 
     def _gp_forward(self, token_X: torch.Tensor) -> Any:
-        return self.model(token_X.to(torch.float64))
+        return self.model(token_X.to(device=self.device, dtype=self.dtype))
 
     def _make_optimizer(self) -> Adam:
         # model already contains the likelihood as a submodule
@@ -371,8 +394,16 @@ class _VariationalDKLGP(gpytorch.models.ApproximateGP):
     the surrogate before invoking this GP.
     """
 
-    def __init__(self, input_dim: int, num_inducing: int = 64) -> None:
-        inducing_points = torch.randn(num_inducing, input_dim, dtype=torch.float64)
+    def __init__(
+        self,
+        input_dim: int,
+        num_inducing: int = 64,
+        dtype: torch.dtype = torch.float64,
+        device: torch.device | None = None,
+    ) -> None:
+        inducing_points = torch.randn(
+            num_inducing, input_dim, dtype=dtype, device=device
+        )
         variational_distribution = gpytorch.variational.CholeskyVariationalDistribution(
             num_inducing_points=num_inducing
         )
@@ -510,11 +541,14 @@ class VariationalSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
 
     def _build_model(self, train_X: torch.Tensor, train_Y: torch.Tensor) -> None:
         gp_input_dim = self._encoder.latent_dim + (1 if self._include_fidelity else 0)
-        self._gp_model = (
-            _VariationalDKLGP(gp_input_dim, self._num_inducing).double().to(self.device)
-        )
-        self._likelihood = (
-            gpytorch.likelihoods.GaussianLikelihood().double().to(self.device)
+        self._gp_model = _VariationalDKLGP(
+            gp_input_dim,
+            self._num_inducing,
+            dtype=self.dtype,
+            device=self.device,
+        ).to(device=self.device, dtype=self.dtype)
+        self._likelihood = gpytorch.likelihoods.GaussianLikelihood().to(
+            device=self.device, dtype=self.dtype
         )
         self._botorch_adapter = _VariationalBoTorchAdapter(
             self._gp_model, self._likelihood
@@ -601,5 +635,5 @@ class VariationalSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
         """Encode token IDs → latent features, appending fidelity when active."""
         if self._include_fidelity:
             features = self._encoder(token_X[:, :-1].long())
-            return torch.cat([features, token_X[:, -1:].double()], dim=-1)
+            return torch.cat([features, token_X[:, -1:].to(features.dtype)], dim=-1)
         return self._encoder(token_X.long())

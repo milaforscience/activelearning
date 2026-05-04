@@ -12,6 +12,7 @@ from activelearning.applications.molecules.dkl_surrogate import (
     ExactSelfiesDKLSurrogate,
     VariationalSelfiesDKLSurrogate,
 )
+from activelearning.runtime import RuntimeContext
 from activelearning.utils.types import Candidate, Observation
 
 BENZENE = "[C][=C][C][=C][C][=C][Ring1][=Branch1]"
@@ -125,6 +126,18 @@ class TestExactSelfiesDKLSurrogate:
         exact_surrogate.fit(_make_observations([BENZENE], [1.0]))
         X = exact_surrogate.encode_candidates(_make_candidates([BENZENE]))
         assert X.dtype == torch.float64
+
+    def test_runtime_float32_controls_exact_surrogate_dtype(
+        self, exact_surrogate: ExactSelfiesDKLSurrogate
+    ) -> None:
+        exact_surrogate.bind_runtime_context(RuntimeContext(dtype=torch.float32))
+        exact_surrogate.fit(_make_observations([BENZENE, ALANINE], [1.0, 2.0]))
+
+        X, Y = exact_surrogate.get_train_data()
+        assert X.dtype == torch.float32
+        assert Y.dtype == torch.float32
+        assert exact_surrogate.model.train_inputs[0].dtype == torch.float32
+        assert next(exact_surrogate._encoder.parameters()).dtype == torch.float32
 
     def test_updates_from_latest_false(self, exact_surrogate: ExactSelfiesDKLSurrogate):
         assert not exact_surrogate.updates_from_latest()
@@ -317,6 +330,18 @@ class TestVariationalSelfiesDKLSurrogate:
         candidates = _make_mf_candidates([BENZENE], [1])
         result = var_mf_surrogate.predict(candidates)
         assert "mean" in result and "std" in result
+
+    def test_runtime_float32_controls_variational_surrogate_dtype(
+        self, var_surrogate: VariationalSelfiesDKLSurrogate
+    ) -> None:
+        var_surrogate.bind_runtime_context(RuntimeContext(dtype=torch.float32))
+        var_surrogate.fit(_make_observations([BENZENE, ALANINE], [1.0, 2.0]))
+
+        latent = var_surrogate.encode_candidates(_make_candidates([ETHANOL]))
+        assert latent.dtype == torch.float32
+        assert next(var_surrogate._encoder.parameters()).dtype == torch.float32
+        assert next(var_surrogate._gp_model.parameters()).dtype == torch.float32
+        assert next(var_surrogate._likelihood.parameters()).dtype == torch.float32
 
 
 # ---------------------------------------------------------------------------
