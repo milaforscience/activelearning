@@ -1,22 +1,13 @@
-# Molecule IP/EA optimisation with DKL (variational GP) + paper-faithful MF-MES
+# Molecule IP/EA optimisation with exact SELFIES DKL + MF-MES over three xTB fidelities.
 #
-# Reproduces the reference DeepKernelMoleculeRegressor setup:
-#   - VariationalSelfiesDKLSurrogate: encoder + sparse variational GP, trained
-#     jointly with VariationalELBO + MLM loss (ELBO, not MLL).
-#   - qMultiFidelityLowerBoundMaxValueEntropy: paper-faithful MF acquisition.
-#   - FidelityCostUtility: scales information gain by 1/cost so cheap fidelities
-#     are preferred when their gain is comparable.
-#   - TrainDataCandidateSetSpec: candidate set from current observations (latent
-#     feature space after encode_candidates override).
-#   - project(): auto-built to map candidates to max fidelity (3.0).
-#
-# Prerequisites:
-#   - A molecules pool file (one SELFIES per line) at the path below
-#   - The `xtb` binary on PATH for oracle evaluation
-#   - uv sync --extra molecules
+# This extends the single-fidelity pool example by:
+# - keeping the exact SELFIES DKL surrogate,
+# - exposing xTB fidelities 1 / 2 / 3 in the pool sampler,
+# - using MF-MES to score candidates,
+# - and using cost-aware selection so cheap fidelities are preferred when informative.
 #
 # Run with:
-#   uv run activelearning config/molecules/variational.yaml
+#   uv run activelearning config/molecules/exact_multi_fidelity.yaml
 
 runtime:
   device: cpu
@@ -26,9 +17,9 @@ dataset:
   type: ListDataset
 
 surrogate:
-  type: VariationalSelfiesDKLSurrogate
+  type: ExactSelfiesDKLSurrogate
   multi_fidelity: true
-  target_fidelity: 3  # max(fidelity_costs) — tells project_to_target_fidelity where to project
+  target_fidelity: 3
   encoder:
     type: SelfiesTransformerEncoder
     max_length: 64
@@ -43,10 +34,8 @@ surrogate:
     lr: 1.0e-3
     mask_ratio: 0.125
     pretrain_epochs: 0
-  num_inducing: 64
   standardize_outputs: true
 
-# Paper-faithful MF-MES with cost-aware utility
 acquisition:
   type: QMultiFidelityLowerBoundMaxValueEntropy
   candidate_set_spec:
@@ -95,4 +84,4 @@ budget:
 logger:
   type: ConsoleLogger
   project_name: molecule_dkl
-  run_name: molecules-dkl-variational-ea
+  run_name: molecules-dkl-exact-multi-fidelity-ea

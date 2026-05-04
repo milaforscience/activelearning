@@ -1,12 +1,10 @@
-# Molecule IP/EA optimisation with DKL (exact GP variant)
+# Molecule IP/EA optimisation with exact SELFIES DKL + single-fidelity pool sampling.
 #
-# The surrogate tokenises SELFIES strings internally; no pre-embed step needed.
-# Compatible with all BoTorch acquisition functions.
-#
-# Prerequisites:
-#   - A molecules pool file (one SELFIES per line) at the path below
-#   - The `xtb` binary on PATH for oracle evaluation
-#   - uv sync --extra molecules
+# This is the smallest pool-based molecule example:
+# - ExactSelfiesDKLSurrogate models SELFIES strings directly.
+# - PoolFileSampler draws candidate molecules from a fixed file.
+# - Only fidelity 1 is available, so the setup stays cheap.
+# - UpperConfidenceBound gives a simple single-fidelity acquisition baseline.
 #
 # Run with:
 #   uv run activelearning config/molecules/exact.yaml
@@ -36,31 +34,26 @@ surrogate:
     pretrain_epochs: 0
   standardize_outputs: true
 
-# Use any BoTorch acquisition function; UCB shown here
 acquisition:
   type: UpperConfidenceBound
   beta: 2.0
 
 sampler:
   type: PoolFileSampler
-  # Replace with the path to your molecules pool
   candidate_pool_file: config/data/molecules.txt
   num_samples: 1000
   fidelities:
     - 1
-    - 2
-    - 3
 
 selector:
-  type: CostAwareSelector
+  type: TopKAcquisitionSelector
+  num_samples: 50
 
 oracle:
   type: XTBIPEAOracle
   task: ea
   fidelity_costs:
     1: 1.0
-    2: 3.5
-    3: 7.0
   gfn_version: 2
   ff: mmff
   log_molecule_visualizations: true
@@ -75,4 +68,4 @@ budget:
 logger:
   type: ConsoleLogger
   project_name: molecule_dkl
-  run_name: molecules-dkl-exact-ea
+  run_name: molecules-dkl-exact-single-fidelity-ea

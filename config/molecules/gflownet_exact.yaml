@@ -62,7 +62,7 @@ sampler:
 
 selector:
   type: TopKAcquisitionSelector
-  num_samples: 1
+  num_samples: 25
 
 oracle:
   type: XTBIPEAOracle
@@ -75,12 +75,12 @@ oracle:
   molecule_visualization_limit: 25
 
 budget:
-  available_budget: 3.0
+  available_budget: 75.0
   schedule:
     type: constant
-    value: 1.0
+    value: 25.0
 
 logger:
-  type: ConsoleLogger
+  type: AimLogger
   project_name: activelearning_tutorials
   run_name: molecules-gflownet-selfies-exact
