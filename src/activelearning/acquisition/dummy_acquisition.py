@@ -54,6 +54,7 @@ class DummyAcquisition(Acquisition):
         if self.surrogate is None:
             return [0.0 for _ in candidate_list]
 
+        candidate_list = list(candidates)
         try:
             pred = self.surrogate.predict(candidate_list)
         except NotImplementedError as e:

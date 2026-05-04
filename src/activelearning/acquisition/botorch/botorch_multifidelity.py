@@ -23,6 +23,7 @@ from activelearning.acquisition.botorch.botorch_acquisition import (
     QBatchBoTorchAcquisition,
 )
 from activelearning.acquisition.botorch.candidate_set import CandidateSetSpec
+from activelearning.runtime import RuntimeContext
 from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import Observation
 
@@ -57,6 +58,7 @@ class _QMultiFidelityEntropyBase(QBatchBoTorchAcquisition):
     """
 
     _botorch_acqf_class: ClassVar[type[AcquisitionFunction]]
+    _supports_multi_fidelity: ClassVar[bool] = True
 
     def __init__(
         self,
@@ -81,6 +83,11 @@ class _QMultiFidelityEntropyBase(QBatchBoTorchAcquisition):
         self._num_mv_samples = num_mv_samples
         self._num_y_samples = num_y_samples
         self._expand = expand
+
+    def bind_runtime_context(self, runtime_context: RuntimeContext) -> None:
+        """Bind runtime context to this acquisition and its candidate set spec."""
+        super().bind_runtime_context(runtime_context)
+        self._candidate_set_spec.bind_runtime_context(runtime_context)
 
     def update(
         self,
@@ -222,6 +229,8 @@ class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
     **kwargs
         Forwarded to :class:`QBatchBoTorchAcquisition`.
     """
+
+    _supports_multi_fidelity: ClassVar[bool] = True
 
     def __init__(
         self,

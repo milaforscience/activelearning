@@ -495,8 +495,9 @@ class BoTorchGPSurrogate(Surrogate):
         encoded_batches = [self.encode_candidates(batch) for batch in batch_list]
         return torch.stack(encoded_batches, dim=0)
 
+    @property
     def is_multi_fidelity(self) -> bool:
-        """Return whether the fitted surrogate is operating in multi-fidelity mode.
+        """Whether the fitted surrogate is operating in multi-fidelity mode.
 
         Returns
         -------

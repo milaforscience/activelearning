@@ -489,7 +489,7 @@ def test_custom_covar_module_routing(multi_fidelity_observations):
     assert isinstance(surrogate.model, SingleTaskGP), (
         "Should use SingleTaskGP when covar_module is provided"
     )
-    assert surrogate._is_multi_fidelity is True, (
+    assert surrogate.is_multi_fidelity is True, (
         "Should still track that the data has fidelity columns"
     )
 
@@ -760,7 +760,7 @@ def test_update_ignores_empty_observations(single_fidelity_observations):
 def test_is_multi_fidelity_resets_between_fits(
     single_fidelity_observations, multi_fidelity_observations
 ):
-    """Test that _is_multi_fidelity resets correctly when re-fitting on different data.
+    """Test that is_multi_fidelity resets correctly when re-fitting on different data.
 
     Regression test: previously the flag was never cleared, so fitting on MF data
     followed by SF data would attempt to build a SingleTaskMultiFidelityGP without
@@ -771,11 +771,11 @@ def test_is_multi_fidelity_resets_between_fits(
     # First fit: multi-fidelity
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
-    assert surrogate._is_multi_fidelity is True
+    assert surrogate.is_multi_fidelity is True
 
     # Second fit: single-fidelity — must reset the flag and build SingleTaskGP
     surrogate.fit(single_fidelity_observations)
-    assert surrogate._is_multi_fidelity is False
+    assert surrogate.is_multi_fidelity is False
     assert isinstance(surrogate.model, SingleTaskGP)
 
     # Predictions must work without fidelity values
