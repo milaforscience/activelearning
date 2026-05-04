@@ -14,7 +14,7 @@
 #   - uv sync --extra molecules
 #
 # Run with:
-#   uv run --extra molecules activelearning config/molecules/gflownet_variational_multi_fidelity.yaml
+#   uv run activelearning config/molecules/gflownet_variational_multi_fidelity.yaml
 
 runtime:
   device: cpu

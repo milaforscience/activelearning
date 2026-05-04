@@ -1,7 +1,11 @@
 # GFlowNet-based tutorial: SELFIES molecule search with exact DKL + single-fidelity xTB.
 #
+# Prerequisites:
+#   - The `xtb` binary on PATH for oracle evaluation
+#   - uv sync --extra molecules
+#
 # Run with:
-#   uv run --extra molecules activelearning config/molecules/gflownet_exact.yaml
+#   uv run activelearning config/molecules/gflownet_exact.yaml
 #
 # This example keeps the setup intentionally small:
 # - GFlowNet samples SELFIES strings directly.
