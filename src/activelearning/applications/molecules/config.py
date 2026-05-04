@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 
 class SelfiesTransformerEncoderConfig(BaseModel):
-    """Configuration for :class:`~activelearning.applications.molecules.encoder.SelfiesTransformerEncoder`.
+    """Configuration for :class:`~activelearning.applications.molecules.selfies_transformer_encoder.SelfiesTransformerEncoder`.
 
     All fields mirror the encoder constructor; changing them via YAML enables
     easy hyperparameter search (e.g. latent_dim sweep for benchmarking).
@@ -34,7 +34,7 @@ class SelfiesTransformerEncoderConfig(BaseModel):
     Parameters
     ----------
     vocab : list[str]
-        SELFIES alphabet.  Defaults to :data:`~activelearning.applications.molecules.tokenizer.SELFIES_VOCAB_SMALL`.
+        SELFIES alphabet.  Defaults to :data:`~activelearning.applications.molecules.constants.SELFIES_VOCAB_SMALL`.
     max_length : int
         Base sequence length (special tokens added internally).
     embed_dim : int
@@ -129,7 +129,7 @@ class SelfiesTrainingConfig(BaseModel):
 class ExactSelfiesDKLSurrogateConfig(BaseModel):
     """Configuration for :class:`~activelearning.applications.molecules.dkl_surrogate.ExactSelfiesDKLSurrogate`.
 
-    Uses a BoTorch ``SingleTaskGP`` with a :class:`~activelearning.applications.molecules.kernel.SelfiesKernel`
+    Uses a BoTorch ``SingleTaskGP`` with a :class:`~activelearning.applications.molecules.selfies_kernel.SelfiesKernel`
     as the covariance module.  Compatible with all BoTorch acquisition functions.
 
     Parameters
