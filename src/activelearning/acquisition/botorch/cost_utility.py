@@ -20,6 +20,9 @@ class FidelityCostUtility(CostAwareUtility):
     corresponding oracle cost so that the acquisition favours cheap fidelities
     when their information gain is comparable.
 
+    Configured costs are keyed by discrete fidelity level and resolved to the
+    encoded BoTorch fidelity values during acquisition ``update()``.
+
     Parameters
     ----------
     fidelity_costs : dict[int, float]

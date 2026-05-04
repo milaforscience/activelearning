@@ -110,7 +110,8 @@ class Acquisition(ABC, ALRuntimeMixin):
             for example dividing by per-candidate cost for cost-efficiency:
             ``lambda scores, cands: [s / cost(c) for s, c in
             zip(scores, cands)]``. Has no effect before ``update()`` has been
-            called.
+            called. Applied after any acquisition-level weighting already built
+            into the acquisition object.
 
         Returns
         -------
@@ -154,7 +155,8 @@ class Acquisition(ABC, ALRuntimeMixin):
             for example dividing by total batch cost for cost-efficiency:
             ``lambda scores, batches: [s / sum_cost(b) for s, b in
             zip(scores, batches)]``. Has no effect before ``update()`` has
-            been called.
+            been called. Applied after any acquisition-level weighting already
+            built into the acquisition object.
 
         Returns
         -------

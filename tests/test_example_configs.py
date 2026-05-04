@@ -155,5 +155,7 @@ def test_molecule_dkl_exact_multi_fidelity_pool_config_parses() -> None:
     assert config.sampler.type == "PoolFileSampler"
     assert config.surrogate.type == "ExactSelfiesDKLSurrogate"
     assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
+    assert config.acquisition.cost_aware_utility is None
+    assert config.selector.type == "CostAwareSelector"
     assert config.oracle.type == "XTBIPEAOracle"
     assert config.sampler.fidelities == [1, 2, 3]

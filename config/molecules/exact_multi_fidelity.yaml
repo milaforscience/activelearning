@@ -5,6 +5,8 @@
 # - exposing xTB fidelities 1 / 2 / 3 in the pool sampler,
 # - using MF-MES to score candidates,
 # - and using cost-aware selection so cheap fidelities are preferred when informative.
+#   In this pool-based config, cost handling lives in the selector rather than
+#   the acquisition to avoid penalizing cost twice.
 #
 # Run with:
 #   uv run activelearning config/molecules/exact_multi_fidelity.yaml
@@ -44,12 +46,6 @@ acquisition:
   num_mv_samples: 10
   num_y_samples: 128
   maximize: true
-  cost_aware_utility:
-    type: FidelityCostUtility
-    fidelity_costs:
-      1: 1.0
-      2: 3.5
-      3: 7.0
 
 sampler:
   type: PoolFileSampler

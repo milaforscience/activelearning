@@ -103,9 +103,17 @@ state, not scoring. Predict inside `score()` or `score_batches()` instead.
 been called. Return neutral scores (e.g. `[0.0] * n`) when the surrogate is
 not yet available rather than raising.
 
-**Cost-weighting passthrough** — if you accept `cost_weighting` in `score()`,
-call it as the last step after computing raw scores, and return its result. Do
-not apply cost weighting twice.
+**Two weighting layers** — `cost_weighting` in `score()` is a caller-side
+post-processing hook. It is distinct from acquisition-level weighting baked
+into the acquisition object during `update()` (for example BoTorch
+multi-fidelity `cost_aware_utility`). If both are used, both penalties apply.
+
+**BoTorch MF cost utilities are baked at `update()` time** — when a BoTorch
+multi-fidelity acquisition is configured with `cost_aware_utility`, that
+utility is wired into the internal BoTorch acquisition object during
+`update()`. Later `score()` calls do not toggle it per consumer: samplers and
+selectors see the same acquisition-level weighting unless you create separate
+acquisition objects.
 
 ## **Related pages**
 

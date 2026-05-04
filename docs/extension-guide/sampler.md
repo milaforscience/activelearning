@@ -93,6 +93,12 @@ def sample(self, acquisition=None, observations=None):
 Always guard with `acquisition is not None` — the sampler may be called before
 the surrogate has been fitted.
 
+For BoTorch multi-fidelity acquisitions, remember that any configured
+`cost_aware_utility` has already been baked into the acquisition object during
+`update()`. In the default active-learning loop the selector receives that same
+acquisition instance, so acquisition-level cost weighting affects both the
+sampler reward proxy and selector scoring.
+
 ## **Common pitfalls**
 
 **Return [`Candidate`](../reference/activelearning/utils/types/#activelearning.utils.types.Candidate) objects, not tensors.** The selector and oracle expect

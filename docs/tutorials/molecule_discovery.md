@@ -28,7 +28,7 @@ The repository includes five example molecule configs arranged as an incremental
 | Config | Sampler | Surrogate | Acquisition | Fidelity setting | Purpose |
 |--------|---------|-----------|-------------|------------------|---------|
 | `config/molecules/exact.yaml` | Pool file | Exact SELFIES DKL | UCB | pool fidelity `1` only | Stage 1: smallest pool-based baseline |
-| `config/molecules/exact_multi_fidelity.yaml` | Pool file | Exact SELFIES DKL | MF-MES with cost utility | pool fidelities `1 / 2 / 3` | Stage 2: same pool setup with multi-fidelity scoring |
+| `config/molecules/exact_multi_fidelity.yaml` | Pool file | Exact SELFIES DKL | MF-MES + `CostAwareSelector` | pool fidelities `1 / 2 / 3` | Stage 2: same pool setup with multi-fidelity scoring |
 | `config/molecules/gflownet_exact.yaml` | SELFIES GFlowNet | Exact SELFIES DKL | UCB | fixed fidelity `1` | Stage 3: swap the pool sampler for a GFlowNet |
 | `config/molecules/gflownet_exact_multi_fidelity.yaml` | SELFIES GFlowNet | Exact SELFIES DKL | MF-MES with cost utility | learned fidelity `1 / 2 / 3` | Stage 4: let the GFlowNet learn molecule-fidelity pairs |
 | `config/molecules/gflownet_variational_multi_fidelity.yaml` | SELFIES GFlowNet | Variational SELFIES DKL | MF-MES with cost utility | learned fidelity `1 / 2 / 3` | Stage 5: keep the MF GFlowNet and swap in the scalable variational surrogate |
@@ -130,7 +130,12 @@ Then move to the multi-fidelity pool version, which keeps the exact SELFIES DKL 
 uv run activelearning config/molecules/exact_multi_fidelity.yaml
 ```
 
-This second stage is the first place where the active-learning loop has to decide how much accuracy is worth paying for. The acquisition scores candidates with respect to the target high-fidelity objective, while the selector divides by query cost so cheap fidelities are favored when they carry similar information.
+This second stage is the first place where the active-learning loop has to decide how much accuracy is worth paying for. The acquisition scores candidates with respect to the target high-fidelity objective, while the selector divides by query cost so cheap fidelities are favored when they carry similar information. In this pool-based setup, that cost penalty is applied only in the selector; the GFlowNet multi-fidelity configs instead keep the cost model inside the acquisition because the reward itself must become cost-aware.
+
+For the GFlowNet stages, the acquisition-side cost model is baked into the
+BoTorch acquisition object during `acquisition.update(...)`. The sampler's
+reward proxy and any later consumer of `acquisition.score(...)` therefore see
+the same weighted acquisition values.
 
 ## **3. Log molecule visualizations**
 
@@ -276,7 +281,7 @@ The main molecule-specific fields are:
 | `sampler.n_fidelities` | Number of fidelity levels exposed to the GFlowNet policy. Values greater than `1` enable joint molecule-fidelity sampling. |
 | `sampler.fidelity_action` | Where the fidelity choice appears in the trajectory; `"any"` lets the policy interleave fidelity selection with token actions. |
 | `acquisition.type` | `UpperConfidenceBound` in stages 1 and 3, or `QMultiFidelityLowerBoundMaxValueEntropy` in stages 2, 4, and 5. |
-| `acquisition.cost_aware_utility` | Cost model used to prefer cheap fidelities when the expected information gain is comparable. |
+| `acquisition.cost_aware_utility` | Cost model baked into the BoTorch multi-fidelity acquisition during `acquisition.update(...)`. In the GFlowNet multi-fidelity configs this makes the sampler reward proxy cost-aware before top-k selection. |
 | `oracle.task` | `ea` for electron affinity or `ip` for ionisation potential. |
 | `oracle.fidelity_costs` | Query costs used by the budget and the cost-aware utility. |
 | `oracle.log_molecule_visualizations` | Whether to log RDKit grids of queried molecules. |

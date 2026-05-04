@@ -84,6 +84,11 @@ if cost_fn is not None:
     scores = [s / c for s, c in zip(scores, costs)]
 ```
 
+This selector-side division is separate from any acquisition-level weighting
+already baked into `acquisition.score(candidates)`. In particular, BoTorch
+multi-fidelity `cost_aware_utility` is resolved during acquisition `update()`,
+so if you pair that with `CostAwareSelector` you apply two cost penalties.
+
 ## **Common pitfalls**
 
 **Do not query the oracle** — the selector only allocates from a pre-built pool.

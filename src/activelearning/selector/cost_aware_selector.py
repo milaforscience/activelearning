@@ -10,6 +10,9 @@ class CostAwareSelector(Selector):
 
     Selects candidates by "bang for buck" (acquisition value/cost ratio) until the
     budget is exhausted. Does not require a fixed number of samples.
+
+    Divides ``acquisition.score(candidates)`` by oracle cost, so any
+    acquisition-level cost weighting is compounded here.
     """
 
     def __call__(
@@ -33,6 +36,8 @@ class CostAwareSelector(Selector):
             Pool of candidates to select from.
         acquisition : Optional[Acquisition]
             Acquisition function to compute acquisition values for candidates.
+            Returned values are used as-is before dividing by
+            ``cost_fn(candidates)``.
         cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
             Function returning per-candidate costs.
         round_budget : Optional[float]

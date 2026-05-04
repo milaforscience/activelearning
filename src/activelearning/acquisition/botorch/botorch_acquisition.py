@@ -93,6 +93,10 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         observations when provided, resolves shared multi-fidelity helpers, and
         rebuilds the internal BoTorch acquisition object.
 
+        Any configured ``cost_aware_utility`` is also resolved here against the
+        surrogate's fidelity-confidence mapping and baked into the internal
+        BoTorch acquisition object.
+
         Parameters
         ----------
         surrogate : Surrogate
