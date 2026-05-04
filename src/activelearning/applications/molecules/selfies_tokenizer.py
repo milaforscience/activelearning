@@ -69,7 +69,7 @@ class SelfiesTokenizer:
         return len(self.full_vocab)
 
     def encode_selfies(self, selfies_string: str, max_length: int) -> Tensor:
-        """Convert a SELFIES string into a padded 1-D tensor of base token IDs.
+        """Convert a SELFIES string into a fixed-length tensor of base token IDs.
 
         Parameters
         ----------
@@ -90,7 +90,7 @@ class SelfiesTokenizer:
             pad_to_len=max_length,
             enc_type="label",
         )
-        return torch.tensor(raw_ids, dtype=torch.long)
+        return torch.tensor(raw_ids[:max_length], dtype=torch.long)
 
     def transform_batch(self, raw_batch: Tensor) -> Tensor:
         """Augment a batch of raw padded sequences to encoder input format.

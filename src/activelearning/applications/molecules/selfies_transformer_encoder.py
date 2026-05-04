@@ -38,13 +38,15 @@ class PositionalEncoding(nn.Module):
         super().__init__()
         self.dropout = nn.Dropout(dropout)
 
-        position = torch.arange(max_len).unsqueeze(1)
+        position = torch.arange(max_len, dtype=torch.float32).unsqueeze(1)
         div_term = torch.exp(
-            torch.arange(0, embed_dim, 2) * (-math.log(10000.0) / embed_dim)
+            torch.arange(0, embed_dim, 2, dtype=torch.float32)
+            * (-math.log(10000.0) / embed_dim)
         )
         pe = torch.zeros(max_len, 1, embed_dim)
         pe[:, 0, 0::2] = torch.sin(position * div_term)
-        pe[:, 0, 1::2] = torch.cos(position * div_term)
+        # Odd embed_dim leaves one more sine slot than cosine slot.
+        pe[:, 0, 1::2] = torch.cos(position * div_term[: pe[:, 0, 1::2].shape[1]])
         # Store as (1, max_len, embed_dim) for easy broadcasting
         self.register_buffer("pe", pe.transpose(0, 1))
 
@@ -67,8 +69,8 @@ class PositionalEncoding(nn.Module):
 class MaskedMeanPool(nn.Module):
     """Pool token features into one vector per molecules via masked mean + projection.
 
-    The mask excludes padding and special tokens so the pooled vector
-    represents only meaningful molecules tokens.
+    The mask excludes padding and ``[EOS]`` so the pooled vector represents the
+    full encoded sequence content, including the leading ``[CLS]`` token.
 
     Parameters
     ----------
@@ -98,7 +100,7 @@ class MaskedMeanPool(nn.Module):
         Tensor
             Shape ``(B, output_dim)``.
         """
-        weights = mask.unsqueeze(-1).float()
+        weights = mask.unsqueeze(-1).to(token_features.dtype)
         # Weighted mean; +1e-6 avoids division by zero for fully-masked inputs
         pooled = (weights * token_features).sum(dim=1) / (weights.sum(dim=1) + 1e-6)
         return self.proj(pooled)
@@ -193,7 +195,7 @@ class SelfiesTransformerEncoder(nn.Module):
             Shape ``(B, seq_len, latent_dim)``.
         keep_mask : Tensor
             Boolean tensor ``(B, seq_len)``.  ``True`` for non-padding,
-            non-EOS tokens that contribute to pooling.
+            non-EOS tokens that contribute to pooling, including ``[CLS]``.
         """
         if token_batch.size(1) > self.max_length:
             token_batch = token_batch[:, : self.max_length]
@@ -204,7 +206,7 @@ class SelfiesTransformerEncoder(nn.Module):
         x = self.encoder_layers(x, src_key_padding_mask=key_padding_mask)
         x = self.embed_to_latent(x)
 
-        # Pool over content tokens only (exclude [nop] padding and [EOS])
+        # Pool over [CLS] and molecular tokens, excluding [EOS] and padding.
         keep_mask = (~key_padding_mask) & token_batch.ne(self.tokenizer.eos_idx)
         return x, keep_mask
 

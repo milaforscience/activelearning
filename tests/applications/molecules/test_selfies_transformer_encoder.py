@@ -53,6 +53,12 @@ class TestPositionalEncoding:
         out = pe(x)
         assert not torch.allclose(out, x)
 
+    def test_odd_embed_dim_supported(self):
+        pe = PositionalEncoding(embed_dim=7, max_len=64)
+        x = torch.randn(2, 20, 7)
+        out = pe(x)
+        assert out.shape == x.shape
+
 
 class TestMaskedMeanPool:
     def test_output_shape(self):
@@ -68,6 +74,13 @@ class TestMaskedMeanPool:
         mask = torch.zeros(2, 10, dtype=torch.bool)  # all masked
         out = pool(features, mask)
         assert torch.isfinite(out).all()
+
+    def test_preserves_double_precision(self):
+        pool = MaskedMeanPool(input_dim=8, output_dim=4).double()
+        features = torch.randn(2, 10, 8, dtype=torch.float64)
+        mask = torch.ones(2, 10, dtype=torch.bool)
+        out = pool(features, mask)
+        assert out.dtype == torch.float64
 
 
 class TestSelfiesTransformerEncoder:
@@ -124,3 +137,30 @@ class TestSelfiesTransformerEncoder:
 
     def test_latent_dim_attribute(self, encoder: SelfiesTransformerEncoder):
         assert encoder.latent_dim == 8
+
+    def test_odd_embed_dim_encoder_forward(self, tokenizer: SelfiesTokenizer):
+        odd_encoder = SelfiesTransformerEncoder(
+            tokenizer=tokenizer,
+            max_length=16,
+            embed_dim=9,
+            ff_dim=16,
+            num_heads=1,
+            num_layers=1,
+            latent_dim=5,
+        )
+        batch = tokenizer.batch_from_selfies([BENZENE], max_length=16)
+        out = odd_encoder(batch)
+        assert out.shape == (1, 5)
+
+    def test_encode_tokens_mask_includes_cls_and_excludes_eos_and_padding(
+        self, encoder: SelfiesTransformerEncoder, tokenizer: SelfiesTokenizer
+    ) -> None:
+        token_batch = tokenizer.batch_from_selfies([BENZENE], max_length=16)
+        _, mask = encoder.encode_tokens(token_batch)
+        assert mask[0, 0].item() is True
+        eos_positions = torch.where(token_batch[0] == tokenizer.eos_idx)[0]
+        assert eos_positions.numel() == 1
+        eos_position = int(eos_positions[0])
+        assert mask[0, eos_position].item() is False
+        if eos_position + 1 < token_batch.shape[1]:
+            assert mask[0, eos_position + 1 :].any().item() is False

@@ -10,6 +10,7 @@ from activelearning.applications.molecules.selfies_tokenizer import (
 
 BENZENE = "[C][=C][C][=C][C][=C][Ring1][=Branch1]"
 ALANINE = "[C][C][Branch1][C][N][C][=Branch1][C][=O][O]"
+LONG_SELFIES = "[C]" * 80
 
 
 @pytest.fixture
@@ -49,6 +50,13 @@ class TestSelfiesTokenizer:
         pad_count = (ids == tokenizer.padding_idx).sum().item()
         assert pad_count > 0
 
+    def test_encode_selfies_truncates_long_sequence(
+        self, tokenizer: SelfiesTokenizer
+    ) -> None:
+        ids = tokenizer.encode_selfies(LONG_SELFIES, max_length=16)
+        assert ids.shape == (16,)
+        assert (ids == tokenizer.padding_idx).sum().item() == 0
+
     def test_transform_batch_shape(self, tokenizer: SelfiesTokenizer):
         raw = torch.stack([tokenizer.encode_selfies(BENZENE, 32) for _ in range(4)])
         out = tokenizer.transform_batch(raw)
@@ -75,6 +83,13 @@ class TestSelfiesTokenizer:
     def test_batch_from_selfies_shape(self, tokenizer: SelfiesTokenizer):
         batch = tokenizer.batch_from_selfies([BENZENE, ALANINE], max_length=64)
         assert batch.shape == (2, 66)  # 64 + 2
+        assert batch.dtype == torch.long
+
+    def test_batch_from_selfies_mixed_short_and_long_sequences(
+        self, tokenizer: SelfiesTokenizer
+    ) -> None:
+        batch = tokenizer.batch_from_selfies([BENZENE, LONG_SELFIES], max_length=16)
+        assert batch.shape == (2, 18)
         assert batch.dtype == torch.long
 
     def test_batch_from_selfies_device(self, tokenizer: SelfiesTokenizer):
