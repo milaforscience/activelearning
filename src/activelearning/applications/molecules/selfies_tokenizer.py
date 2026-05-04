@@ -2,40 +2,18 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 
-import selfies as sf
 import torch
 from torch import Tensor
 
-# Small SELFIES vocabulary covering the common organic fragments
-# used by the molecules experiments in this repo.
-SELFIES_VOCAB_SMALL: list[str] = [
-    "[#Branch1]",
-    "[#Branch2]",
-    "[#C]",
-    "[#N]",
-    "[=Branch1]",
-    "[=Branch2]",
-    "[=C]",
-    "[=N]",
-    "[=O]",
-    "[=Ring1]",
-    "[=Ring2]",
-    "[=S]",
-    "[B]",
-    "[Br]",
-    "[Branch1]",
-    "[Branch2]",
-    "[C]",
-    "[Cl]",
-    "[F]",
-    "[NH1]",
-    "[N]",
-    "[O]",
-    "[P]",
-    "[Ring1]",
-    "[Ring2]",
-    "[S]",
-]
+from activelearning.applications.molecules._optional import (
+    missing_molecules_dependency_error,
+)
+from activelearning.applications.molecules.constants import SELFIES_VOCAB_SMALL
+
+try:
+    import selfies as sf
+except ImportError as error:  # pragma: no cover - exercised via subprocess test
+    raise missing_molecules_dependency_error("SelfiesTokenizer", error) from error
 
 
 class SelfiesTokenizer:

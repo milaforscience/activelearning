@@ -8,10 +8,20 @@ from collections.abc import Sequence
 from typing import Any
 
 import matplotlib.pyplot as plt
-import selfies as sf
 from matplotlib.figure import Figure
-from rdkit import Chem, rdBase
-from rdkit.Chem import Draw
+
+from activelearning.applications.molecules._optional import (
+    missing_molecules_dependency_error,
+)
+
+try:
+    import selfies as sf
+    from rdkit import Chem, rdBase
+    from rdkit.Chem import Draw
+except ImportError as error:  # pragma: no cover - exercised via subprocess test
+    raise missing_molecules_dependency_error(
+        "Molecule plotting helpers", error
+    ) from error
 
 from activelearning.utils.types import Candidate, Observation
 

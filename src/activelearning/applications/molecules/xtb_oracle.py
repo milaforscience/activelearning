@@ -32,9 +32,17 @@ from tempfile import TemporaryDirectory
 from typing import Any, List, Optional, Sequence
 
 import matplotlib.pyplot as plt
-import selfies as sf
-from rdkit import Chem, rdBase
-from rdkit.Chem import AllChem
+
+from activelearning.applications.molecules._optional import (
+    missing_molecules_dependency_error,
+)
+
+try:
+    import selfies as sf
+    from rdkit import Chem, rdBase
+    from rdkit.Chem import AllChem
+except ImportError as error:  # pragma: no cover - exercised via subprocess test
+    raise missing_molecules_dependency_error("XTBIPEAOracle", error) from error
 
 from activelearning.oracle.multi_fidelity_oracle import MultiFidelityOracle
 from activelearning.utils.types import Candidate, Observation

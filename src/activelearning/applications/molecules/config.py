@@ -7,15 +7,17 @@ encoder selection.
 """
 
 from __future__ import annotations
-from typing import Annotated, Literal, Optional, Union
+
+from typing import TYPE_CHECKING, Annotated, Literal, Optional, Union
+
 from pydantic import BaseModel, Field, model_validator
-from activelearning.applications.molecules.selfies_transformer_encoder import (
-    SelfiesTransformerEncoder,
-)
-from activelearning.applications.molecules.selfies_tokenizer import (
-    SELFIES_VOCAB_SMALL,
-    SelfiesTokenizer,
-)
+
+from activelearning.applications.molecules.constants import SELFIES_VOCAB_SMALL
+
+if TYPE_CHECKING:
+    from activelearning.applications.molecules.selfies_transformer_encoder import (
+        SelfiesTransformerEncoder,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -59,8 +61,15 @@ class SelfiesTransformerEncoderConfig(BaseModel):
     latent_dim: int = 64
     dropout: float = 0.0
 
-    def build(self) -> SelfiesTransformerEncoder:
+    def build(self) -> "SelfiesTransformerEncoder":
         """Instantiate the encoder with its tokenizer."""
+        from activelearning.applications.molecules.selfies_tokenizer import (
+            SelfiesTokenizer,
+        )
+        from activelearning.applications.molecules.selfies_transformer_encoder import (
+            SelfiesTransformerEncoder,
+        )
+
         tokenizer = SelfiesTokenizer(selfies_vocab=self.vocab)
         return SelfiesTransformerEncoder(
             tokenizer=tokenizer,
