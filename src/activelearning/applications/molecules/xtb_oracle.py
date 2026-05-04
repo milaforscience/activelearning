@@ -217,15 +217,28 @@ def _run_xtb(
 ) -> subprocess.CompletedProcess:
     """Run ``xtb <xyz_path> <args...>`` and capture output to a file."""
     command = ["xtb", str(xyz_path), *args]
-    with open(output_path, "w") as fh:
-        return subprocess.run(
-            command,
-            cwd=str(cwd) if cwd is not None else None,
-            stdout=fh,
-            stderr=subprocess.STDOUT,
-            check=False,
-            text=True,
+    try:
+        with open(output_path, "w") as fh:
+            result = subprocess.run(
+                command,
+                cwd=str(cwd) if cwd is not None else None,
+                stdout=fh,
+                stderr=subprocess.STDOUT,
+                check=False,
+                text=True,
+            )
+    except FileNotFoundError as error:
+        raise RuntimeError(
+            "xtb executable not found. Install xtb and ensure it is available on PATH."
+        ) from error
+
+    if result.returncode != 0:
+        output_tail = output_path.read_text(encoding="utf-8", errors="replace")[-500:]
+        raise RuntimeError(
+            f"xTB command failed with return code {result.returncode}: "
+            f"{' '.join(command)}\nOutput tail: {output_tail!r}"
         )
+    return result
 
 
 def _run_xtb_optimize(
@@ -291,10 +304,11 @@ def _parse_vertical_ipea(output_text: str, task: str) -> float:
     float
         The parsed value in eV.
     """
+    numeric_pattern = r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)"
     if task == "ea":
-        pattern = r"delta SCC EA \(eV\):\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))"
+        pattern = rf"delta SCC EA \(eV\):\s*{numeric_pattern}"
     elif task == "ip":
-        pattern = r"delta SCC IP \(eV\):\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))"
+        pattern = rf"delta SCC IP \(eV\):\s*{numeric_pattern}"
     else:
         raise ValueError(f"Unsupported task: {task!r}")
 
@@ -323,7 +337,10 @@ def _parse_total_energy(output_text: str) -> float:
     float
         Energy in Hartree.
     """
-    matches = re.findall(r"TOTAL ENERGY\s+([+-]?(?:\d+(?:\.\d*)?|\.\d+))", output_text)
+    matches = re.findall(
+        r"TOTAL ENERGY\s+([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)",
+        output_text,
+    )
     if not matches:
         raise RuntimeError(
             f"Could not find TOTAL ENERGY in XTB output.\n"

@@ -1,6 +1,7 @@
 """Tests for XTBIPEAOracle (xtb subprocess calls are mocked)."""
 
 import math
+import subprocess
 
 import numpy as np
 import pytest
@@ -18,6 +19,7 @@ from activelearning.applications.molecules.xtb_oracle import (
     _decode_to_smiles,
     _parse_vertical_ipea,
     _parse_total_energy,
+    _run_xtb,
     _write_best_rdkit_xyz,
 )
 from activelearning.oracle.config import XTBIPEAOracleConfig
@@ -108,6 +110,10 @@ class TestParsers:
         output = "delta SCC EA (eV):    -0.5432\n"
         assert _parse_vertical_ipea(output, task="ea") == pytest.approx(-0.5432)
 
+    def test_parse_vertical_scientific_notation(self):
+        output = "delta SCC EA (eV):    2.3456e-01\n"
+        assert _parse_vertical_ipea(output, task="ea") == pytest.approx(0.23456)
+
     def test_parse_vertical_bad_task_raises(self):
         with pytest.raises(ValueError, match="Unsupported task"):
             _parse_vertical_ipea(_FAKE_EA_OUTPUT, task="gibbs")
@@ -119,6 +125,13 @@ class TestParsers:
     def test_parse_total_energy_last_value(self):
         energy = _parse_total_energy(_FAKE_OPT_OUTPUT)
         assert energy == pytest.approx(-10.234567890123)
+
+    def test_parse_total_energy_scientific_notation(self):
+        output = (
+            "TOTAL ENERGY     -1.012345678901e+01 Eh\n"
+            "TOTAL ENERGY     -1.023456789012e+01 Eh\n"
+        )
+        assert _parse_total_energy(output) == pytest.approx(-10.23456789012)
 
     def test_parse_total_energy_missing_raises(self):
         with pytest.raises(RuntimeError, match="TOTAL ENERGY"):
@@ -145,6 +158,74 @@ class TestXTBIPEAOracleConstruction:
         assert oracle.log_molecule_visualizations is False
         assert oracle._molecule_visualization_limit == 25
 
+
+class TestRunXTB:
+    def test_successful_return_code_returns_completed_process(self, tmp_path):
+        xyz_path = tmp_path / "mol.xyz"
+        xyz_path.write_text("3\n\nH 0 0 0\nH 0 0 1\nH 0 1 0\n")
+        output_path = tmp_path / "xtb.out"
+        completed = subprocess.CompletedProcess(["xtb", str(xyz_path)], returncode=0)
+
+        with patch(
+            "activelearning.applications.molecules.xtb_oracle.subprocess.run",
+            return_value=completed,
+        ) as run_mock:
+            result = _run_xtb(
+                xyz_path=xyz_path,
+                args=["--gfn", "2", "--vea"],
+                output_path=output_path,
+                cwd=tmp_path,
+            )
+
+        assert result is completed
+        run_mock.assert_called_once()
+
+    def test_non_zero_return_code_raises_with_output_tail(self, tmp_path):
+        xyz_path = tmp_path / "mol.xyz"
+        xyz_path.write_text("3\n\nH 0 0 0\nH 0 0 1\nH 0 1 0\n")
+        output_path = tmp_path / "xtb.out"
+
+        def fake_run(*args, **kwargs):
+            kwargs["stdout"].write("xtb failed to converge\n")
+            kwargs["stdout"].flush()
+            return subprocess.CompletedProcess(args[0], returncode=2)
+
+        with patch(
+            "activelearning.applications.molecules.xtb_oracle.subprocess.run",
+            side_effect=fake_run,
+        ):
+            with pytest.raises(RuntimeError, match="return code 2") as error_info:
+                _run_xtb(
+                    xyz_path=xyz_path,
+                    args=["--gfn", "2", "--vea"],
+                    output_path=output_path,
+                    cwd=tmp_path,
+                )
+
+        assert "xtb failed to converge" in str(error_info.value)
+        assert "xtb " in str(error_info.value)
+
+    def test_missing_binary_raises_clear_install_message(self, tmp_path):
+        xyz_path = tmp_path / "mol.xyz"
+        xyz_path.write_text("3\n\nH 0 0 0\nH 0 0 1\nH 0 1 0\n")
+        output_path = tmp_path / "xtb.out"
+
+        with (
+            patch(
+                "activelearning.applications.molecules.xtb_oracle.subprocess.run",
+                side_effect=FileNotFoundError("xtb"),
+            ),
+            pytest.raises(RuntimeError, match="Install xtb"),
+        ):
+            _run_xtb(
+                xyz_path=xyz_path,
+                args=["--gfn", "2", "--vea"],
+                output_path=output_path,
+                cwd=tmp_path,
+            )
+
+
+class TestXTBIPEAOracleConstructionValidation:
     def test_bad_task_raises(self):
         with pytest.raises(ValueError, match="task"):
             XTBIPEAOracle(task="free_energy", fidelity_costs={1: 1.0})
@@ -656,6 +737,24 @@ class TestXTBScoreFidelityRouting:
         )
         assert "MMFF parameters unavailable" in warning_record.message
         assert warning_record.exc_info is None
+
+    def test_xtb_subprocess_failure_returns_nan(self, tmp_path):
+        oracle = XTBIPEAOracle(task="ea", fidelity_costs={1: 1.0}, mol_repr="smiles")
+        fake_xyz = tmp_path / "neutral.xyz"
+
+        with (
+            patch(
+                "activelearning.applications.molecules.xtb_oracle._write_best_rdkit_xyz",
+                return_value=fake_xyz,
+            ),
+            patch(
+                "activelearning.applications.molecules.xtb_oracle._run_xtb",
+                side_effect=RuntimeError("xTB command failed with return code 1"),
+            ),
+        ):
+            result = oracle._xtb_score(BENZENE_SMILES, fidelity=1)
+
+        assert math.isnan(result)
 
 
 # ---------------------------------------------------------------------------
