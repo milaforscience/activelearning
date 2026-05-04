@@ -117,6 +117,13 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         self._botorch_surrogate = surrogate
         self._observations_cache = obs_list
 
+        if self._cost_aware_utility_override is not None and hasattr(
+            self._cost_aware_utility_override, "set_fidelity_confidences"
+        ):
+            self._cost_aware_utility_override.set_fidelity_confidences(
+                surrogate.get_fidelity_confidences()
+            )
+
         # Resolve shared MF / cost-aware helpers before building the acqf.
         self._resolved_target_fidelity_value = self._resolve_target_fidelity_value()
         self._resolved_project_to_target_fidelity_fn = (

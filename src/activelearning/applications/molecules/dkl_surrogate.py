@@ -13,9 +13,11 @@ Two variants are provided, both inheriting from :class:`BoTorchGPSurrogate`:
     ``VariationalELBO + MLM loss`` via Adam.
 
 **Multi-fidelity** is controlled via the ``multi_fidelity`` constructor
-argument (and the ``multi_fidelity`` key in the YAML config).  When enabled,
-the raw fidelity scalar from each observation/candidate is appended as the
-last column of the feature tensor before the GP.
+argument (and the ``multi_fidelity`` key in the YAML config). When enabled,
+the surrogate appends the BoTorch-facing **fidelity confidence** from
+``set_fidelity_confidences()`` as the last column of the feature tensor before
+the GP. This keeps the fidelity coordinate in the continuous space used by
+BoTorch's multi-fidelity helpers such as ``project_to_target_fidelity``.
 """
 
 from __future__ import annotations
@@ -52,12 +54,14 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
     training_params : SelfiesTrainingConfig
         Training hyper-parameters (epochs, lr, mask_ratio, pretrain_epochs).
     multi_fidelity : bool
-        Whether to append the fidelity scalar to each feature vector.  Should
-        match the ``multi_fidelity`` key in the YAML run config.
+        Whether to append the encoded fidelity confidence to each feature
+        vector. Should match the ``multi_fidelity`` key in the YAML run config.
     target_fidelity : int, optional
         The target (highest) fidelity level.  **Required when
         ``multi_fidelity=True``**; tells BoTorch's ``project_to_target_fidelity``
-        which fidelity level to project to.  Typically ``max(fidelity_costs)``.
+        which encoded fidelity value to project to. Typically this is the
+        highest fidelity level, and it is mapped to its configured confidence
+        internally.
     **botorch_kwargs
         Forwarded to :class:`BoTorchGPSurrogate`.
 
@@ -97,11 +101,7 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         self._training = training_params
         self._include_fidelity: bool = multi_fidelity
 
-        # Cast to float: the fidelity column in the tensor is float, so
-        # get_target_fidelity_value() must return a float for tensor assignment.
-        self._target_fidelity: Optional[float] = (
-            float(target_fidelity) if target_fidelity is not None else None
-        )
+        self._target_fidelity_level = target_fidelity
         botorch_kwargs.setdefault("optimize_hyperparameters", False)
         super().__init__(**botorch_kwargs)
         # Override the base-class default (False) so is_multi_fidelity() returns
@@ -125,12 +125,15 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         return False
 
     def get_target_fidelity_value(self) -> float | None:
-        """Return the target (highest) fidelity value from config.
+        """Return the encoded target fidelity value used by BoTorch.
 
-        Overrides :meth:`BoTorchGPSurrogate.get_target_fidelity_value`, which
-        relies on ``_fidelity_confidences`` (unused by DKL surrogates).
+        Overrides :meth:`BoTorchGPSurrogate.get_target_fidelity_value` so the
+        configured target fidelity level is converted through the active
+        confidence mapping before BoTorch uses it.
         """
-        return self._target_fidelity
+        if self._target_fidelity_level is None:
+            return None
+        return self._encode_fidelity_level(self._target_fidelity_level)
 
     # Template methods -- must be implemented by subclasses
 
@@ -160,10 +163,12 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         """Run the joint MLM + GP Adam training loop."""
         optimizer = self._make_optimizer()
         all_params = [p for group in optimizer.param_groups for p in group["params"]]
-        token_X_long = self._train_X.long().to(self.device)
+        train_X = self._train_X.to(self.device)
         targets = self._train_Y.squeeze(-1).to(self.device)
         # MLM only sees token IDs -- strip the fidelity column when present
-        mlm_tokens = token_X_long[:, :-1] if self._include_fidelity else token_X_long
+        mlm_tokens = (
+            train_X[:, :-1].long() if self._include_fidelity else train_X.long()
+        )
 
         for _ in range(self._training.pretrain_epochs):
             self._encoder.train()
@@ -178,7 +183,7 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
             mlm_loss = self._encoder.mlm_loss(mlm_tokens, self._training.mask_ratio)
             # Extra Cholesky jitter stabilises early training when embeddings are similar
             with gpytorch.settings.cholesky_jitter(1e-1):
-                gp_loss = -mll(self._gp_forward(token_X_long), targets)
+                gp_loss = -mll(self._gp_forward(train_X), targets)
             (mlm_loss + gp_loss).backward()
             torch.nn.utils.clip_grad_norm_(all_params, max_norm=1.0)
             optimizer.step()
@@ -203,7 +208,8 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
     def encode_candidates(self, candidates: Iterable[Candidate]) -> torch.Tensor:
         """Tokenise candidates to float64 token-ID tensors.
 
-        Appends fidelity as last column when ``multi_fidelity=True``.
+        Appends the encoded fidelity confidence as the last column when
+        ``multi_fidelity=True``.
         """
         cand_list = list(candidates)
         if not cand_list:
@@ -215,13 +221,15 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
     def _tokenize_with_fidelity(
         self, items: list[Candidate | Observation]
     ) -> torch.Tensor:
-        """Tokenise items and append the fidelity scalar as last column when active."""
+        """Tokenise items and append the encoded fidelity value when active."""
         strings = [self._extract_molecule_string(item) for item in items]
         tokens = self._tokenize_strings(strings)
         if self._include_fidelity:
             fidelities = torch.tensor(
                 [
-                    float(item.fidelity) if item.fidelity is not None else 1.0
+                    self._encode_fidelity_level(item.fidelity)
+                    if item.fidelity is not None
+                    else self.get_target_fidelity_value()
                     for item in items
                 ],
                 dtype=torch.float64,
@@ -229,6 +237,17 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
             ).unsqueeze(-1)
             tokens = torch.cat([tokens, fidelities], dim=-1)
         return tokens
+
+    def _encode_fidelity_level(self, fidelity_level: int) -> float:
+        """Map a discrete fidelity level to the BoTorch-facing confidence value."""
+        if fidelity_level not in self._fidelity_confidences:
+            raise ValueError(
+                "Missing fidelity confidence for "
+                f"level {fidelity_level}. Call set_fidelity_confidences() with "
+                "the oracle's confidence mapping before fitting or scoring a "
+                "multi-fidelity SELFIES surrogate."
+            )
+        return float(self._fidelity_confidences[fidelity_level])
 
     def _tokenize_strings(self, strings: list[str]) -> torch.Tensor:
         max_len = self._encoder.max_length - 2  # tokenizer adds [CLS] + [EOS]
@@ -537,8 +556,8 @@ class VariationalSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
         """
         if self._gp_model is None:
             raise RuntimeError("Surrogate has not been fitted yet.")
-        # Tokenise via parent, then encode to latent features
-        token_X = super().encode_candidates(candidates).long().to(self.device)
+        # Tokenise via parent, then encode to latent features.
+        token_X = super().encode_candidates(candidates).to(self.device)
         self._set_eval_mode()
         with torch.no_grad():
             return self._encode_with_fidelity(token_X)
@@ -581,6 +600,6 @@ class VariationalSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
     def _encode_with_fidelity(self, token_X: torch.Tensor) -> torch.Tensor:
         """Encode token IDs → latent features, appending fidelity when active."""
         if self._include_fidelity:
-            features = self._encoder(token_X[:, :-1])
+            features = self._encoder(token_X[:, :-1].long())
             return torch.cat([features, token_X[:, -1:].double()], dim=-1)
-        return self._encoder(token_X)
+        return self._encoder(token_X.long())

@@ -17,6 +17,7 @@ from activelearning.utils.types import Candidate, Observation
 BENZENE = "[C][=C][C][=C][C][=C][Ring1][=Branch1]"
 ALANINE = "[C][C][Branch1][C][N][C][=Branch1][C][=O][O]"
 ETHANOL = "[C][C][O]"
+FIDELITY_CONFIDENCES = {1: 0.25, 2: 0.5, 3: 1.0}
 
 TRAINING = SelfiesTrainingConfig(epochs=2, lr=1e-3, mask_ratio=0.15, pretrain_epochs=1)
 ENCODER_CFG = SelfiesTransformerEncoderConfig(
@@ -68,12 +69,14 @@ def exact_surrogate() -> ExactSelfiesDKLSurrogate:
 @pytest.fixture
 def exact_mf_surrogate() -> ExactSelfiesDKLSurrogate:
     encoder = ENCODER_CFG.build()
-    return ExactSelfiesDKLSurrogate(
+    surrogate = ExactSelfiesDKLSurrogate(
         encoder=encoder,
         training_params=TRAINING,
         multi_fidelity=True,
         target_fidelity=3,
     )
+    surrogate.set_fidelity_confidences(FIDELITY_CONFIDENCES)
+    return surrogate
 
 
 class TestExactSelfiesDKLSurrogate:
@@ -149,15 +152,31 @@ class TestExactSelfiesDKLSurrogate:
     def test_multi_fidelity_encode_candidates(
         self, exact_mf_surrogate: ExactSelfiesDKLSurrogate
     ):
-        """encode_candidates should append the fidelity column for a multi-fidelity surrogate."""
+        """encode_candidates should append confidence values for BoTorch MF helpers."""
         obs = _make_mf_observations([BENZENE, ALANINE], [1.0, 2.0], [1, 2])
         exact_mf_surrogate.fit(obs)
         candidates = _make_mf_candidates([BENZENE, ALANINE], [2, 3])
         tokens = exact_mf_surrogate.encode_candidates(candidates)
         # Shape: (2, seq_len + 1 for fidelity)
         assert tokens.shape == (2, exact_mf_surrogate._encoder.max_length + 1)
-        # Last column should contain fidelity values 2.0 and 3.0
-        assert tokens[:, -1].tolist() == pytest.approx([2.0, 3.0])
+        # Last column should contain encoded confidence values.
+        assert tokens[:, -1].tolist() == pytest.approx([0.5, 1.0])
+
+    def test_multi_fidelity_requires_confidence_mapping(self) -> None:
+        surrogate = ExactSelfiesDKLSurrogate(
+            encoder=ENCODER_CFG.build(),
+            training_params=TRAINING,
+            multi_fidelity=True,
+            target_fidelity=3,
+        )
+
+        with pytest.raises(ValueError, match="Missing fidelity confidence"):
+            surrogate.fit(_make_mf_observations([BENZENE], [1.0], [1]))
+
+    def test_target_fidelity_value_uses_encoded_confidence(
+        self, exact_mf_surrogate: ExactSelfiesDKLSurrogate
+    ) -> None:
+        assert exact_mf_surrogate.get_target_fidelity_value() == pytest.approx(1.0)
 
     def test_empty_candidates_raises(self, exact_surrogate: ExactSelfiesDKLSurrogate):
         with pytest.raises(ValueError):
@@ -187,13 +206,15 @@ def var_surrogate() -> VariationalSelfiesDKLSurrogate:
 @pytest.fixture
 def var_mf_surrogate() -> VariationalSelfiesDKLSurrogate:
     encoder = ENCODER_CFG.build()
-    return VariationalSelfiesDKLSurrogate(
+    surrogate = VariationalSelfiesDKLSurrogate(
         encoder=encoder,
         training_params=TRAINING,
         num_inducing=8,
         multi_fidelity=True,
         target_fidelity=3,
     )
+    surrogate.set_fidelity_confidences(FIDELITY_CONFIDENCES)
+    return surrogate
 
 
 class TestVariationalSelfiesDKLSurrogate:
@@ -261,8 +282,8 @@ class TestVariationalSelfiesDKLSurrogate:
         candidates = _make_mf_candidates([BENZENE, ALANINE], [1, 2])
         latent = var_mf_surrogate.encode_candidates(candidates)
         assert latent.shape == (2, ENCODER_CFG.latent_dim + 1)
-        # Last column is fidelity
-        assert latent[:, -1].tolist() == pytest.approx([1.0, 2.0])
+        # Last column is the encoded fidelity confidence.
+        assert latent[:, -1].tolist() == pytest.approx([0.25, 0.5])
 
     def test_get_model_returns_botorch_adapter(
         self, var_surrogate: VariationalSelfiesDKLSurrogate
@@ -530,9 +551,9 @@ class TestSelfiesKernelBatchDims:
         kernel = SelfiesKernel(encoder, base_kernel, include_fidelity=True)
 
         seq_len = encoder.max_length
-        # Last column = fidelity; shape (batch=2, q=1, seq_len+1)
+        # Last column = encoded fidelity value; shape (batch=2, q=1, seq_len+1)
         x = torch.zeros(2, 1, seq_len + 1, dtype=torch.float64)
-        x[..., -1] = 1.0  # fidelity = 1.0
+        x[..., -1] = 1.0  # encoded target fidelity confidence
         result = kernel(x, x).evaluate()
         assert result.shape[0] == 2  # no shape error
 

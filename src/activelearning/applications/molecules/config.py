@@ -139,9 +139,11 @@ class ExactSelfiesDKLSurrogateConfig(BaseModel):
     training_params : SelfiesTrainingConfig
         Training hyper-parameters for the joint MLM + GP Adam loop.
     multi_fidelity : bool
-        Append fidelity scalar to feature tensors.
+        Append the encoded fidelity confidence to feature tensors.
     target_fidelity : int, optional
-        Required when ``multi_fidelity=True``; typically ``max(fidelity_costs)``.
+        Required when ``multi_fidelity=True``; typically the highest fidelity
+        level. It is mapped to its configured confidence before BoTorch uses it
+        as the target-fidelity value.
     standardize_outputs : bool
         Normalise GP outputs to mean 0 / variance 1.
     """
@@ -189,9 +191,11 @@ class VariationalSelfiesDKLSurrogateConfig(BaseModel):
     training_params : SelfiesTrainingConfig
         Training hyper-parameters.
     multi_fidelity : bool
-        Append fidelity scalar to latent feature vectors.
+        Append the encoded fidelity confidence to latent feature vectors.
     target_fidelity : int, optional
-        Required when ``multi_fidelity=True``; typically ``max(fidelity_costs)``.
+        Required when ``multi_fidelity=True``; typically the highest fidelity
+        level. It is mapped to its configured confidence before BoTorch uses it
+        as the target-fidelity value.
     num_inducing : int
         Number of variational inducing points.
     standardize_outputs : bool

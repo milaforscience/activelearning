@@ -6,7 +6,7 @@
 # This keeps the exact-GP variant intentionally smaller than the variational
 # multi-fidelity example:
 # - GFlowNet samples both a SELFIES molecule and a fidelity level.
-# - ExactSelfiesDKLSurrogate appends fidelity to the molecule features.
+# - ExactSelfiesDKLSurrogate appends fidelity confidences to the molecule features.
 # - qMultiFidelityLowerBoundMaxValueEntropy provides the MF-MES reward proxy.
 # - FidelityCostUtility prefers cheaper fidelities when they are similarly informative.
 
