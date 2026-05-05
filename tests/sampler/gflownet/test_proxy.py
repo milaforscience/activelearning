@@ -97,11 +97,33 @@ class TestAcquisitionProxyInit:
         proxy = _make_proxy()
         assert proxy._env is None
 
+    def test_reward_scaling_defaults_to_identity(self):
+        proxy = _make_proxy()
+        assert proxy._round_reward_scale() == pytest.approx(1.0)
+
+    def test_bad_reward_beta_raises(self):
+        with pytest.raises(ValueError, match="reward_beta"):
+            _make_proxy(reward_beta=0.0)
+
+    def test_bad_reward_rho_raises(self):
+        with pytest.raises(ValueError, match="reward_rho"):
+            _make_proxy(reward_rho=0.0)
+
     def test_set_acquisition_replaces(self):
         proxy = _make_proxy()
         acq = _ConstantAcquisition()
         proxy.set_acquisition(acq)
         assert proxy.acquisition is acq
+
+    def test_set_round_index_updates_reward_scale(self):
+        proxy = _make_proxy(reward_beta=0.5, reward_rho=2.0)
+        proxy.set_round_index(3)
+        assert proxy._round_reward_scale() == pytest.approx(16.0)
+
+    def test_set_round_index_rejects_negative(self):
+        proxy = _make_proxy()
+        with pytest.raises(ValueError, match="round_index"):
+            proxy.set_round_index(-1)
 
     def test_setup_stores_env(self):
         proxy = _make_proxy()
@@ -157,6 +179,13 @@ class TestAcquisitionProxyCallSingleFidelity:
     def test_constant_acquisition_values(self):
         result = self.proxy(torch.tensor([[0.1, 0.2], [0.3, 0.4]]))
         assert torch.allclose(result, torch.tensor([3.0, 3.0]))
+
+    def test_applies_paper_reward_scaling(self):
+        proxy = _make_proxy(float_precision=32, reward_beta=0.25, reward_rho=2.0)
+        proxy.set_acquisition(_ConstantAcquisition(value=3.0))
+        proxy.set_round_index(2)
+        result = proxy(torch.tensor([[0.1, 0.2]]))
+        assert result.item() == pytest.approx(48.0)
 
     def test_acquisition_receives_correct_coords(self):
         acq = _CoordSumAcquisition()

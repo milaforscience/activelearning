@@ -13,7 +13,7 @@ from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
 from activelearning.active_learning import active_learning
 from activelearning.utils.types import Candidate, Observation
 from activelearning.logger.logger import ConsoleLogger
-from activelearning.runtime import RuntimeContext
+from activelearning.runtime import ALRuntimeMixin, RuntimeContext
 
 
 class ConfidenceAwareDummyMeanSurrogate(DummyMeanSurrogate):
@@ -261,6 +261,22 @@ class RuntimeLoggingSampler(PoolScoreSampler):
         return samples
 
 
+class RoundRecordingSampler(PoolScoreSampler):
+    """Sampler test double that records shared runtime-context rounds."""
+
+    def __init__(self, candidate_pool, num_samples: int) -> None:
+        super().__init__(candidate_pool=candidate_pool, num_samples=num_samples)
+        self.round_indices: list[int] = []
+
+    def sample(
+        self,
+        acquisition: Optional[DummyAcquisition] = None,
+        observations: Optional[Iterable[Observation]] = None,
+    ) -> list[Candidate]:
+        self.round_indices.append(self.active_learning_round)
+        return super().sample(acquisition=acquisition, observations=observations)
+
+
 class RuntimeLoggingSelector(TopKAcquisitionSelector):
     """Selector test double that emits metrics through the bound runtime logger."""
 
@@ -369,3 +385,33 @@ def test_active_learning_binds_runtime_context_to_modules_for_logging(capsys):
     assert "dataset_records=" in out
     assert "budget_round_limit=" in out
     assert "[Logger] Run 'runtime_test_run' finished." in out
+
+
+def test_active_learning_updates_runtime_context_round_before_each_sampling_call():
+    sampler = RoundRecordingSampler(candidate_pool=[Candidate(0, 0)], num_samples=1)
+
+    def score_fn(value):
+        return float(value)
+
+    oracle = MultiFidelityOracle(
+        fidelity_configs={
+            0: {
+                "cost_per_sample": 1.0,
+                "score_fn": score_fn,
+                "fidelity_confidence": 1.0,
+            },
+        }
+    )
+    _, _, num_iter = active_learning(
+        dataset=ListDataset(),
+        surrogate=DummyMeanSurrogate(),
+        acquisition=DummyAcquisition(),
+        sampler=sampler,
+        selector=TopKAcquisitionSelector(num_samples=1),
+        oracle=oracle,
+        budget=Budget(available_budget=2.0, schedule=lambda round_num: 1.0),
+    )
+
+    assert num_iter == 2
+    assert sampler.round_indices == [0, 1]
+    assert ALRuntimeMixin().active_learning_round == 0

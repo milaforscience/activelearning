@@ -14,6 +14,12 @@ class RuntimeContext:
     device: torch.device = torch.device("cpu")
     dtype: torch.dtype = torch.float64
     seed: int = 42
+    active_learning_round: int = 0
+
+    def __post_init__(self) -> None:
+        """Validate runtime settings after dataclass construction."""
+        if self.active_learning_round < 0:
+            raise ValueError("active_learning_round must be non-negative.")
 
 
 DEFAULT_RUNTIME_CONTEXT = RuntimeContext()
@@ -73,6 +79,11 @@ class ALRuntimeMixin:
     def dtype(self) -> torch.dtype:
         """Return the shared floating-point torch dtype."""
         return self.runtime_context.dtype
+
+    @property
+    def active_learning_round(self) -> int:
+        """Return the zero-based active-learning round bound to this instance."""
+        return self.runtime_context.active_learning_round
 
 
 def bind_runtime_context(

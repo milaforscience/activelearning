@@ -137,6 +137,43 @@ def test_molecule_dkl_variational_multi_fidelity_gflownet_config_parses() -> Non
     }
 
 
+def test_molecule_dkl_variational_multi_fidelity_gflownet_config_matches_tutorial_values() -> (
+    None
+):
+    """Ensure the variational MF-GFlowNet tutorial keeps its documented defaults."""
+    config_path = (
+        REPOSITORY_ROOT
+        / "config"
+        / "molecules"
+        / "gflownet_variational_multi_fidelity.yaml"
+    )
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.sampler.n_samples == 640
+    assert config.selector.num_samples == 128
+    assert config.surrogate.type == "VariationalSelfiesDKLSurrogate"
+    assert config.surrogate.multi_fidelity is True
+    assert config.surrogate.target_fidelity == 3
+    assert config.surrogate.encoder.max_length == 64
+    assert config.surrogate.encoder.num_layers == 8
+    assert config.surrogate.encoder.num_heads == 8
+    assert config.surrogate.encoder.latent_dim == 32
+    assert config.surrogate.num_inducing == 64
+    assert config.sampler.conf is not None
+    assert config.sampler.conf["proxy"]["reward_beta"] == 1.0e-6
+    assert config.sampler.conf["proxy"]["reward_rho"] == 1.5
+    assert config.acquisition.cost_aware_utility.fidelity_costs == {
+        1: 1.0,
+        2: 3.5,
+        3: 7.0,
+    }
+    assert config.oracle.fidelity_costs == {1: 1.0, 2: 3.5, 3: 7.0}
+    assert config.oracle.per_fidelity_num_conformers == {1: 1, 2: 2, 3: 4}
+    assert config.budget.available_budget == 1260.0
+    assert config.budget.schedule.value == 896.0
+
+
 def test_molecule_dkl_exact_pool_config_parses() -> None:
     """Ensure the exact single-fidelity pool-based molecule example matches the schema."""
     config_path = REPOSITORY_ROOT / "config" / "molecules" / "exact.yaml"

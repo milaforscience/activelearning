@@ -126,6 +126,12 @@ class TestGFlowNetSamplerInstantiation:
             )
         assert not caplog.records
 
+    def test_active_learning_round_reads_from_runtime_context(self, gflownet_conf_2d):
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=3, conf=conf)
+        sampler.bind_runtime_context(RuntimeContext(active_learning_round=4))
+        assert sampler.active_learning_round == 4
+
 
 # ---------------------------------------------------------------------------
 # fidelity_action → wrapper class selection
@@ -194,6 +200,24 @@ class TestGFlowNetSamplerFidelityActionWrapperSelection:
         sampler.bind_runtime_context(RuntimeContext())
         with pytest.raises(ValueError, match="fidelity_action"):
             sampler._build_agent(acquisition=Mock())
+
+    def test_round_index_is_passed_to_proxy(self, gflownet_conf_2d):
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=2, conf=conf)
+        sampler.bind_runtime_context(RuntimeContext(active_learning_round=3))
+
+        mock_agent = Mock()
+        mock_agent.proxy = Mock()
+        mock_agent.env = Mock()
+        mock_agent.logger = Mock()
+
+        with patch(
+            "activelearning.sampler.gflownet.gflownet_sampler.gflownet_from_config",
+            return_value=mock_agent,
+        ):
+            sampler._build_agent(acquisition=Mock())
+
+        mock_agent.proxy.set_round_index.assert_called_once_with(3)
 
 
 # ---------------------------------------------------------------------------

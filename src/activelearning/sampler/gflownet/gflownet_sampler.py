@@ -115,6 +115,8 @@ class GFlowNetSampler(Sampler):
 
         agent = gflownet_from_config(conf, env=env)
         agent.proxy.set_acquisition(acquisition)
+        if hasattr(agent.proxy, "set_round_index"):
+            agent.proxy.set_round_index(self.active_learning_round)
 
         if self.logger is not None:
             agent.logger = RuntimeGFlowNetLoggerWrapper(

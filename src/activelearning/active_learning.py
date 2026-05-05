@@ -3,7 +3,6 @@ from activelearning.budget.budget import Budget
 from activelearning.dataset.dataset import Dataset
 from activelearning.oracle.oracle import Oracle
 from activelearning.runtime import (
-    DEFAULT_RUNTIME_CONTEXT,
     RuntimeContext,
     bind_runtime_context,
 )
@@ -47,8 +46,8 @@ def active_learning(
         Budget object managing allocation and consumption.
     runtime_context : RuntimeContext, optional
         Shared runtime settings propagated to runtime-aware components. If
-        omitted, components fall back to the default context. If the context
-        contains a logger, the loop records per-round metrics through it.
+        omitted, components receive a fresh context with default values. If the
+        context contains a logger, the loop records per-round metrics through it.
 
     Returns
     -------
@@ -63,7 +62,7 @@ def active_learning(
         The loop terminates early if no candidates can be afforded within
         the remaining budget to prevent infinite loops.
     """
-    resolved_runtime_context = runtime_context or DEFAULT_RUNTIME_CONTEXT
+    resolved_runtime_context = runtime_context or RuntimeContext()
     logger = resolved_runtime_context.logger
 
     bind_runtime_context(
@@ -73,12 +72,14 @@ def active_learning(
 
     initial_budget = budget.available_budget
     num_rounds = 0
+    resolved_runtime_context.active_learning_round = 0
 
     # Propagate oracle fidelity confidences to the surrogate before the loop.
     # Surrogates that don't use fidelity metadata safely ignore this (no-op default).
     surrogate.set_fidelity_confidences(oracle.get_fidelity_confidences())
 
     while budget.available_budget > 0:
+        resolved_runtime_context.active_learning_round = num_rounds
         # Call once per round so all consumers share the same consistent epoch view.
         # Implementations must guarantee the returned iterable supports multiple
         # iterations with the same sequence (see Dataset.get_observations_iterable).
