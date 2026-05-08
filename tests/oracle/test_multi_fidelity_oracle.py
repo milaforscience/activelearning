@@ -132,6 +132,24 @@ def test_get_supported_fidelities():
     assert oracle.get_supported_fidelities() == [0, 1, 2]
 
 
+def test_single_supported_fidelity_accepts_candidates_without_explicit_fidelity():
+    """Single-fidelity oracles should infer their only supported fidelity."""
+
+    oracle = MultiFidelityOracle(
+        fidelity_configs={
+            3: {
+                "cost_per_sample": 7.0,
+                "score_fn": lambda x: float(x) + 1.0,
+                "fidelity_confidence": 1.0,
+            }
+        }
+    )
+    candidates = [Candidate(x=2.0, fidelity=None)]
+
+    assert oracle.get_costs(candidates) == [7.0]
+    assert oracle.query(candidates) == [Observation(x=2.0, y=3.0, fidelity=3)]
+
+
 def test_get_fidelity_confidences():
     """Test get_fidelity_confidences returns the expected mapping."""
 

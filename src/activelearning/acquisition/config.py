@@ -9,6 +9,10 @@ from activelearning.acquisition.botorch.candidate_set import (
     TrainDataCandidateSetSpec,
 )
 from activelearning.acquisition.dummy_acquisition import DummyAcquisition
+from activelearning.acquisition.botorch.botorch_single_fidelity import (
+    QLowerBoundMaxValueEntropy,
+    QMaxValueEntropy,
+)
 from activelearning.acquisition.botorch.botorch_analytic import (
     ExpectedImprovement,
     LogExpectedImprovement,
@@ -75,13 +79,11 @@ class DummyAcquisitionConfig(BaseModel):
 class UpperConfidenceBoundConfig(BaseModel):
     type: Literal["UpperConfidenceBound"] = "UpperConfidenceBound"
     beta: float = 2.0
-    maximize: bool = True
     target_fidelity_value: Optional[float] = None
 
     def build(self) -> Acquisition:
         return UpperConfidenceBound(
             beta=self.beta,
-            maximize=self.maximize,
             target_fidelity_value=self.target_fidelity_value,
         )
 
@@ -89,13 +91,11 @@ class UpperConfidenceBoundConfig(BaseModel):
 class ExpectedImprovementConfig(BaseModel):
     type: Literal["ExpectedImprovement"] = "ExpectedImprovement"
     best_f: Optional[float] = None
-    maximize: bool = True
     target_fidelity_value: Optional[float] = None
 
     def build(self) -> Acquisition:
         return ExpectedImprovement(
             best_f=self.best_f,
-            maximize=self.maximize,
             target_fidelity_value=self.target_fidelity_value,
         )
 
@@ -103,13 +103,11 @@ class ExpectedImprovementConfig(BaseModel):
 class LogExpectedImprovementConfig(BaseModel):
     type: Literal["LogExpectedImprovement"] = "LogExpectedImprovement"
     best_f: Optional[float] = None
-    maximize: bool = True
     target_fidelity_value: Optional[float] = None
 
     def build(self) -> Acquisition:
         return LogExpectedImprovement(
             best_f=self.best_f,
-            maximize=self.maximize,
             target_fidelity_value=self.target_fidelity_value,
         )
 
@@ -117,13 +115,11 @@ class LogExpectedImprovementConfig(BaseModel):
 class ProbabilityOfImprovementConfig(BaseModel):
     type: Literal["ProbabilityOfImprovement"] = "ProbabilityOfImprovement"
     best_f: Optional[float] = None
-    maximize: bool = True
     target_fidelity_value: Optional[float] = None
 
     def build(self) -> Acquisition:
         return ProbabilityOfImprovement(
             best_f=self.best_f,
-            maximize=self.maximize,
             target_fidelity_value=self.target_fidelity_value,
         )
 
@@ -131,25 +127,53 @@ class ProbabilityOfImprovementConfig(BaseModel):
 class LogProbabilityOfImprovementConfig(BaseModel):
     type: Literal["LogProbabilityOfImprovement"] = "LogProbabilityOfImprovement"
     best_f: Optional[float] = None
-    maximize: bool = True
     target_fidelity_value: Optional[float] = None
 
     def build(self) -> Acquisition:
         return LogProbabilityOfImprovement(
             best_f=self.best_f,
-            maximize=self.maximize,
             target_fidelity_value=self.target_fidelity_value,
         )
 
 
 class PosteriorMeanConfig(BaseModel):
     type: Literal["PosteriorMean"] = "PosteriorMean"
-    maximize: bool = True
     target_fidelity_value: Optional[float] = None
 
     def build(self) -> Acquisition:
         return PosteriorMean(
-            maximize=self.maximize,
+            target_fidelity_value=self.target_fidelity_value,
+        )
+
+
+class QMaxValueEntropyConfig(BaseModel):
+    type: Literal["QMaxValueEntropy"] = "QMaxValueEntropy"
+    candidate_set_spec: CandidateSetSpecConfig
+    num_fantasies: int = Field(default=16, gt=0)
+    num_mv_samples: int = Field(default=10, gt=0)
+    num_y_samples: int = Field(default=128, gt=0)
+    target_fidelity_value: Optional[float] = None
+
+    def build(self) -> Acquisition:
+        return QMaxValueEntropy(
+            candidate_set_spec=self.candidate_set_spec.build(),  # type: ignore[arg-type]
+            num_fantasies=self.num_fantasies,
+            num_mv_samples=self.num_mv_samples,
+            num_y_samples=self.num_y_samples,
+            target_fidelity_value=self.target_fidelity_value,
+        )
+
+
+class QLowerBoundMaxValueEntropyConfig(BaseModel):
+    type: Literal["QLowerBoundMaxValueEntropy"] = "QLowerBoundMaxValueEntropy"
+    candidate_set_spec: CandidateSetSpecConfig
+    num_mv_samples: int = Field(default=10, gt=0)
+    target_fidelity_value: Optional[float] = None
+
+    def build(self) -> Acquisition:
+        return QLowerBoundMaxValueEntropy(
+            candidate_set_spec=self.candidate_set_spec.build(),  # type: ignore[arg-type]
+            num_mv_samples=self.num_mv_samples,
             target_fidelity_value=self.target_fidelity_value,
         )
 
@@ -160,7 +184,6 @@ class QMultiFidelityMaxValueEntropyConfig(BaseModel):
     num_fantasies: int = Field(default=16, gt=0)
     num_mv_samples: int = Field(default=10, gt=0)
     num_y_samples: int = Field(default=128, gt=0)
-    maximize: bool = True
     target_fidelity_value: Optional[float] = None
     cost_aware_utility: Optional[FidelityCostUtilityConfig] = None
 
@@ -170,7 +193,6 @@ class QMultiFidelityMaxValueEntropyConfig(BaseModel):
             num_fantasies=self.num_fantasies,
             num_mv_samples=self.num_mv_samples,
             num_y_samples=self.num_y_samples,
-            maximize=self.maximize,
             target_fidelity_value=self.target_fidelity_value,
             cost_aware_utility=(
                 self.cost_aware_utility.build()
@@ -188,7 +210,6 @@ class QMultiFidelityLowerBoundMaxValueEntropyConfig(BaseModel):
     num_fantasies: int = Field(default=16, gt=0)
     num_mv_samples: int = Field(default=10, gt=0)
     num_y_samples: int = Field(default=128, gt=0)
-    maximize: bool = True
     target_fidelity_value: Optional[float] = None
     cost_aware_utility: Optional[FidelityCostUtilityConfig] = None
 
@@ -198,7 +219,6 @@ class QMultiFidelityLowerBoundMaxValueEntropyConfig(BaseModel):
             num_fantasies=self.num_fantasies,
             num_mv_samples=self.num_mv_samples,
             num_y_samples=self.num_y_samples,
-            maximize=self.maximize,
             target_fidelity_value=self.target_fidelity_value,
             cost_aware_utility=(
                 self.cost_aware_utility.build()
@@ -212,14 +232,12 @@ class QMultiFidelityKnowledgeGradientConfig(BaseModel):
     type: Literal["QMultiFidelityKnowledgeGradient"] = "QMultiFidelityKnowledgeGradient"
     num_fantasies: int = Field(default=64, gt=0)
     current_value: Optional[float] = None
-    maximize: bool = True
     target_fidelity_value: Optional[float] = None
 
     def build(self) -> Acquisition:
         return QMultiFidelityKnowledgeGradient(
             num_fantasies=self.num_fantasies,
             current_value=self.current_value,
-            maximize=self.maximize,
             target_fidelity_value=self.target_fidelity_value,
         )
 
@@ -233,6 +251,8 @@ AcquisitionConfig = Annotated[
         ProbabilityOfImprovementConfig,
         LogProbabilityOfImprovementConfig,
         PosteriorMeanConfig,
+        QMaxValueEntropyConfig,
+        QLowerBoundMaxValueEntropyConfig,
         QMultiFidelityMaxValueEntropyConfig,
         QMultiFidelityLowerBoundMaxValueEntropyConfig,
         QMultiFidelityKnowledgeGradientConfig,

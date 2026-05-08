@@ -915,6 +915,56 @@ class TestAnalyticAcquisitionIntegration:
 
 
 # ===================================================================
+# Concrete single-fidelity entropy acquisition integration tests
+# ===================================================================
+
+
+class TestSingleFidelityEntropyAcquisitionIntegration:
+    """Integration tests for concrete single-fidelity MES wrappers."""
+
+    def _scores_valid(self, scores: list[float], n: int = 2) -> None:
+        assert len(scores) == n
+        assert all(isinstance(s, float) for s in scores)
+        assert all(math.isfinite(s) for s in scores)
+
+    def test_qmes_scores(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+        candidates: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_single_fidelity import (
+            QMaxValueEntropy,
+        )
+
+        acq = QMaxValueEntropy(
+            candidate_set_spec=TrainDataCandidateSetSpec(),
+            num_fantasies=2,
+            num_mv_samples=5,
+            num_y_samples=16,
+        )
+        acq.update(fitted_surrogate, single_fidelity_observations)
+        self._scores_valid(acq.score(candidates))
+
+    def test_qlbmes_scores(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+        candidates: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_single_fidelity import (
+            QLowerBoundMaxValueEntropy,
+        )
+
+        acq = QLowerBoundMaxValueEntropy(
+            candidate_set_spec=TrainDataCandidateSetSpec(),
+            num_mv_samples=5,
+        )
+        acq.update(fitted_surrogate, single_fidelity_observations)
+        self._scores_valid(acq.score(candidates))
+
+
+# ===================================================================
 # Concrete multi-fidelity acquisition integration tests
 # ===================================================================
 
