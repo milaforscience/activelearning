@@ -2,6 +2,7 @@ import math
 
 import pytest
 
+from activelearning.dataset.config import CSVInitialDataConfig, ListDatasetConfig
 from activelearning.dataset.list_dataset import ListDataset
 from activelearning.utils.types import Observation
 
@@ -188,3 +189,48 @@ def test_get_latest_observations_independence(dataset):
     latest_again = dataset.get_latest_observations_iterable()
     assert len(latest_again) == 1
     assert latest_again[0].x == 1
+
+
+def test_list_dataset_config_loads_numeric_csv_initial_data(tmp_path):
+    """ListDatasetConfig should preload numeric observations from CSV."""
+
+    csv_path = tmp_path / "initial.csv"
+    csv_path.write_text(
+        "x1,x2,y,fidelity,source\n1.0,2.0,3.0,1,seed\n4.0,5.0,6.0,2,seed\n",
+        encoding="utf-8",
+    )
+    config = ListDatasetConfig(
+        initial_data=CSVInitialDataConfig(
+            path=csv_path,
+            x_columns=["x1", "x2"],
+            y_column="y",
+            fidelity_column="fidelity",
+        )
+    )
+
+    observations = config.build().get_observations_iterable()
+
+    assert observations == [
+        Observation(x=[1.0, 2.0], y=3.0, fidelity=1, metadata={"source": "seed"}),
+        Observation(x=[4.0, 5.0], y=6.0, fidelity=2, metadata={"source": "seed"}),
+    ]
+
+
+def test_list_dataset_config_loads_string_csv_for_minimization(tmp_path):
+    """ListDatasetConfig can negate seeded targets before storing them."""
+
+    csv_path = tmp_path / "initial.csv"
+    csv_path.write_text("selfies,y\n[C],7.5\n", encoding="utf-8")
+    config = ListDatasetConfig(
+        negate_initial_targets=True,
+        initial_data=CSVInitialDataConfig(
+            path=csv_path,
+            x_columns="selfies",
+            y_column="y",
+            metadata_columns=None,
+        ),
+    )
+
+    observations = config.build().get_observations_iterable()
+
+    assert observations == [Observation(x="[C]", y=-7.5)]
