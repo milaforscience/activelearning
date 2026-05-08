@@ -13,7 +13,9 @@ from activelearning.sampler.pool_file_sampler import PoolFileSampler
 from activelearning.sampler.gflownet.config_utils import compose_gflownet_conf
 from activelearning.sampler.gflownet.grid_sampler import GFlowNetGridSampler
 from activelearning.sampler.gflownet.gflownet_sampler import GFlowNetSampler
-from activelearning.sampler.token_sequence_sampler import UniformTokenSequenceSampler
+from activelearning.sampler.random_token_sequence_sampler import (
+    RandomTokenSequenceSampler,
+)
 
 _FidelityAction = Literal["any", "first", "last"]
 
@@ -68,16 +70,18 @@ class PoolFileSamplerConfig(BaseModel):
         )
 
 
-class UniformTokenSequenceSamplerConfig(BaseModel):
-    """Configuration for uniformly sampling bounded token sequences."""
+class RandomTokenSequenceSamplerConfig(BaseModel):
+    """Configuration for random token-by-token sequence sampling."""
 
-    type: Literal["UniformTokenSequenceSampler"] = "UniformTokenSequenceSampler"
+    type: Literal["RandomTokenSequenceSampler"] = "RandomTokenSequenceSampler"
     tokens: list[str] | Literal["SELFIES_VOCAB_SMALL"]
     num_samples: int = Field(gt=0)
     min_length: int = Field(default=1, ge=1)
     max_length: int = Field(ge=1)
     fidelity_policy: DiscreteFidelityPolicyConfig | None = None
     seed_offset: int = 0
+    unique: bool = True
+    max_attempts: int = Field(default=100000, gt=0)
 
     def build(self) -> Sampler:
         tokens = (
@@ -85,7 +89,7 @@ class UniformTokenSequenceSamplerConfig(BaseModel):
             if self.tokens == "SELFIES_VOCAB_SMALL"
             else self.tokens
         )
-        return UniformTokenSequenceSampler(
+        return RandomTokenSequenceSampler(
             tokens=tokens,
             num_samples=self.num_samples,
             min_length=self.min_length,
@@ -96,6 +100,8 @@ class UniformTokenSequenceSamplerConfig(BaseModel):
                 else None
             ),
             seed_offset=self.seed_offset,
+            unique=self.unique,
+            max_attempts=self.max_attempts,
         )
 
 
@@ -197,7 +203,7 @@ SamplerConfig = Annotated[
     Union[
         HypercubeSamplerConfig,
         PoolFileSamplerConfig,
-        UniformTokenSequenceSamplerConfig,
+        RandomTokenSequenceSamplerConfig,
         GFlowNetSamplerConfig,
         GFlowNetGridSamplerConfig,
     ],
