@@ -5,6 +5,7 @@ from activelearning.budget.config import BudgetConfig
 from activelearning.dataset.config import DatasetConfig
 from activelearning.logger.config import LoggerConfig
 from activelearning.oracle.config import OracleConfig
+from activelearning.run_writer import RunWriterConfig
 from activelearning.sampler.config import SamplerConfig
 from activelearning.selector.config import SelectorConfig
 from activelearning.surrogate.config import SurrogateConfig
@@ -21,3 +22,4 @@ class ActiveLearningConfig(BaseModel):
     oracle: OracleConfig
     budget: BudgetConfig
     logger: LoggerConfig | None = None
+    run_writer: RunWriterConfig | None = None

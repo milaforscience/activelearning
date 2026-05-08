@@ -1,3 +1,5 @@
+import csv
+import json
 import pytest
 from unittest.mock import Mock
 from typing import Callable, Iterable, Optional, Sequence
@@ -14,6 +16,7 @@ from activelearning.active_learning import active_learning
 from activelearning.utils.types import Candidate, Observation
 from activelearning.logger.logger import ConsoleLogger
 from activelearning.runtime import ALRuntimeMixin, RuntimeContext
+from activelearning.run_writer import JSONLinesRunWriter
 
 
 class ConfidenceAwareDummyMeanSurrogate(DummyMeanSurrogate):
@@ -415,3 +418,57 @@ def test_active_learning_updates_runtime_context_round_before_each_sampling_call
     assert num_iter == 2
     assert sampler.round_indices == [0, 1]
     assert ALRuntimeMixin().active_learning_round == 0
+
+
+def test_active_learning_records_round_artifacts(tmp_path):
+    """The active-learning loop should write structured per-round artifacts."""
+
+    run_writer = JSONLinesRunWriter(
+        output_dir=tmp_path,
+        metadata={"name": "run-writer-test"},
+    )
+
+    dataset_out, total_cost, num_rounds = active_learning(
+        dataset=ListDataset(),
+        surrogate=DummyMeanSurrogate(),
+        acquisition=DummyAcquisition(),
+        sampler=PoolScoreSampler(
+            candidate_pool=[Candidate(1, 0), Candidate(2, 0)],
+            num_samples=2,
+        ),
+        selector=TopKAcquisitionSelector(num_samples=1),
+        oracle=MultiFidelityOracle(
+            fidelity_configs={
+                0: {
+                    "cost_per_sample": 1.0,
+                    "score_fn": lambda value: float(value),
+                    "fidelity_confidence": 1.0,
+                }
+            }
+        ),
+        budget=Budget(available_budget=1.0, schedule=lambda round_num: 1.0),
+        run_writer=run_writer,
+    )
+
+    manifest = json.loads((tmp_path / "run_manifest.json").read_text(encoding="utf-8"))
+    summary = json.loads((tmp_path / "run_summary.json").read_text(encoding="utf-8"))
+    experiment_log_rows = list(
+        csv.DictReader((tmp_path / "experiment_log.csv").open(encoding="utf-8"))
+    )
+    round_records = [
+        json.loads(line)
+        for line in (tmp_path / "round_history.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+
+    assert num_rounds == 1
+    assert total_cost == 1.0
+    assert len(dataset_out.get_observations_iterable()) == 1
+    assert manifest["name"] == "run-writer-test"
+    assert summary["total_cost"] == 1.0
+    assert experiment_log_rows[0]["run_directory"] == str(tmp_path)
+    assert experiment_log_rows[0]["total_cost"] == "1.0"
+    assert len(round_records) == 1
+    assert round_records[0]["selected_candidates"][0]["x"] in {1, 2}
+    assert round_records[0]["selected_costs"] == [1.0]

@@ -10,6 +10,7 @@ These tests verify that:
 
 import sys
 import textwrap
+import hashlib
 from unittest.mock import patch
 
 import pytest
@@ -316,3 +317,135 @@ def test_cli_unknown_flags_emit_warning_and_do_not_crash(
     ):
         with pytest.warns(UserWarning, match="Unrecognised arguments ignored"):
             main()
+
+
+def test_cli_passes_compact_provenance_to_run_writer(
+    base_config,
+    acquisition_config,
+) -> None:
+    """The CLI should record config provenance without requiring manual metadata."""
+
+    from activelearning.main import main
+
+    data_file = base_config.parent / "initial.csv"
+    data_file.write_text("x1,x2,y\n0.0,0.0,1.0\n", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def _capture_run_writer(*args, **kwargs):
+        captured["run_writer"] = kwargs["run_writer"]
+        return kwargs.get("dataset") or args[0], 0.0, 0
+
+    with patch.object(
+        sys,
+        "argv",
+        [
+            "activelearning",
+            str(base_config),
+            str(acquisition_config),
+            f"dataset.initial_data.path={data_file}",
+            "dataset.initial_data.x_columns=[x1,x2]",
+            "dataset.initial_data.y_column=y",
+            "run_writer.type=JSONLinesRunWriter",
+            f"run_writer.output_dir={base_config.parent / 'runs'}",
+        ],
+    ):
+        with patch(
+            "activelearning.main._git_commit_sha",
+            return_value="deadbeef",
+        ):
+            with patch(
+                "activelearning.active_learning.active_learning",
+                side_effect=_capture_run_writer,
+            ):
+                main()
+
+    run_writer = captured["run_writer"]
+    run_metadata = run_writer.metadata
+    assert run_writer is not None
+    assert isinstance(run_metadata, dict)
+    assert run_metadata["provenance"]["git_commit_sha"] == "deadbeef"
+    assert run_metadata["cli"]["config_files"] == [
+        str(base_config),
+        str(acquisition_config),
+    ]
+    assert run_metadata["cli"]["config_overrides"] == [
+        f"dataset.initial_data.path={data_file}",
+        "dataset.initial_data.x_columns=[x1,x2]",
+        "dataset.initial_data.y_column=y",
+        "run_writer.type=JSONLinesRunWriter",
+        f"run_writer.output_dir={base_config.parent / 'runs'}",
+    ]
+    assert run_metadata["config"]["dataset"]["initial_data"]["path"] == str(data_file)
+    assert run_metadata["config"]["dataset"]["initial_data"]["x_columns"] == [
+        "x1",
+        "x2",
+    ]
+    input_files = {
+        item["path"]: item["md5"] for item in run_metadata["provenance"]["input_files"]
+    }
+    assert (
+        input_files[str(base_config)]
+        == hashlib.md5(base_config.read_bytes()).hexdigest()
+    )
+    assert (
+        input_files[str(acquisition_config)]
+        == hashlib.md5(acquisition_config.read_bytes()).hexdigest()
+    )
+    assert (
+        input_files[str(data_file)] == hashlib.md5(data_file.read_bytes()).hexdigest()
+    )
+
+
+def test_dataset_negate_initial_targets_negates_initial_data(tmp_path) -> None:
+    """The dataset config can negate seeded initial CSV observations."""
+
+    config_path = tmp_path / "config.yaml"
+    data_path = tmp_path / "initial.csv"
+    data_path.write_text("x,y\nseed,3.5\n", encoding="utf-8")
+    config_path.write_text(
+        textwrap.dedent(
+            f"""
+            runtime:
+              device: cpu
+              precision: 64
+            dataset:
+              type: ListDataset
+              negate_initial_targets: true
+              initial_data:
+                path: {data_path}
+                x_columns: x
+                y_column: y
+                metadata_columns: null
+            surrogate:
+              type: BoTorchGPSurrogate
+            acquisition:
+              type: DummyAcquisition
+            sampler:
+              type: HypercubeSampler
+              bounds:
+                - [0.0, 1.0]
+                - [0.0, 1.0]
+              num_samples: 1
+              fidelities: [1]
+            selector:
+              type: TopKAcquisitionSelector
+              num_samples: 1
+            oracle:
+              type: BraninOracle
+              fidelity_costs:
+                1: 1.0
+            budget:
+              available_budget: 1.0
+              schedule:
+                type: constant
+                value: 1.0
+            """
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    dataset = config.dataset.build()
+
+    assert dataset.get_observations_iterable()[0].y == pytest.approx(-3.5)
