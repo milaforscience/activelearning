@@ -80,7 +80,9 @@ def test_molecule_dkl_exact_gflownet_config_parses() -> None:
     config = load_and_parse(config_path, ActiveLearningConfig)
 
     assert config.sampler.type == "GFlowNetSampler"
-    assert config.sampler.fixed_fidelity == 1
+    assert config.sampler.fidelity_policy is not None
+    assert config.sampler.fidelity_policy.type == "fixed"
+    assert config.sampler.fidelity_policy.value == 1
     assert config.selector.type == "TopKAcquisitionSelector"
     assert config.oracle.type == "XTBIPEAOracle"
     assert config.acquisition.type == "UpperConfidenceBound"
@@ -95,8 +97,9 @@ def test_molecule_dkl_exact_multi_fidelity_gflownet_config_parses() -> None:
     config = load_and_parse(config_path, ActiveLearningConfig)
 
     assert config.sampler.type == "GFlowNetSampler"
-    assert config.sampler.n_fidelities == 3
-    assert config.sampler.fixed_fidelity is None
+    assert config.sampler.fidelity_policy is not None
+    assert config.sampler.fidelity_policy.type == "joint_sampling"
+    assert config.sampler.fidelity_policy.n_fidelities == 3
     assert config.selector.type == "TopKAcquisitionSelector"
     assert config.oracle.type == "XTBIPEAOracle"
     assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
@@ -122,8 +125,9 @@ def test_molecule_dkl_variational_multi_fidelity_gflownet_config_parses() -> Non
     config = load_and_parse(config_path, ActiveLearningConfig)
 
     assert config.sampler.type == "GFlowNetSampler"
-    assert config.sampler.n_fidelities == 3
-    assert config.sampler.fixed_fidelity is None
+    assert config.sampler.fidelity_policy is not None
+    assert config.sampler.fidelity_policy.type == "joint_sampling"
+    assert config.sampler.fidelity_policy.n_fidelities == 3
     assert config.selector.type == "TopKAcquisitionSelector"
     assert config.oracle.type == "XTBIPEAOracle"
     assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
@@ -184,7 +188,9 @@ def test_molecule_dkl_exact_pool_config_parses() -> None:
     assert config.surrogate.type == "ExactSelfiesDKLSurrogate"
     assert config.acquisition.type == "UpperConfidenceBound"
     assert config.oracle.type == "XTBIPEAOracle"
-    assert config.sampler.fidelities == [1]
+    assert config.sampler.fidelity_policy is not None
+    assert config.sampler.fidelity_policy.type == "fixed"
+    assert config.sampler.fidelity_policy.value == 1
 
 
 def test_molecule_dkl_exact_multi_fidelity_pool_config_parses() -> None:
@@ -199,4 +205,6 @@ def test_molecule_dkl_exact_multi_fidelity_pool_config_parses() -> None:
     assert config.acquisition.cost_aware_utility is None
     assert config.selector.type == "CostAwareSelector"
     assert config.oracle.type == "XTBIPEAOracle"
-    assert config.sampler.fidelities == [1, 2, 3]
+    assert config.sampler.fidelity_policy is not None
+    assert config.sampler.fidelity_policy.type == "uniform"
+    assert config.sampler.fidelity_policy.values == [1, 2, 3]

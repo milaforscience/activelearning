@@ -44,7 +44,9 @@ def base_config(tmp_path):
             - [0.0, 1.0]
             - [0.0, 1.0]
           num_samples: 20
-          fidelities: [1, 2]
+          fidelity_policy:
+            type: uniform
+            values: [1, 2]
 
         selector:
           type: CostAwareSelector
@@ -426,7 +428,9 @@ def test_dataset_negate_initial_targets_negates_initial_data(tmp_path) -> None:
                 - [0.0, 1.0]
                 - [0.0, 1.0]
               num_samples: 1
-              fidelities: [1]
+              fidelity_policy:
+                type: fixed
+                value: 1
             selector:
               type: TopKAcquisitionSelector
               num_samples: 1

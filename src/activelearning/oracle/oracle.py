@@ -63,6 +63,8 @@ class Oracle(ABC, ALRuntimeMixin):
                 )
             return None
         if candidate.fidelity is None:
+            if len(supported_fidelities) == 1:
+                return next(iter(supported_fidelities))
             raise ValueError(
                 "Candidate fidelity must not be None for a multi-fidelity oracle."
             )

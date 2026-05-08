@@ -49,7 +49,9 @@ acquisition:
 sampler:
   type: GFlowNetSampler
   n_samples: 16
-  fixed_fidelity: 1
+  fidelity_policy:
+    type: fixed
+    value: 1
   conf:
     env:
       _target_: gflownet.envs.sequences.selfies.Selfies

@@ -11,6 +11,11 @@ from activelearning.budget.budget import Budget
 from activelearning.dataset.list_dataset import ListDataset
 from activelearning.oracle.augmented_function_oracle import BraninOracle
 from activelearning.runtime import RuntimeContext
+from activelearning.sampler.fidelity_policy import (
+    FixedFidelityPolicy,
+    FixedFidelityPolicyConfig,
+    JointSamplingFidelityPolicy,
+)
 from activelearning.sampler.gflownet.grid_sampler import GFlowNetGridSampler
 from activelearning.selector.score_selector import TopKAcquisitionSelector
 from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
@@ -97,6 +102,15 @@ class TestGFlowNetGridSamplerInstantiation:
         sampler = GFlowNetGridSampler(n_samples=5, conf=conf)
         assert sampler.n_samples == 5
 
+    def test_stores_fixed_output_policy(self, gflownet_conf_2d):
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetGridSampler(
+            n_samples=5,
+            conf=conf,
+            fidelity_policy=FixedFidelityPolicy(value=2),
+        )
+        assert sampler.fidelity_policy == FixedFidelityPolicy(value=2)
+
     def test_stores_output_bounds(self, gflownet_conf_2d):
         conf, _ = gflownet_conf_2d
         bounds = [(-1.0, 1.0), (0.0, 2.0)]
@@ -116,6 +130,16 @@ class TestGFlowNetGridSamplerInstantiation:
         with pytest.raises(ValueError, match="Grid environment"):
             GFlowNetGridSampler(n_samples=3, conf=conf)
 
+    def test_reward_fidelity_is_rejected_for_joint_sampling(self, gflownet_conf_2d):
+        conf, _ = gflownet_conf_2d
+        with pytest.raises(ValueError, match="reward_fidelity"):
+            GFlowNetGridSampler(
+                n_samples=3,
+                conf=conf,
+                fidelity_policy=JointSamplingFidelityPolicy(n_fidelities=2),
+                reward_fidelity=1,
+            )
+
 
 # ---------------------------------------------------------------------------
 # Sample output validation
@@ -134,6 +158,16 @@ class TestGFlowNetGridSamplerSample:
         sampler = GFlowNetGridSampler(n_samples=4, conf=conf)
         candidates = sampler.sample(acquisition=_ConstantAcquisition())
         assert all(isinstance(c, Candidate) for c in candidates)
+
+    def test_sample_applies_fixed_output_policy(self, gflownet_conf_2d):
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetGridSampler(
+            n_samples=4,
+            conf=conf,
+            fidelity_policy=FixedFidelityPolicy(value=3),
+        )
+        candidates = sampler.sample(acquisition=_ConstantAcquisition())
+        assert {candidate.fidelity for candidate in candidates} == {3}
 
     def test_sample_within_output_bounds(self, conf_2d_with_bounds):
         conf, _ = conf_2d_with_bounds
@@ -255,3 +289,21 @@ class TestGFlowNetGridSamplerActivelearningLoop:
             runtime_context=runtime_context,
         )
         runtime_logger.end.assert_called_once()
+
+
+class TestGFlowNetGridSamplerConfigRoundTrip:
+    """Verify that GFlowNetGridSamplerConfig forwards the shared fidelity policy."""
+
+    def test_config_build_passes_fixed_policy_to_sampler(self, gflownet_conf_2d):
+        from activelearning.sampler.config import GFlowNetGridSamplerConfig
+
+        conf_dict, _ = gflownet_conf_2d
+        conf_raw = OmegaConf.to_container(conf_dict, resolve=True)
+        cfg = GFlowNetGridSamplerConfig(
+            n_samples=3,
+            fidelity_policy=FixedFidelityPolicyConfig(value=2),
+            conf=conf_raw,
+            output_bounds=[(0.0, 1.0), (0.0, 1.0)],
+        )
+        sampler = cfg.build()
+        assert sampler.fidelity_policy == FixedFidelityPolicy(value=2)

@@ -1,12 +1,19 @@
 from pathlib import Path
 from typing import Annotated, Any, Literal, Union
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+from activelearning.applications.molecules.constants import SELFIES_VOCAB_SMALL
+from activelearning.sampler.fidelity_policy import (
+    DiscreteFidelityPolicyConfig,
+    JointSamplingFidelityPolicyConfig,
+    SamplerFidelityPolicyConfig,
+)
 from activelearning.sampler.hypercube_sampler import HypercubeSampler
 from activelearning.sampler.sampler import Sampler
 from activelearning.sampler.pool_file_sampler import PoolFileSampler
 from activelearning.sampler.gflownet.config_utils import compose_gflownet_conf
 from activelearning.sampler.gflownet.grid_sampler import GFlowNetGridSampler
 from activelearning.sampler.gflownet.gflownet_sampler import GFlowNetSampler
+from activelearning.sampler.token_sequence_sampler import UniformTokenSequenceSampler
 
 _FidelityAction = Literal["any", "first", "last"]
 
@@ -15,14 +22,18 @@ class HypercubeSamplerConfig(BaseModel):
     type: Literal["HypercubeSampler"] = "HypercubeSampler"
     bounds: list[tuple[float, float]]
     num_samples: int = Field(gt=0)
-    fidelities: dict[int, float] | list[int] | None = None
+    fidelity_policy: DiscreteFidelityPolicyConfig | None = None
     point_strategy: Literal["uniform", "lhs"] = "uniform"
 
     def build(self) -> Sampler:
         return HypercubeSampler(
             bounds=self.bounds,
             num_samples=self.num_samples,
-            fidelities=self.fidelities,
+            fidelity_policy=(
+                self.fidelity_policy.build()
+                if self.fidelity_policy is not None
+                else None
+            ),
             point_strategy=self.point_strategy,
         )
 
@@ -36,21 +47,55 @@ class PoolFileSamplerConfig(BaseModel):
         Path to a text file with one candidate entry per line.
     num_samples : int
         Maximum number of candidates to return per call.
-    fidelities : list[int] or dict[int, float] or None
-        Fidelity assignment strategy.  ``list[int]`` → uniform random;
-        ``dict[int, float]`` → cost-inverse weighted; ``None`` → no fidelity.
+    fidelity_policy : fidelity policy config or None
+        Policy controlling candidate fidelity assignment.
     """
 
     type: Literal["PoolFileSampler"] = "PoolFileSampler"
     candidate_pool_file: Path
     num_samples: int = Field(gt=0)
-    fidelities: dict[int, float] | list[int] | None = None
+    fidelity_policy: DiscreteFidelityPolicyConfig | None = None
 
     def build(self, runtime=None) -> Sampler:
         return PoolFileSampler(
             candidate_pool_file=self.candidate_pool_file,
             num_samples=self.num_samples,
-            fidelities=self.fidelities,
+            fidelity_policy=(
+                self.fidelity_policy.build()
+                if self.fidelity_policy is not None
+                else None
+            ),
+        )
+
+
+class UniformTokenSequenceSamplerConfig(BaseModel):
+    """Configuration for uniformly sampling bounded token sequences."""
+
+    type: Literal["UniformTokenSequenceSampler"] = "UniformTokenSequenceSampler"
+    tokens: list[str] | Literal["SELFIES_VOCAB_SMALL"]
+    num_samples: int = Field(gt=0)
+    min_length: int = Field(default=1, ge=1)
+    max_length: int = Field(ge=1)
+    fidelity_policy: DiscreteFidelityPolicyConfig | None = None
+    seed_offset: int = 0
+
+    def build(self) -> Sampler:
+        tokens = (
+            list(SELFIES_VOCAB_SMALL)
+            if self.tokens == "SELFIES_VOCAB_SMALL"
+            else self.tokens
+        )
+        return UniformTokenSequenceSampler(
+            tokens=tokens,
+            num_samples=self.num_samples,
+            min_length=self.min_length,
+            max_length=self.max_length,
+            fidelity_policy=(
+                self.fidelity_policy.build()
+                if self.fidelity_policy is not None
+                else None
+            ),
+            seed_offset=self.seed_offset,
         )
 
 
@@ -68,12 +113,13 @@ class GFlowNetSamplerConfig(BaseModel):
         Discriminator field for the :data:`SamplerConfig` union.
     n_samples : int
         Number of candidates to generate per :meth:`~activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler.sample` call.
-    n_fidelities : int
-        Number of fidelity levels. ``1`` means single-fidelity.
-    fixed_fidelity : int or None
-        If set, stamp this fidelity onto every sampled candidate. This keeps
-        the sampler single-fidelity while still letting downstream multi-fidelity
-        components consume the candidates.
+    fidelity_policy : fidelity policy config or None
+        Shared sampler fidelity policy. ``joint_sampling`` enables true multi-fidelity
+        GFlowNet sampling; other policies stamp fidelities after decoding.
+    reward_fidelity : int or None
+        Optional proxy-scoring fidelity override used by GFlowNet experiments
+        that train proposals against one fidelity while returning candidates with
+        another declared fidelity policy.
     log_dir : str or None
         Root directory for GFlowNet logs.  A temporary directory is created
         automatically when ``None``.
@@ -85,19 +131,32 @@ class GFlowNetSamplerConfig(BaseModel):
 
     type: Literal["GFlowNetSampler"] = "GFlowNetSampler"
     n_samples: int = Field(gt=0)
-    n_fidelities: int = 1
-    fidelity_action: _FidelityAction = "any"
-    fixed_fidelity: int | None = Field(default=None, gt=0)
+    fidelity_policy: SamplerFidelityPolicyConfig | None = None
+    reward_fidelity: int | None = Field(default=None, gt=0)
     log_dir: str | None = None
     conf: dict[str, Any] | None = None
+
+    @model_validator(mode="after")
+    def _validate_reward_fidelity(self) -> "GFlowNetSamplerConfig":
+        if (
+            isinstance(self.fidelity_policy, JointSamplingFidelityPolicyConfig)
+            and self.reward_fidelity is not None
+        ):
+            raise ValueError(
+                "reward_fidelity is not supported when fidelity_policy.type is joint_sampling."
+            )
+        return self
 
     def build(self) -> Sampler:
         return GFlowNetSampler(
             n_samples=self.n_samples,
             conf=compose_gflownet_conf(conf_overrides=self.conf, log_dir=self.log_dir),
-            n_fidelities=self.n_fidelities,
-            fidelity_action=self.fidelity_action,
-            fixed_fidelity=self.fixed_fidelity,
+            fidelity_policy=(
+                self.fidelity_policy.build()
+                if self.fidelity_policy is not None
+                else None
+            ),
+            reward_fidelity=self.reward_fidelity,
         )
 
 
@@ -125,8 +184,12 @@ class GFlowNetGridSamplerConfig(GFlowNetSamplerConfig):
             n_samples=self.n_samples,
             conf=compose_gflownet_conf(conf_overrides=self.conf, log_dir=self.log_dir),
             output_bounds=self.output_bounds,
-            n_fidelities=self.n_fidelities,
-            fidelity_action=self.fidelity_action,
+            fidelity_policy=(
+                self.fidelity_policy.build()
+                if self.fidelity_policy is not None
+                else None
+            ),
+            reward_fidelity=self.reward_fidelity,
         )
 
 
@@ -134,6 +197,7 @@ SamplerConfig = Annotated[
     Union[
         HypercubeSamplerConfig,
         PoolFileSamplerConfig,
+        UniformTokenSequenceSamplerConfig,
         GFlowNetSamplerConfig,
         GFlowNetGridSamplerConfig,
     ],

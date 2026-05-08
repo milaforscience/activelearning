@@ -1,12 +1,18 @@
 """GFlowNet-based sampler for active learning candidate generation."""
 
-from dataclasses import replace
 import logging
+import random
 import hydra
 import torch
-from typing import Any, Iterable, Literal, Optional
+from typing import Any, Iterable, Optional
 from omegaconf import DictConfig, OmegaConf
 from gflownet.utils.common import gflownet_from_config
+from activelearning.sampler.fidelity_policy import (
+    FixedFidelityPolicy,
+    JointSamplingFidelityPolicy,
+    SamplerFidelityPolicy,
+    apply_fidelity_policy,
+)
 from activelearning.sampler.gflownet.logger_wrapper import RuntimeGFlowNetLoggerWrapper
 from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
     build_multi_fidelity_env_wrapper,
@@ -32,41 +38,37 @@ class GFlowNetSampler(Sampler):
     conf : DictConfig
         GFlowNet config (``env``, ``policy``, ``gflownet``, ``loss``,
         ``buffer``, ``evaluator``, ``logger``, ``proxy``).
-    n_fidelities : int
-        Number of fidelity levels. When > 1 the env is wrapped with a
-        multi-fidelity wrapper chosen by *fidelity_action*.
-    fidelity_action : {"any", "first", "last"}
-        Controls when fidelity is chosen during a trajectory. Only used when
-        ``n_fidelities > 1``.
-        - ``"any"`` *(default)* — fidelity may be chosen at any point,
-          interleaved with base-env actions (SetFix wrapper).
-        - ``"first"`` — fidelity is chosen before any base-env action (Stack).
-        - ``"last"`` — fidelity is chosen after all base-env actions (Stack).
-    fixed_fidelity : int, optional
-        Stamps the same fidelity onto every sampled candidate. Intended for
-        single-fidelity tutorial runs that still query a multi-fidelity oracle.
+    fidelity_policy : SamplerFidelityPolicy, optional
+        Declares how the sampler should assign fidelities to returned candidates.
+        A ``joint_sampling`` policy uses a multi-fidelity GFlowNet environment; other
+        policies stamp fidelities after state decoding.
+    reward_fidelity : int, optional
+        Optional fidelity override used only while scoring candidates through the
+        GFlowNet proxy. This preserves experiments that train proposals against a
+        fixed-fidelity reward while returning candidates with a different final
+        fidelity policy.
     """
 
     def __init__(
         self,
         n_samples: int,
         conf: DictConfig,
-        n_fidelities: int = 1,
-        fidelity_action: Literal["any", "first", "last"] = "any",
-        fixed_fidelity: int | None = None,
+        fidelity_policy: SamplerFidelityPolicy | None = None,
+        reward_fidelity: int | None = None,
     ) -> None:
-        if fixed_fidelity is not None and n_fidelities != 1:
-            raise ValueError("fixed_fidelity is only supported when n_fidelities=1.")
         self.n_samples = n_samples
         self.conf = conf
-        self.n_fidelities = n_fidelities
-        self.fidelity_action = fidelity_action
-        self.fixed_fidelity = fixed_fidelity
-        if n_fidelities == 1 and fidelity_action != "any":
-            logger.warning(
-                "fidelity_action=%r has no effect when n_fidelities=1.",
-                fidelity_action,
-            )
+        self.fidelity_policy = fidelity_policy
+        self.reward_fidelity = reward_fidelity
+        if isinstance(self.fidelity_policy, JointSamplingFidelityPolicy):
+            if self.reward_fidelity is not None:
+                raise ValueError(
+                    "reward_fidelity is not supported when fidelity_policy is joint_sampling."
+                )
+        elif self.reward_fidelity is None and isinstance(
+            self.fidelity_policy, FixedFidelityPolicy
+        ):
+            self.reward_fidelity = self.fidelity_policy.value
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -101,20 +103,23 @@ class GFlowNetSampler(Sampler):
         # When env=None, gflownet_from_config instantiates the env from conf.env
         # using the device/float_precision already merged into conf above.
         env = None
-        if self.n_fidelities > 1:
+        joint_sampling_policy = self._joint_sampling_policy()
+        if joint_sampling_policy is not None:
             env_base_maker = hydra.utils.instantiate(
                 conf.env, device=device, float_precision=fp, _partial_=True
             )
             env = build_multi_fidelity_env_wrapper(
-                fidelity_action=self.fidelity_action,
+                fidelity_action=joint_sampling_policy.action,
                 env_base_maker=env_base_maker,
-                n_fidelities=self.n_fidelities,
+                n_fidelities=joint_sampling_policy.n_fidelities,
                 float_precision=fp,
                 device=device,
             )
 
         agent = gflownet_from_config(conf, env=env)
         agent.proxy.set_acquisition(acquisition)
+        if hasattr(agent.proxy, "set_reward_fidelity"):
+            agent.proxy.set_reward_fidelity(self.reward_fidelity)
         if hasattr(agent.proxy, "set_round_index"):
             agent.proxy.set_round_index(self.active_learning_round)
 
@@ -149,13 +154,24 @@ class GFlowNetSampler(Sampler):
             return []
         return proxy_states_to_candidates(env.states2proxy(states), env)
 
-    def _apply_fixed_fidelity(self, candidates: list[Candidate]) -> list[Candidate]:
-        """Stamp a fixed fidelity onto sampled candidates when configured."""
-        if self.fixed_fidelity is None:
+    def _joint_sampling_policy(self) -> JointSamplingFidelityPolicy | None:
+        """Return the joint-sampling policy when configured."""
+
+        if isinstance(self.fidelity_policy, JointSamplingFidelityPolicy):
+            return self.fidelity_policy
+        return None
+
+    def _apply_output_fidelity_policy(
+        self, candidates: list[Candidate]
+    ) -> list[Candidate]:
+        """Apply the configured output fidelity policy to sampled candidates."""
+
+        if self.fidelity_policy is None or isinstance(
+            self.fidelity_policy, JointSamplingFidelityPolicy
+        ):
             return candidates
-        return [
-            replace(candidate, fidelity=self.fixed_fidelity) for candidate in candidates
-        ]
+        rng = random.Random(self.runtime_context.seed + self.active_learning_round)
+        return apply_fidelity_policy(candidates, self.fidelity_policy, rng)
 
     # ------------------------------------------------------------------
     # Public interface
@@ -195,4 +211,4 @@ class GFlowNetSampler(Sampler):
         raw_states = batch.get_terminating_states()
 
         candidates = self._states_to_candidates(raw_states, agent.env)
-        return self._apply_fixed_fidelity(candidates)
+        return self._apply_output_fidelity_policy(candidates)

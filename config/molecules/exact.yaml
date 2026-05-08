@@ -42,8 +42,9 @@ sampler:
   type: PoolFileSampler
   candidate_pool_file: config/data/molecules.txt
   num_samples: 1000
-  fidelities:
-    - 1
+  fidelity_policy:
+    type: fixed
+    value: 1
 
 selector:
   type: TopKAcquisitionSelector

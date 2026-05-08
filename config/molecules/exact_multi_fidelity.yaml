@@ -45,16 +45,14 @@ acquisition:
   num_fantasies: 16
   num_mv_samples: 10
   num_y_samples: 128
-  maximize: true
 
 sampler:
   type: PoolFileSampler
   candidate_pool_file: config/data/molecules.txt
   num_samples: 1000
-  fidelities:
-    - 1
-    - 2
-    - 3
+  fidelity_policy:
+    type: uniform
+    values: [1, 2, 3]
 
 selector:
   type: CostAwareSelector

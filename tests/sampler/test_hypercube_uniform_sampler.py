@@ -2,6 +2,7 @@ import pytest
 import torch
 
 from activelearning.sampler.hypercube_uniform_sampler import HypercubeUniformSampler
+from activelearning.sampler.fidelity_policy import UniformFidelityPolicy
 from activelearning.utils.types import Candidate
 
 
@@ -59,7 +60,9 @@ def test_fidelity_sampled_from_list():
     """All candidate fidelities are drawn from the supplied fidelities list."""
     fidelities = [1, 2, 3]
     sampler = HypercubeUniformSampler(
-        bounds=BRANIN_BOUNDS, num_samples=50, fidelities=fidelities
+        bounds=BRANIN_BOUNDS,
+        num_samples=50,
+        fidelity_policy=UniformFidelityPolicy(values=tuple(fidelities)),
     )
     for candidate in sampler.sample():
         assert candidate.fidelity in fidelities
@@ -69,7 +72,9 @@ def test_all_fidelities_represented_in_large_sample():
     """With enough samples, all fidelity levels are drawn at least once."""
     fidelities = [1, 2, 3]
     sampler = HypercubeUniformSampler(
-        bounds=BRANIN_BOUNDS, num_samples=300, fidelities=fidelities
+        bounds=BRANIN_BOUNDS,
+        num_samples=300,
+        fidelity_policy=UniformFidelityPolicy(values=tuple(fidelities)),
     )
     observed = {c.fidelity for c in sampler.sample()}
     assert observed == set(fidelities)
@@ -78,7 +83,9 @@ def test_all_fidelities_represented_in_large_sample():
 def test_single_fidelity_list_always_produces_that_fidelity():
     """A single-element fidelities list always produces that fidelity."""
     sampler = HypercubeUniformSampler(
-        bounds=BRANIN_BOUNDS, num_samples=10, fidelities=[3]
+        bounds=BRANIN_BOUNDS,
+        num_samples=10,
+        fidelity_policy=UniformFidelityPolicy(values=(3,)),
     )
     for candidate in sampler.sample():
         assert candidate.fidelity == 3
@@ -87,7 +94,9 @@ def test_single_fidelity_list_always_produces_that_fidelity():
 def test_reproducibility_with_seed():
     """Fixing torch seed before sample() produces identical results."""
     sampler = HypercubeUniformSampler(
-        bounds=BRANIN_BOUNDS, num_samples=8, fidelities=[1, 2, 3]
+        bounds=BRANIN_BOUNDS,
+        num_samples=8,
+        fidelity_policy=UniformFidelityPolicy(values=(1, 2, 3)),
     )
 
     torch.manual_seed(42)

@@ -1,8 +1,12 @@
+import random
 import torch
 
-from typing import Iterable, Literal, Optional, Sequence, Union
+from typing import Iterable, Literal, Optional, Sequence
 
 from activelearning.acquisition.acquisition import Acquisition
+from activelearning.sampler.fidelity_policy import (
+    DiscreteFidelityPolicy,
+)
 from activelearning.sampler.sampler import Sampler
 from activelearning.utils.sampling import latin_hypercube
 from activelearning.utils.types import Candidate, Observation
@@ -23,14 +27,9 @@ class HypercubeSampler(Sampler):
         ``lower < upper``. The length determines input dimensionality.
     num_samples : int
         Number of candidates to generate per ``sample()`` call. Must be > 0.
-    fidelities : Sequence[int] or dict[int, float] or None
-        Controls fidelity assignment for each candidate:
-        - ``None`` — no fidelity (``candidate.fidelity = None``).
-        - ``[1, 2, 3]`` — uniform sampling across fidelity levels.
-        - ``{1: 1.0, 2: 5.0}`` — cost-inverse sampling: each key is a fidelity
-          level and each value is its cost. Candidates are assigned fidelities
-          with probability **inversely proportional** to cost (cheaper fidelities
-          are sampled more often). All costs must be positive.
+    fidelity_policy : DiscreteFidelityPolicy or None
+        Policy controlling how fidelities are assigned to generated candidates.
+        ``None`` leaves candidates without fidelity metadata.
     point_strategy : Literal["uniform", "lhs"]
         How x-values are generated within the hypercube.
         "uniform" draws i.i.d. uniform samples; "lhs" uses Latin
@@ -48,7 +47,7 @@ class HypercubeSampler(Sampler):
         self,
         bounds: Sequence[tuple[float, float]],
         num_samples: int,
-        fidelities: Union[None, Sequence[int], dict[int, float]] = None,
+        fidelity_policy: DiscreteFidelityPolicy | None = None,
         point_strategy: Literal["uniform", "lhs"] = "uniform",
     ) -> None:
         if len(bounds) == 0:
@@ -66,24 +65,7 @@ class HypercubeSampler(Sampler):
         self.bounds = bounds
         self.num_samples = num_samples
         self.point_strategy = point_strategy
-
-        # Normalize the fidelities param into internal fields
-        self._fidelity_levels = None
-        self._fidelity_costs = None
-        if isinstance(fidelities, dict):
-            if len(fidelities) == 0:
-                raise ValueError("fidelities must not be empty when specified")
-            for fidelity, cost in fidelities.items():
-                if cost <= 0:
-                    raise ValueError(
-                        f"All costs must be positive; fidelity {fidelity} has cost {cost}"
-                    )
-            self._fidelity_levels = sorted(fidelities.keys())
-            self._fidelity_costs = fidelities
-        elif isinstance(fidelities, list):
-            if len(fidelities) == 0:
-                raise ValueError("fidelities must not be empty when specified")
-            self._fidelity_levels = fidelities
+        self.fidelity_policy = fidelity_policy
 
         # Store scalar values and materialize tensors lazily so a later-bound
         # runtime context can still control dtype.
@@ -120,30 +102,10 @@ class HypercubeSampler(Sampler):
         fidelities : list[Optional[int]]
             One fidelity per candidate. ``None`` if no fidelities were configured.
         """
-        if self._fidelity_levels is None:
+        if self.fidelity_policy is None:
             return [None] * self.num_samples
-
-        fidelity_tensor = torch.tensor(
-            self._fidelity_levels,
-            dtype=torch.long,
-        )
-
-        if self._fidelity_costs is not None:
-            # Weights ∝ 1/cost; cheaper fidelities are sampled more often
-            costs = torch.tensor(
-                [self._fidelity_costs[f] for f in self._fidelity_levels],
-                dtype=self.dtype,
-            )
-            weights = costs.reciprocal()
-            indices = torch.multinomial(
-                weights, num_samples=self.num_samples, replacement=True
-            )
-        else:
-            # Uniform sampling across fidelity levels
-            indices = torch.randint(0, len(self._fidelity_levels), (self.num_samples,))
-
-        selected = fidelity_tensor[indices]
-        return selected.tolist()
+        rng = random.Random(self.runtime_context.seed + self.active_learning_round)
+        return self.fidelity_policy.sample_fidelities(self.num_samples, rng)
 
     def sample(
         self,

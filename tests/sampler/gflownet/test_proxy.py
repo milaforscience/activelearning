@@ -125,6 +125,11 @@ class TestAcquisitionProxyInit:
         with pytest.raises(ValueError, match="round_index"):
             proxy.set_round_index(-1)
 
+    def test_set_reward_fidelity_updates_proxy(self):
+        proxy = _make_proxy()
+        proxy.set_reward_fidelity(3)
+        assert proxy._reward_fidelity == 3
+
     def test_setup_stores_env(self):
         proxy = _make_proxy()
         env = object()
@@ -214,6 +219,13 @@ class TestAcquisitionProxyCallSingleFidelity:
         self.proxy.set_acquisition(acq)
         self.proxy(["[C][=O][N]"])
         assert acq.seen == ["[C][=O][N]"]
+
+    def test_reward_fidelity_is_stamped_before_scoring(self):
+        acq = _FidelityCapturingAcquisition()
+        self.proxy.set_acquisition(acq)
+        self.proxy.set_reward_fidelity(3)
+        self.proxy(torch.tensor([[0.1, 0.2], [0.3, 0.4]]))
+        assert acq.seen == [3, 3]
 
 
 # ---------------------------------------------------------------------------

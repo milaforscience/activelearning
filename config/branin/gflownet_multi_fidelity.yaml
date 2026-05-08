@@ -33,8 +33,10 @@ acquisition:
 sampler:
   type: GFlowNetGridSampler
   n_samples: 100
-  n_fidelities: 3
-  fidelity_action: first  # "any" (SetFix), "first" (Stack fid-first), "last" (Stack fid-last)
+  fidelity_policy:
+    type: joint_sampling
+    n_fidelities: 3
+    action: first
   # Rescale grid coordinates (cell_min=-1, cell_max=1) to the Branin domain.
   output_bounds:
     - [-5.0, 10.0]

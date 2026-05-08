@@ -45,7 +45,6 @@ acquisition:
   num_fantasies: 8
   num_mv_samples: 10
   num_y_samples: 64
-  maximize: true
   cost_aware_utility:
     type: FidelityCostUtility
     fidelity_costs:
@@ -56,8 +55,10 @@ acquisition:
 sampler:
   type: GFlowNetSampler
   n_samples: 64
-  n_fidelities: 3
-  fidelity_action: any
+  fidelity_policy:
+    type: joint_sampling
+    n_fidelities: 3
+    action: any
   conf:
     env:
       _target_: gflownet.envs.sequences.selfies.Selfies

@@ -30,7 +30,9 @@ sampler:
     - [-5.0, 10.0]
     - [0.0, 15.0]
   num_samples: 10000
-  fidelities: [1]
+  fidelity_policy:
+    type: fixed
+    value: 1
   point_strategy: lhs
 
 selector:

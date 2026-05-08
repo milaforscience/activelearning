@@ -6,6 +6,12 @@ import pytest
 import torch
 
 from activelearning.runtime import RuntimeContext
+from activelearning.sampler.fidelity_policy import (
+    FixedFidelityPolicy,
+    FixedFidelityPolicyConfig,
+    JointSamplingFidelityPolicy,
+    JointSamplingFidelityPolicyConfig,
+)
 from activelearning.sampler.gflownet.gflownet_sampler import GFlowNetSampler
 from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
     MultiFidelityGFlowNetEnvWrapper,
@@ -49,82 +55,51 @@ class TestGFlowNetSamplerInstantiation:
         sampler = GFlowNetSampler(n_samples=7, conf=conf)
         assert sampler.n_samples == 7
 
-    def test_instantiation_stores_n_fidelities(self, gflownet_conf_2d):
+    def test_instantiation_stores_joint_sampling_fidelity_policy(
+        self, gflownet_conf_2d
+    ):
         conf, _ = gflownet_conf_2d
-        sampler = GFlowNetSampler(n_samples=3, conf=conf, n_fidelities=2)
-        assert sampler.n_fidelities == 2
+        policy = JointSamplingFidelityPolicy(n_fidelities=2)
+        sampler = GFlowNetSampler(n_samples=3, conf=conf, fidelity_policy=policy)
+        assert sampler.fidelity_policy == policy
 
-    def test_default_n_fidelities_is_one(self, gflownet_conf_2d):
+    def test_default_fidelity_policy_is_none(self, gflownet_conf_2d):
         conf, _ = gflownet_conf_2d
         sampler = GFlowNetSampler(n_samples=3, conf=conf)
-        assert sampler.n_fidelities == 1
+        assert sampler.fidelity_policy is None
 
-    def test_default_fidelity_action_is_any(self, gflownet_conf_2d):
+    def test_default_reward_fidelity_is_none(self, gflownet_conf_2d):
         conf, _ = gflownet_conf_2d
         sampler = GFlowNetSampler(n_samples=3, conf=conf)
-        assert sampler.fidelity_action == "any"
+        assert sampler.reward_fidelity is None
 
-    def test_instantiation_stores_fixed_fidelity(self, gflownet_conf_2d):
+    def test_instantiation_stores_fixed_output_policy(self, gflownet_conf_2d):
         conf, _ = gflownet_conf_2d
-        sampler = GFlowNetSampler(n_samples=3, conf=conf, fixed_fidelity=1)
-        assert sampler.fixed_fidelity == 1
+        policy = FixedFidelityPolicy(value=1)
+        sampler = GFlowNetSampler(n_samples=3, conf=conf, fidelity_policy=policy)
+        assert sampler.fidelity_policy == policy
+        assert sampler.reward_fidelity == 1
 
     @pytest.mark.parametrize("action", ["any", "first", "last"])
-    def test_fidelity_action_is_stored(self, gflownet_conf_2d, action):
+    def test_joint_sampling_action_is_stored(self, gflownet_conf_2d, action):
         conf, _ = gflownet_conf_2d
-        sampler = GFlowNetSampler(n_samples=3, conf=conf, fidelity_action=action)
-        assert sampler.fidelity_action == action
+        sampler = GFlowNetSampler(
+            n_samples=3,
+            conf=conf,
+            fidelity_policy=JointSamplingFidelityPolicy(n_fidelities=2, action=action),
+        )
+        assert sampler.fidelity_policy is not None
+        assert sampler.fidelity_policy.action == action
 
-    def test_fixed_fidelity_requires_single_fidelity(self, gflownet_conf_2d):
+    def test_reward_fidelity_is_rejected_for_joint_sampling(self, gflownet_conf_2d):
         conf, _ = gflownet_conf_2d
-        with pytest.raises(ValueError, match="fixed_fidelity"):
-            GFlowNetSampler(n_samples=3, conf=conf, n_fidelities=2, fixed_fidelity=1)
-
-    @pytest.mark.parametrize("action", ["first", "last"])
-    def test_warns_when_fidelity_action_set_with_single_fidelity(
-        self, gflownet_conf_2d, action, caplog
-    ):
-        import logging
-
-        conf, _ = gflownet_conf_2d
-        with caplog.at_level(
-            logging.WARNING,
-            logger="activelearning.sampler.gflownet.gflownet_sampler",
-        ):
+        with pytest.raises(ValueError, match="reward_fidelity"):
             GFlowNetSampler(
-                n_samples=3, conf=conf, n_fidelities=1, fidelity_action=action
+                n_samples=3,
+                conf=conf,
+                fidelity_policy=JointSamplingFidelityPolicy(n_fidelities=2),
+                reward_fidelity=1,
             )
-        assert any("fidelity_action" in r.message for r in caplog.records)
-
-    def test_no_warning_when_fidelity_action_any_with_single_fidelity(
-        self, gflownet_conf_2d, caplog
-    ):
-        import logging
-
-        conf, _ = gflownet_conf_2d
-        with caplog.at_level(
-            logging.WARNING,
-            logger="activelearning.sampler.gflownet.gflownet_sampler",
-        ):
-            GFlowNetSampler(
-                n_samples=3, conf=conf, n_fidelities=1, fidelity_action="any"
-            )
-        assert not caplog.records
-
-    def test_no_warning_when_fidelity_action_set_with_multi_fidelity(
-        self, gflownet_conf_2d, caplog
-    ):
-        import logging
-
-        conf, _ = gflownet_conf_2d
-        with caplog.at_level(
-            logging.WARNING,
-            logger="activelearning.sampler.gflownet.gflownet_sampler",
-        ):
-            GFlowNetSampler(
-                n_samples=3, conf=conf, n_fidelities=2, fidelity_action="first"
-            )
-        assert not caplog.records
 
     def test_active_learning_round_reads_from_runtime_context(self, gflownet_conf_2d):
         conf, _ = gflownet_conf_2d
@@ -155,7 +130,9 @@ class TestGFlowNetSamplerFidelityActionWrapperSelection:
     def test_correct_wrapper_class_is_instantiated(self, gflownet_conf_2d, action):
         conf, _ = gflownet_conf_2d
         sampler = GFlowNetSampler(
-            n_samples=2, conf=conf, n_fidelities=2, fidelity_action=action
+            n_samples=2,
+            conf=conf,
+            fidelity_policy=JointSamplingFidelityPolicy(n_fidelities=2, action=action),
         )
         sampler.bind_runtime_context(RuntimeContext())
 
@@ -194,8 +171,10 @@ class TestGFlowNetSamplerFidelityActionWrapperSelection:
         sampler = GFlowNetSampler(
             n_samples=2,
             conf=conf,
-            n_fidelities=2,
-            fidelity_action="bad",  # type: ignore[arg-type]
+            fidelity_policy=JointSamplingFidelityPolicy(
+                n_fidelities=2,
+                action="bad",  # type: ignore[arg-type]
+            ),
         )
         sampler.bind_runtime_context(RuntimeContext())
         with pytest.raises(ValueError, match="fidelity_action"):
@@ -293,9 +272,13 @@ class TestGFlowNetSamplerSmokeTest:
         candidates = sampler.sample(acquisition=_ConstantAcquisition())
         assert all(len(c.x) == 2 for c in candidates)
 
-    def test_sample_applies_fixed_fidelity(self, gflownet_conf_2d):
+    def test_sample_applies_fixed_output_policy(self, gflownet_conf_2d):
         conf, _ = gflownet_conf_2d
-        sampler = GFlowNetSampler(n_samples=3, conf=conf, fixed_fidelity=1)
+        sampler = GFlowNetSampler(
+            n_samples=3,
+            conf=conf,
+            fidelity_policy=FixedFidelityPolicy(value=1),
+        )
         candidates = sampler.sample(acquisition=_ConstantAcquisition())
         assert all(candidate.fidelity == 1 for candidate in candidates)
 
@@ -337,23 +320,29 @@ class TestGFlowNetSamplerRuntimeLogger:
 
 
 class TestGFlowNetSamplerConfigRoundTrip:
-    """Verify that GFlowNetSamplerConfig correctly passes fidelity_action to the sampler."""
+    """Verify that GFlowNetSamplerConfig forwards the shared fidelity policy."""
 
-    def test_default_fidelity_action_in_config_is_any(self):
+    def test_default_fidelity_policy_in_config_is_none(self):
         from activelearning.sampler.config import GFlowNetSamplerConfig
 
         cfg = GFlowNetSamplerConfig(n_samples=3)
-        assert cfg.fidelity_action == "any"
+        assert cfg.fidelity_policy is None
 
     @pytest.mark.parametrize("action", ["any", "first", "last"])
-    def test_config_stores_fidelity_action(self, action):
+    def test_config_stores_joint_sampling_policy(self, action):
         from activelearning.sampler.config import GFlowNetSamplerConfig
 
-        cfg = GFlowNetSamplerConfig(n_samples=3, fidelity_action=action)
-        assert cfg.fidelity_action == action
+        cfg = GFlowNetSamplerConfig(
+            n_samples=3,
+            fidelity_policy=JointSamplingFidelityPolicyConfig(
+                n_fidelities=3, action=action
+            ),
+        )
+        assert cfg.fidelity_policy is not None
+        assert cfg.fidelity_policy.action == action
 
     @pytest.mark.parametrize("action", ["any", "first", "last"])
-    def test_config_build_passes_fidelity_action_to_sampler(
+    def test_config_build_passes_joint_sampling_policy_to_sampler(
         self, gflownet_conf_2d, action
     ):
         from activelearning.sampler.config import GFlowNetSamplerConfig
@@ -363,17 +352,30 @@ class TestGFlowNetSamplerConfigRoundTrip:
         from omegaconf import OmegaConf
 
         conf_raw = OmegaConf.to_container(conf_dict, resolve=True)
-        cfg = GFlowNetSamplerConfig(n_samples=3, fidelity_action=action, conf=conf_raw)
+        cfg = GFlowNetSamplerConfig(
+            n_samples=3,
+            fidelity_policy=JointSamplingFidelityPolicyConfig(
+                n_fidelities=3, action=action
+            ),
+            conf=conf_raw,
+        )
         sampler = cfg.build()
-        assert sampler.fidelity_action == action
+        assert isinstance(sampler.fidelity_policy, JointSamplingFidelityPolicy)
+        assert sampler.fidelity_policy.action == action
 
-    def test_config_build_passes_fixed_fidelity_to_sampler(self, gflownet_conf_2d):
+    def test_config_build_passes_fixed_policy_to_sampler(self, gflownet_conf_2d):
         from activelearning.sampler.config import GFlowNetSamplerConfig
 
         conf_dict, _ = gflownet_conf_2d
         from omegaconf import OmegaConf
 
         conf_raw = OmegaConf.to_container(conf_dict, resolve=True)
-        cfg = GFlowNetSamplerConfig(n_samples=3, fixed_fidelity=1, conf=conf_raw)
+        cfg = GFlowNetSamplerConfig(
+            n_samples=3,
+            fidelity_policy=FixedFidelityPolicyConfig(value=1),
+            conf=conf_raw,
+        )
         sampler = cfg.build()
-        assert sampler.fixed_fidelity == 1
+        assert isinstance(sampler.fidelity_policy, FixedFidelityPolicy)
+        assert sampler.fidelity_policy.value == 1
+        assert sampler.reward_fidelity == 1

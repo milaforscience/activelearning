@@ -1,12 +1,13 @@
 """GFlowNet sampler for continuous bounded grid domains."""
 
-from typing import Any, Literal, Optional, Sequence
+from typing import Any, Optional, Sequence
 
 import torch
 from hydra.utils import get_class
 from gflownet.envs.grid import Grid
 from omegaconf import DictConfig
 
+from activelearning.sampler.fidelity_policy import SamplerFidelityPolicy
 from activelearning.sampler.gflownet.gflownet_sampler import GFlowNetSampler
 from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
     MultiFidelityGFlowNetEnvWrapperBase,
@@ -38,13 +39,11 @@ class GFlowNetGridSampler(GFlowNetSampler):
         Per-dimension ``(lower, upper)`` bounds to which the grid coordinates
         are rescaled.  Must have one entry per grid dimension.  If ``None``,
         the native ``[cell_min, cell_max]`` coordinates are returned as-is.
-    n_fidelities : int
-        Number of fidelity levels. ``1`` means single-fidelity.
-    fidelity_action : {"any", "first", "last"}
-        Controls when fidelity is chosen during a trajectory. Only used when
-        ``n_fidelities > 1``. See
-        :class:`~activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler`
-        for full semantics.
+    fidelity_policy : SamplerFidelityPolicy, optional
+        Fidelity assignment policy shared with :class:`GFlowNetSampler`.
+    reward_fidelity : int, optional
+        Optional proxy-scoring fidelity override shared with
+        :class:`GFlowNetSampler`.
 
     Raises
     ------
@@ -58,14 +57,14 @@ class GFlowNetGridSampler(GFlowNetSampler):
         n_samples: int,
         conf: DictConfig,
         output_bounds: Optional[Sequence[tuple[float, float]]] = None,
-        n_fidelities: int = 1,
-        fidelity_action: Literal["any", "first", "last"] = "any",
+        fidelity_policy: SamplerFidelityPolicy | None = None,
+        reward_fidelity: int | None = None,
     ) -> None:
         super().__init__(
             n_samples=n_samples,
             conf=conf,
-            n_fidelities=n_fidelities,
-            fidelity_action=fidelity_action,
+            fidelity_policy=fidelity_policy,
+            reward_fidelity=reward_fidelity,
         )
         self._validate_grid_env(conf)
         if output_bounds is not None:

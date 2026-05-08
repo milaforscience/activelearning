@@ -33,7 +33,9 @@ acquisition:
 sampler:
   type: GFlowNetGridSampler
   n_samples: 100
-  n_fidelities: 1
+  fidelity_policy:
+    type: fixed
+    value: 1
   # Rescale grid coordinates (cell_min=-1, cell_max=1) to the Branin domain.
   output_bounds:
     - [-5.0, 10.0]

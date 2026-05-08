@@ -4,6 +4,7 @@ from typing import Any, List, Optional, Union
 from torchtyping import TensorType
 from gflownet.proxy.base import Proxy
 from activelearning.sampler.gflownet.utils import proxy_states_to_candidates
+from activelearning.utils.types import Candidate
 
 
 class AcquisitionProxy(Proxy):
@@ -57,6 +58,7 @@ class AcquisitionProxy(Proxy):
         self.reward_beta = float(reward_beta)
         self.reward_rho = float(reward_rho)
         self._round_index = 0
+        self._reward_fidelity: int | None = None
 
     def setup(self, env: Any = None) -> None:
         """Store the environment for multi-fidelity index resolution."""
@@ -71,6 +73,10 @@ class AcquisitionProxy(Proxy):
         if round_index < 0:
             raise ValueError("round_index must be non-negative.")
         self._round_index = round_index
+
+    def set_reward_fidelity(self, reward_fidelity: int | None) -> None:
+        """Override candidate fidelities before acquisition scoring."""
+        self._reward_fidelity = reward_fidelity
 
     def _round_reward_scale(self) -> float:
         """Return ``rho**round / beta`` for MF-GFN reward scaling."""
@@ -105,6 +111,15 @@ class AcquisitionProxy(Proxy):
             )
 
         candidates = proxy_states_to_candidates(states, self._env)
+        if self._reward_fidelity is not None:
+            candidates = [
+                Candidate(
+                    x=candidate.x,
+                    fidelity=self._reward_fidelity,
+                    metadata=candidate.metadata,
+                )
+                for candidate in candidates
+            ]
         acq_values = self.acquisition.score(candidates)
         scaled_values = [value * self._round_reward_scale() for value in acq_values]
         return torch.tensor(scaled_values, dtype=self.float, device=self.device)

@@ -1,8 +1,10 @@
+import random
 import torch
 
 from typing import Iterable, Optional, Sequence
 
 from activelearning.acquisition.acquisition import Acquisition
+from activelearning.sampler.fidelity_policy import DiscreteFidelityPolicy
 from activelearning.sampler.sampler import Sampler
 from activelearning.utils.types import Candidate, Observation
 
@@ -26,10 +28,8 @@ class HypercubeUniformSampler(Sampler):
         The length determines the input dimensionality.
     num_samples : int
         Number of candidates to generate per ``sample()`` call. Must be > 0.
-    fidelities : Optional[Sequence[int]]
-        Fidelity levels to sample from uniformly at random. Each generated
-        candidate is assigned one level drawn with equal probability. When
-        ``None``, candidates are created with ``fidelity=None``.
+    fidelity_policy : DiscreteFidelityPolicy or None
+        Policy controlling fidelity assignment for generated candidates.
 
     Raises
     ------
@@ -41,7 +41,7 @@ class HypercubeUniformSampler(Sampler):
         self,
         bounds: Sequence[tuple[float, float]],
         num_samples: int,
-        fidelities: Optional[Sequence[int]] = None,
+        fidelity_policy: DiscreteFidelityPolicy | None = None,
     ) -> None:
         if num_samples <= 0:
             raise ValueError(f"num_samples must be > 0, got {num_samples}")
@@ -49,11 +49,9 @@ class HypercubeUniformSampler(Sampler):
             if lower >= upper:
                 raise ValueError(f"Bound {i} has lower >= upper: ({lower}, {upper})")
 
-        if fidelities is not None and len(fidelities) == 0:
-            raise ValueError("fidelities must not be empty when specified")
         self.bounds = bounds
         self.num_samples = num_samples
-        self.fidelities = list(fidelities) if fidelities is not None else None
+        self.fidelity_policy = fidelity_policy
 
         lowers = [b[0] for b in bounds]
         uppers = [b[1] for b in bounds]
@@ -69,8 +67,7 @@ class HypercubeUniformSampler(Sampler):
     ) -> list[Candidate]:
         """Generate candidates by sampling uniformly from the hypercube.
 
-        Each candidate's fidelity is drawn uniformly at random from the
-        ``fidelities`` list supplied at construction.
+        Each candidate's fidelity is assigned by the configured policy.
 
         Parameters
         ----------
@@ -89,13 +86,11 @@ class HypercubeUniformSampler(Sampler):
         uniform = torch.rand(self.num_samples, len(self.bounds), dtype=torch.float64)
         points = self._lower + uniform * self._range  # broadcast scaling
 
-        if self.fidelities is not None:
-            fidelity_indices = torch.randint(
-                0, len(self.fidelities), (self.num_samples,)
-            )
-            fidelities = [self.fidelities[idx] for idx in fidelity_indices.tolist()]
-        else:
+        if self.fidelity_policy is None:
             fidelities = [None] * self.num_samples
+        else:
+            rng = random.Random(self.runtime_context.seed + self.active_learning_round)
+            fidelities = self.fidelity_policy.sample_fidelities(self.num_samples, rng)
 
         return [
             Candidate(x=points[i].tolist(), fidelity=fidelities[i])

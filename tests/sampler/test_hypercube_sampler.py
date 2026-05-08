@@ -2,6 +2,11 @@ import pytest
 import torch
 
 from activelearning.runtime import RuntimeContext
+from activelearning.sampler.fidelity_policy import (
+    CostWeightedFidelityPolicy,
+    FixedFidelityPolicy,
+    UniformFidelityPolicy,
+)
 from activelearning.sampler.hypercube_sampler import HypercubeSampler
 from activelearning.utils.types import Candidate
 
@@ -186,7 +191,9 @@ class TestUniformFidelityAssignment:
     def test_fidelities_drawn_from_list(self):
         fidelities = [1, 2, 3]
         sampler = HypercubeSampler(
-            bounds=BRANIN_BOUNDS, num_samples=50, fidelities=fidelities
+            bounds=BRANIN_BOUNDS,
+            num_samples=50,
+            fidelity_policy=UniformFidelityPolicy(values=tuple(fidelities)),
         )
         for c in sampler.sample():
             assert c.fidelity in fidelities
@@ -194,13 +201,19 @@ class TestUniformFidelityAssignment:
     def test_all_fidelities_represented(self):
         fidelities = [1, 2, 3]
         sampler = HypercubeSampler(
-            bounds=BRANIN_BOUNDS, num_samples=300, fidelities=fidelities
+            bounds=BRANIN_BOUNDS,
+            num_samples=300,
+            fidelity_policy=UniformFidelityPolicy(values=tuple(fidelities)),
         )
         observed = {c.fidelity for c in sampler.sample()}
         assert observed == set(fidelities)
 
     def test_single_fidelity_always_selected(self):
-        sampler = HypercubeSampler(bounds=BRANIN_BOUNDS, num_samples=20, fidelities=[7])
+        sampler = HypercubeSampler(
+            bounds=BRANIN_BOUNDS,
+            num_samples=20,
+            fidelity_policy=FixedFidelityPolicy(value=7),
+        )
         assert all(c.fidelity == 7 for c in sampler.sample())
 
 
@@ -213,7 +226,9 @@ class TestCostInverseFidelityAssignment:
     def test_fidelities_drawn_from_cost_keys(self):
         fidelities = {1: 1.0, 2: 5.0, 3: 10.0}
         sampler = HypercubeSampler(
-            bounds=BRANIN_BOUNDS, num_samples=100, fidelities=fidelities
+            bounds=BRANIN_BOUNDS,
+            num_samples=100,
+            fidelity_policy=CostWeightedFidelityPolicy(costs=fidelities),
         )
         for c in sampler.sample():
             assert c.fidelity in fidelities
@@ -222,7 +237,9 @@ class TestCostInverseFidelityAssignment:
         """Fidelity 1 (cost=1) should be sampled ~10× more often than fidelity 3 (cost=10)."""
         fidelities = {1: 1.0, 3: 10.0}
         sampler = HypercubeSampler(
-            bounds=BRANIN_BOUNDS, num_samples=1000, fidelities=fidelities
+            bounds=BRANIN_BOUNDS,
+            num_samples=1000,
+            fidelity_policy=CostWeightedFidelityPolicy(costs=fidelities),
         )
         candidates = sampler.sample()
         count_1 = sum(1 for c in candidates if c.fidelity == 1)
@@ -235,13 +252,18 @@ class TestCostInverseFidelityAssignment:
 
     def test_fidelities_property_from_cost_keys(self):
         sampler = HypercubeSampler(
-            bounds=BRANIN_BOUNDS, num_samples=10, fidelities={2: 2.0, 1: 1.0}
+            bounds=BRANIN_BOUNDS,
+            num_samples=10,
+            fidelity_policy=CostWeightedFidelityPolicy(costs={2: 2.0, 1: 1.0}),
         )
-        assert sampler._fidelity_levels == [1, 2]  # sorted
+        assert isinstance(sampler.fidelity_policy, CostWeightedFidelityPolicy)
+        assert sorted(sampler.fidelity_policy.costs) == [1, 2]
 
     def test_single_fidelity_cost_always_selected(self):
         sampler = HypercubeSampler(
-            bounds=BRANIN_BOUNDS, num_samples=20, fidelities={5: 3.0}
+            bounds=BRANIN_BOUNDS,
+            num_samples=20,
+            fidelity_policy=CostWeightedFidelityPolicy(costs={5: 3.0}),
         )
         assert all(c.fidelity == 5 for c in sampler.sample())
 
@@ -257,7 +279,7 @@ class TestComposition:
         sampler = HypercubeSampler(
             bounds=BRANIN_BOUNDS,
             num_samples=50,
-            fidelities=fidelities,
+            fidelity_policy=CostWeightedFidelityPolicy(costs=fidelities),
             point_strategy="lhs",
         )
         candidates = sampler.sample()
@@ -269,7 +291,7 @@ class TestComposition:
         sampler = HypercubeSampler(
             bounds=HARTMANN_BOUNDS,
             num_samples=20,
-            fidelities=[1, 2],
+            fidelity_policy=UniformFidelityPolicy(values=(1, 2)),
             point_strategy="lhs",
         )
         candidates = sampler.sample()
@@ -307,18 +329,18 @@ class TestValidation:
                 point_strategy="random",  # type: ignore[arg-type]
             )
 
-    def test_raises_on_empty_fidelities(self):
-        with pytest.raises(ValueError, match="fidelities must not be empty"):
-            HypercubeSampler(bounds=BRANIN_BOUNDS, num_samples=5, fidelities=[])
+    def test_raises_on_empty_uniform_policy(self):
+        with pytest.raises(ValueError, match="must not be empty"):
+            UniformFidelityPolicy(values=())
 
-    def test_raises_on_empty_fidelities_dict(self):
-        with pytest.raises(ValueError, match="fidelities must not be empty"):
-            HypercubeSampler(bounds=BRANIN_BOUNDS, num_samples=5, fidelities={})
+    def test_raises_on_empty_cost_policy(self):
+        with pytest.raises(ValueError, match="must not be empty"):
+            CostWeightedFidelityPolicy(costs={})
 
     def test_raises_on_zero_cost(self):
-        with pytest.raises(ValueError, match="costs must be positive"):
-            HypercubeSampler(bounds=BRANIN_BOUNDS, num_samples=5, fidelities={1: 0.0})
+        with pytest.raises(ValueError, match="strictly positive costs"):
+            CostWeightedFidelityPolicy(costs={1: 0.0})
 
     def test_raises_on_negative_cost(self):
-        with pytest.raises(ValueError, match="costs must be positive"):
-            HypercubeSampler(bounds=BRANIN_BOUNDS, num_samples=5, fidelities={1: -1.0})
+        with pytest.raises(ValueError, match="strictly positive costs"):
+            CostWeightedFidelityPolicy(costs={1: -1.0})
