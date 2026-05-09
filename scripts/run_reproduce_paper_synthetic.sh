@@ -18,7 +18,33 @@ set -euo pipefail
 #   sbatch --time=48:00:00 --mem=24G scripts/run_reproduce_paper_synthetic.sh
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+
+find_repo_root() {
+  local start_dir="$1"
+  local current_dir
+
+  if ! current_dir="$(cd -- "${start_dir}" && pwd)"; then
+    return 1
+  fi
+
+  while true; do
+    if [[ -f "${current_dir}/pyproject.toml" ]]; then
+      printf '%s\n' "${current_dir}"
+      return 0
+    fi
+    if [[ "${current_dir}" == "/" ]]; then
+      return 1
+    fi
+    current_dir="$(dirname "${current_dir}")"
+  done
+}
+
+REPO_SEARCH_START="${SLURM_SUBMIT_DIR:-${SCRIPT_DIR}}"
+REPO_ROOT="$(find_repo_root "${REPO_SEARCH_START}")" || {
+  echo "Could not find pyproject.toml starting from ${REPO_SEARCH_START}." >&2
+  echo "Submit the job from the repository root (or one of its subdirectories)." >&2
+  exit 1
+}
 cd "${REPO_ROOT}"
 
 VENV_DIR="${REPO_ROOT}/.venv"

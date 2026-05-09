@@ -212,6 +212,8 @@ with `uv sync --frozen`, while the molecule launcher bootstraps it with
 `uv sync --frozen --extra molecules`. If your cluster shares the repository
 filesystem between login and compute nodes, you can prebuild that local env once
 before submitting, for example with `uv sync --frozen --all-extras`. You can
+submit from the repository root (recommended) or any child directory; on SLURM
+the launchers resolve the repo via `SLURM_SUBMIT_DIR`. You can
 also override SLURM resources at submission time, for example:
 
 ```sh

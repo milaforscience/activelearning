@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -40,6 +41,7 @@ def test_launchers_include_sbatch_directives() -> None:
     assert "#SBATCH --time=24:00:00" in synthetic_script
     assert "#SBATCH --output=slurm-logs/%x-%j.out" in synthetic_script
     assert "#SBATCH --error=slurm-logs/%x-%j.err" in synthetic_script
+    assert 'REPO_SEARCH_START="${SLURM_SUBMIT_DIR:-${SCRIPT_DIR}}"' in synthetic_script
     assert 'VENV_DIR="${REPO_ROOT}/.venv"' in synthetic_script
     assert "sync_cmd=(uv sync --frozen)" in synthetic_script
     assert "#SBATCH --job-name=repro-molecules" in molecules_script
@@ -50,6 +52,7 @@ def test_launchers_include_sbatch_directives() -> None:
     assert "#SBATCH --time=72:00:00" in molecules_script
     assert "#SBATCH --output=slurm-logs/%x-%j.out" in molecules_script
     assert "#SBATCH --error=slurm-logs/%x-%j.err" in molecules_script
+    assert 'REPO_SEARCH_START="${SLURM_SUBMIT_DIR:-${SCRIPT_DIR}}"' in molecules_script
     assert 'VENV_DIR="${REPO_ROOT}/.venv"' in molecules_script
     assert "sync_cmd=(uv sync --frozen --extra molecules)" in molecules_script
 
@@ -89,6 +92,38 @@ def test_synthetic_launcher_supports_slurm_array_dispatch() -> None:
         in lines[0]
     )
     assert "runtime.seed=0" in lines[0]
+
+
+def test_synthetic_launcher_resolves_repo_root_from_slurm_submit_dir(
+    tmp_path: Path,
+) -> None:
+    copied_script = tmp_path / "run_reproduce_paper_synthetic.sh"
+    shutil.copy2(
+        REPOSITORY_ROOT / "scripts" / "run_reproduce_paper_synthetic.sh", copied_script
+    )
+
+    result = subprocess.run(
+        ["bash", str(copied_script), "0"],
+        check=True,
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "DRY_RUN": "1",
+            "SLURM_SUBMIT_DIR": str(REPOSITORY_ROOT),
+        },
+    )
+
+    lines = [line for line in result.stdout.splitlines() if line]
+
+    assert len(lines) == 8
+    assert all(str(REPO_PYTHON) in line for line in lines)
+    assert any(
+        "scripts/configs/reproduce_paper/synthetic/branin/mf_gfn.yaml" in line
+        and "runtime.seed=0" in line
+        for line in lines
+    )
 
 
 def test_molecule_launcher_prints_expected_commands_for_two_seeds() -> None:
