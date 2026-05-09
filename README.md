@@ -202,9 +202,17 @@ sbatch scripts/run_reproduce_paper_molecules.sh
 The same scripts still work as plain local shell launchers with `bash ...`. To
 fan out one config/seed pair per SLURM array task, submit with `--array=0-39`
 for the default 5 seeds across 8 configs, or adjust the array range if you pass
-a different seed list. The scripts ship with default `#SBATCH` resource requests
+a different seed list.
+
+The scripts ship with default `#SBATCH` resource requests
 for CPU, memory, wall time, and log files; override them at submission time if
-your cluster needs different values, for example:
+your cluster needs different values. They always run the repo-local `./.venv`
+Python directly. If `./.venv` is missing, the synthetic launcher bootstraps it
+with `uv sync --frozen`, while the molecule launcher bootstraps it with
+`uv sync --frozen --extra molecules`. If your cluster shares the repository
+filesystem between login and compute nodes, you can prebuild that local env once
+before submitting, for example with `uv sync --frozen --all-extras`. You can
+also override SLURM resources at submission time, for example:
 
 ```sh
 sbatch --array=0-39 --time=48:00:00 --mem=24G scripts/run_reproduce_paper_synthetic.sh

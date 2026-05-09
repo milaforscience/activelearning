@@ -21,6 +21,10 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
+VENV_DIR="${REPO_ROOT}/.venv"
+PYTHON_BIN="${VENV_DIR}/bin/python"
+sync_cmd=(uv sync --frozen --extra molecules)
+
 methods=(mf_gfn sf_gfn random random_fid_gfn)
 tasks=(molecules_ip molecules_ea)
 seeds=(0 1 2 3 4)
@@ -28,6 +32,31 @@ seeds=(0 1 2 3 4)
 if (($# > 0)); then
   seeds=("$@")
 fi
+
+python_env_ready() {
+  [[ -x "${PYTHON_BIN}" ]] || return 1
+  "${PYTHON_BIN}" -c "import activelearning" >/dev/null 2>&1
+}
+
+ensure_runtime_python() {
+  if [[ "${DRY_RUN:-0}" == "1" ]]; then
+    return 0
+  fi
+
+  if python_env_ready; then
+    return 0
+  fi
+
+  echo "Bootstrapping ${VENV_DIR} with: ${sync_cmd[*]}" >&2
+  "${sync_cmd[@]}"
+
+  if ! python_env_ready; then
+    echo "Expected an importable activelearning environment at ${VENV_DIR} after bootstrapping, but import still failed." >&2
+    exit 1
+  fi
+}
+
+ensure_runtime_python
 
 work_items=()
 for task in "${tasks[@]}"; do
@@ -43,7 +72,8 @@ run_one() {
   local method="$2"
   local seed="$3"
   local cmd=(
-    uv run activelearning
+    "${PYTHON_BIN}"
+    -m activelearning.main
     "scripts/configs/reproduce_paper/molecules/${task}/${method}.yaml"
     "runtime.seed=${seed}"
   )

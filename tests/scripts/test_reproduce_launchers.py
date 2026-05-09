@@ -6,6 +6,7 @@ from pathlib import Path
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+REPO_PYTHON = REPOSITORY_ROOT / ".venv" / "bin" / "python"
 
 
 def _run_launcher(
@@ -39,6 +40,8 @@ def test_launchers_include_sbatch_directives() -> None:
     assert "#SBATCH --time=24:00:00" in synthetic_script
     assert "#SBATCH --output=slurm-logs/%x-%j.out" in synthetic_script
     assert "#SBATCH --error=slurm-logs/%x-%j.err" in synthetic_script
+    assert 'VENV_DIR="${REPO_ROOT}/.venv"' in synthetic_script
+    assert "sync_cmd=(uv sync --frozen)" in synthetic_script
     assert "#SBATCH --job-name=repro-molecules" in molecules_script
     assert "#SBATCH --nodes=1" in molecules_script
     assert "#SBATCH --ntasks=1" in molecules_script
@@ -47,6 +50,8 @@ def test_launchers_include_sbatch_directives() -> None:
     assert "#SBATCH --time=72:00:00" in molecules_script
     assert "#SBATCH --output=slurm-logs/%x-%j.out" in molecules_script
     assert "#SBATCH --error=slurm-logs/%x-%j.err" in molecules_script
+    assert 'VENV_DIR="${REPO_ROOT}/.venv"' in molecules_script
+    assert "sync_cmd=(uv sync --frozen --extra molecules)" in molecules_script
 
 
 def test_synthetic_launcher_prints_expected_commands_for_one_seed() -> None:
@@ -55,6 +60,8 @@ def test_synthetic_launcher_prints_expected_commands_for_one_seed() -> None:
     lines = [line for line in result.stdout.splitlines() if line]
 
     assert len(lines) == 8
+    assert all(str(REPO_PYTHON) in line for line in lines)
+    assert all("-m activelearning.main" in line for line in lines)
     assert any(
         "scripts/configs/reproduce_paper/synthetic/branin/mf_gfn.yaml" in line
         and "runtime.seed=0" in line
@@ -90,6 +97,8 @@ def test_molecule_launcher_prints_expected_commands_for_two_seeds() -> None:
     lines = [line for line in result.stdout.splitlines() if line]
 
     assert len(lines) == 16
+    assert all(str(REPO_PYTHON) in line for line in lines)
+    assert all("-m activelearning.main" in line for line in lines)
     assert any(
         "scripts/configs/reproduce_paper/molecules/molecules_ip/mf_gfn.yaml" in line
         and "runtime.seed=0" in line
