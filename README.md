@@ -186,17 +186,28 @@ uv run pre-commit install
 
 Each paper task/method pair has one runnable checked-in config. The primary
 execution path is direct `activelearning` execution, and the repo also includes
-two thin shell launchers for the full synthetic and molecule sweeps. See
+two thin SLURM-friendly launchers for the full synthetic and molecule sweeps. See
 Hernandez-Garcia et al., *Multi-Fidelity Active Learning with GFlowNets*
 ([arXiv](http://arxiv.org/abs/2306.11715),
 [OpenReview](https://openreview.net/forum?id=dLaazW9zuF)) for the target
 experiments.
 
-Full sweeps:
+Full sweeps on SLURM:
 
 ```sh
-bash scripts/run_reproduce_paper_synthetic.sh
-bash scripts/run_reproduce_paper_molecules.sh
+sbatch scripts/run_reproduce_paper_synthetic.sh
+sbatch scripts/run_reproduce_paper_molecules.sh
+```
+
+The same scripts still work as plain local shell launchers with `bash ...`. To
+fan out one config/seed pair per SLURM array task, submit with `--array=0-39`
+for the default 5 seeds across 8 configs, or adjust the array range if you pass
+a different seed list. The scripts ship with default `#SBATCH` resource requests
+for CPU, memory, wall time, and log files; override them at submission time if
+your cluster needs different values, for example:
+
+```sh
+sbatch --array=0-39 --time=48:00:00 --mem=24G scripts/run_reproduce_paper_synthetic.sh
 ```
 
 Aggregate plots:
