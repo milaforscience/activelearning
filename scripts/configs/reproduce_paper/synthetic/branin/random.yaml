@@ -1,0 +1,89 @@
+runtime:
+  device: cpu
+  precision: 64
+  seed: 42
+
+dataset:
+  type: ListDataset
+  initial_data:
+    path: ${reproduce_paper.initial_data.multi}
+    x_columns: [x1, x2]
+    y_column: y
+    fidelity_column: fidelity
+    metadata_columns: remaining
+
+surrogate:
+  type: BoTorchGPSurrogate
+
+acquisition:
+  type: QMultiFidelityLowerBoundMaxValueEntropy
+  candidate_set_spec:
+    type: TrainDataCandidateSetSpec
+  cost_aware_utility:
+    type: FidelityCostUtility
+    fidelity_costs: ${reproduce_paper.oracle_costs}
+
+sampler:
+  type: HypercubeSampler
+  num_samples: ${reproduce_paper.candidate_sample_count}
+  bounds: ${reproduce_paper.domain_bounds}
+  point_strategy: lhs
+  fidelity_policy:
+    type: uniform
+    values: [1, 2, 3]
+
+selector:
+  type: TopKAcquisitionSelector
+  num_samples: 30
+
+oracle:
+  type: BraninOracle
+  fidelity_costs: ${reproduce_paper.oracle_costs}
+  fidelity_confidences: ${reproduce_paper.fidelity_confidences}
+
+budget:
+  available_budget: 300.0
+  schedule:
+    type: constant
+    value: 30.0
+
+logger:
+  type: ConsoleLogger
+  project_name: activelearning_paper_reproduction
+  run_name: ${reproduce_paper.task}-${reproduce_paper.method}-seed${runtime.seed}
+
+run_writer:
+  type: JSONLinesRunWriter
+  output_dir: outputs/reproduce_paper/${reproduce_paper.task}/${reproduce_paper.method}/seed_${runtime.seed}
+
+reproduce_paper:
+  task_group: synthetic
+  task: branin
+  task_label: Branin
+  method: random
+  method_label: Random
+  top_k: 50
+  negate_score: true
+  initial_data:
+    multi: scripts/configs/reproduce_paper/data/branin/initial_multi_fidelity.csv
+    single: scripts/configs/reproduce_paper/data/branin/initial_single_fidelity.csv
+  oracle_costs:
+    1: 0.01
+    2: 0.1
+    3: 1.0
+  fidelity_confidences:
+    1: 0.5
+    2: 0.75
+    3: 1.0
+  domain_bounds:
+    - [-5.0, 10.0]
+    - [0.0, 15.0]
+  candidate_sample_count: 150
+  gflownet:
+    n_dim: 2
+    grid_length: 100
+    optimizer_batch_size: 16
+    random_action_prob: 0.0
+    reward_beta: 1.0
+    reward_rho: 1.0
+    fidelity_action: first

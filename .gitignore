@@ -314,7 +314,11 @@ poetry.toml
 pyrightconfig.json
 
 # Local experiment scripts
-scripts/
+local_scripts/
+
+# Output folder
+output/
+outputs/
 
 ### VisualStudioCode ###
 .vscode/*

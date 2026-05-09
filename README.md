@@ -182,6 +182,47 @@ uv run pre-commit install
 
 ---
 
+## Paper reproduction
+
+Each paper task/method pair has one runnable checked-in config. The primary
+execution path is direct `activelearning` execution, and the repo also includes
+two thin shell launchers for the full synthetic and molecule sweeps. See
+Hernandez-Garcia et al., *Multi-Fidelity Active Learning with GFlowNets*
+([arXiv](http://arxiv.org/abs/2306.11715),
+[OpenReview](https://openreview.net/forum?id=dLaazW9zuF)) for the target
+experiments.
+
+Full sweeps:
+
+```sh
+bash scripts/run_reproduce_paper_synthetic.sh
+bash scripts/run_reproduce_paper_molecules.sh
+```
+
+Aggregate plots:
+
+```sh
+uv run python scripts/plot_reproduce_paper.py \
+  --task-group synthetic \
+  outputs/reproduce_paper \
+  --output-dir outputs/reproduce_paper/plots/synthetic
+
+uv run python scripts/plot_reproduce_paper.py \
+  --task-group molecules \
+  outputs/reproduce_paper \
+  --output-dir outputs/reproduce_paper/plots/molecules
+```
+
+The normal override is just `runtime.seed`; the config already encodes the task,
+method, run name, output directory, and initial-data path.
+
+The checked-in runtime inputs live under `scripts/configs/reproduce_paper/`.
+Reference-only source artifacts live under `data/reproduce_paper_reference/`,
+and the detailed provenance notes live at
+`docs/resources/reproduce_paper_reference.md`.
+
+---
+
 ## Extending the Framework
 
 Each component has a documented extension interface. The [Extension Guide](https://milaforscience.github.io/activelearning/extension-guide/overview/) covers:

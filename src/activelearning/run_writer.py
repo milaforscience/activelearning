@@ -212,9 +212,6 @@ def _build_experiment_log_row(
     schedule = budget.get("schedule", {})
     logger = config.get("logger", {})
     input_files = provenance.get("input_files", [])
-    inferred_identity = _infer_identity_from_config_files(
-        cli_metadata.get("config_files", [])
-    )
     input_file_md5s = {
         str(item["path"]): str(item["md5"])
         for item in input_files
@@ -223,15 +220,9 @@ def _build_experiment_log_row(
 
     return {
         "run_directory": str(output_dir),
-        "task_group": _string_or_empty(
-            run_metadata.get("task_group", inferred_identity.get("task_group"))
-        ),
-        "task": _string_or_empty(
-            run_metadata.get("task", inferred_identity.get("task"))
-        ),
-        "method": _string_or_empty(
-            run_metadata.get("method", inferred_identity.get("method"))
-        ),
+        "task_group": _string_or_empty(run_metadata.get("task_group")),
+        "task": _string_or_empty(run_metadata.get("task")),
+        "method": _string_or_empty(run_metadata.get("method")),
         "seed": _string_or_empty(
             run_metadata.get("seed", config.get("runtime", {}).get("seed"))
         ),
@@ -264,21 +255,3 @@ def _string_or_empty(value: Any) -> str:
     """Convert optional values into CSV-friendly strings."""
 
     return "" if value is None else str(value)
-
-
-def _infer_identity_from_config_files(config_files: Sequence[str]) -> dict[str, str]:
-    """Infer paper experiment identity from recorded config paths when possible."""
-
-    for config_file in config_files:
-        parts = Path(config_file).parts
-        try:
-            root_index = parts.index("reproduce_paper")
-        except ValueError:
-            continue
-        if root_index + 2 >= len(parts):
-            continue
-        task = parts[root_index + 1]
-        method = Path(parts[root_index + 2]).stem
-        task_group = "molecules" if task.startswith("molecules_") else "synthetic"
-        return {"task_group": task_group, "task": task, "method": method}
-    return {}

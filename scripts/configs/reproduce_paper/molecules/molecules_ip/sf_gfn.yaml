@@ -1,0 +1,111 @@
+runtime:
+  device: cpu
+  precision: 32
+  seed: 42
+
+dataset:
+  type: ListDataset
+  negate_initial_targets: true
+  initial_data:
+    path: ${reproduce_paper.initial_data.single}
+    x_columns: selfies
+    y_column: y
+    metadata_columns: remaining
+
+surrogate:
+  type: VariationalSelfiesDKLSurrogate
+  encoder:
+    type: SelfiesTransformerEncoder
+    max_length: 64
+    embed_dim: 64
+    ff_dim: 256
+    num_heads: 8
+    num_layers: 8
+    latent_dim: 32
+    dropout: 0.0
+  training_params:
+    epochs: 512
+    lr: 0.001
+    mask_ratio: 0.125
+    pretrain_epochs: 0
+  num_inducing: 64
+  standardize_outputs: true
+
+acquisition:
+  type: QLowerBoundMaxValueEntropy
+  candidate_set_spec:
+    type: TrainDataCandidateSetSpec
+
+sampler:
+  type: GFlowNetSampler
+  n_samples: ${reproduce_paper.candidate_sample_count}
+  log_dir: ${run_writer.output_dir}/gflownet_logs
+  conf:
+    env:
+      _target_: gflownet.envs.sequences.selfies.Selfies
+      env_id: selfies
+      id: selfies
+      max_length: 64
+    policy:
+      forward:
+        n_hid: 2048
+        n_layers: 2
+    gflownet:
+      random_action_prob: 0.0
+      optimizer:
+        lr: 0.0005
+        lr_z_mult: 20.0
+        z_dim: 64
+        n_train_steps: 10000
+        batch_size:
+          forward: ${reproduce_paper.gflownet.optimizer_batch_size}
+    proxy:
+      reward_beta: ${reproduce_paper.gflownet.reward_beta}
+      reward_rho: ${reproduce_paper.gflownet.reward_rho}
+
+selector:
+  type: TopKAcquisitionSelector
+  num_samples: 128
+
+oracle:
+  type: XTBIPEAOracle
+  task: ip
+  fidelity_costs:
+    3: 7.0
+  num_conformers: 4
+
+budget:
+  available_budget: 1260.0
+  schedule:
+    type: constant
+    value: 896.0
+
+logger:
+  type: ConsoleLogger
+  project_name: activelearning_paper_reproduction
+  run_name: ${reproduce_paper.task}-${reproduce_paper.method}-seed${runtime.seed}
+
+run_writer:
+  type: JSONLinesRunWriter
+  output_dir: outputs/reproduce_paper/${reproduce_paper.task}/${reproduce_paper.method}/seed_${runtime.seed}
+
+reproduce_paper:
+  task_group: molecules
+  task: molecules_ip
+  task_label: Molecules (IP)
+  method: sf_gfn
+  method_label: SF-GFN
+  top_k: 100
+  initial_data:
+    multi: scripts/configs/reproduce_paper/data/molecules_ip/initial_multi_fidelity.csv
+    single: scripts/configs/reproduce_paper/data/molecules_ip/initial_single_fidelity.csv
+  oracle_costs:
+    1: 1.0
+    2: 3.5
+    3: 7.0
+  candidate_sample_count: 640
+  molecule_representation: selfies
+  gflownet:
+    optimizer_batch_size: 32
+    reward_beta: 1.0e-06
+    reward_rho: 1.5

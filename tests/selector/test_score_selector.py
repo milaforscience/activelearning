@@ -1,3 +1,5 @@
+from unittest.mock import Mock
+
 import pytest
 
 from activelearning.acquisition.dummy_acquisition import DummyAcquisition
@@ -92,3 +94,20 @@ def test_selection_with_varied_scores():
     assert len(selected) == 2
     assert selected[0].x == 3
     assert selected[1].x == 1
+
+
+def test_cost_fn_and_budget_do_not_change_topk_selection() -> None:
+    """Top-k selection should use raw acquisition scores without extra cost scaling."""
+    selector = TopKAcquisitionSelector(num_samples=2)
+    acquisition = Mock()
+    acquisition.score.return_value = [1.0, 3.0, 2.0]
+    candidates = [Candidate(x=i) for i in range(3)]
+
+    selected = selector(
+        candidates,
+        acquisition=acquisition,
+        cost_fn=lambda _: [0.01, 100.0, 0.01],
+        round_budget=0.01,
+    )
+
+    assert [candidate.x for candidate in selected] == [1, 2]
