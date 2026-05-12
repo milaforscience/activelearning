@@ -13,6 +13,7 @@ from activelearning.acquisition.botorch.candidate_set import (
     TensorCandidateSetSpec,
     TrainDataCandidateSetSpec,
 )
+from activelearning.runtime import RuntimeContext
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
 from activelearning.utils.types import Candidate, Observation
 
@@ -170,6 +171,24 @@ class TestHypercubeCandidateSetSpec:
         r2 = spec.build(fitted_sf_surrogate)
         assert not torch.allclose(r1, r2)
 
+    def test_build_matches_surrogate_runtime_dtype_and_device(
+        self,
+        single_fidelity_observations: list[Observation],
+    ) -> None:
+        """Generated candidate sets must align with the fitted surrogate runtime."""
+        surrogate = BoTorchGPSurrogate(optimize_hyperparameters=False)
+        surrogate.bind_runtime_context(
+            RuntimeContext(device=torch.device("cpu"), dtype=torch.float32)
+        )
+        surrogate.fit(single_fidelity_observations)
+
+        spec = HypercubeCandidateSetSpec(bounds=self.BOUNDS_2D, n_points=self.N)
+        result = spec.build(surrogate)
+        train_X, _ = surrogate.get_train_data()
+
+        assert result.dtype == train_X.dtype == torch.float32
+        assert result.device == train_X.device == torch.device("cpu")
+
     # --- update is a no-op ---------------------------------------------------
 
     def test_update_is_noop(
@@ -267,6 +286,25 @@ class TestTensorCandidateSetSpec:
         spec = TensorCandidateSetSpec(tensor)
         result = spec.build(fitted_sf_surrogate)
         assert result is tensor
+
+    def test_build_aligns_tensor_to_surrogate_runtime(
+        self,
+        single_fidelity_observations: list[Observation],
+    ) -> None:
+        """A fitted surrogate's runtime should control the returned tensor dtype/device."""
+        surrogate = BoTorchGPSurrogate(optimize_hyperparameters=False)
+        surrogate.bind_runtime_context(
+            RuntimeContext(device=torch.device("cpu"), dtype=torch.float32)
+        )
+        surrogate.fit(single_fidelity_observations)
+
+        tensor = torch.rand(10, 2, dtype=torch.float64)
+        spec = TensorCandidateSetSpec(tensor)
+        result = spec.build(surrogate)
+        train_X, _ = surrogate.get_train_data()
+
+        assert result.dtype == train_X.dtype == torch.float32
+        assert result.device == train_X.device == torch.device("cpu")
 
     def test_surrogate_not_used(self) -> None:
         """build() does not require a fitted surrogate — tensor is returned as-is."""

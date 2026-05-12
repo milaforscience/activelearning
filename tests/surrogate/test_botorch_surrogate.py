@@ -8,6 +8,7 @@ from botorch.models.gp_regression_fidelity import SingleTaskMultiFidelityGP
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
 from activelearning.utils.types import Observation, Candidate
 from activelearning.dataset.list_dataset import ListDataset
+from activelearning.runtime import RuntimeContext
 
 
 @pytest.fixture
@@ -104,6 +105,28 @@ def test_multi_fidelity_fit_and_predict(multi_fidelity_observations):
     predictions = surrogate.predict(candidates)
 
     assert len(predictions["mean"]) == 2
+
+
+def test_fit_and_encoding_follow_bound_runtime_dtype(single_fidelity_observations):
+    """Training data, model parameters, and encodings must follow the runtime dtype."""
+    surrogate = BoTorchGPSurrogate(optimize_hyperparameters=False)
+    surrogate.bind_runtime_context(
+        RuntimeContext(device=torch.device("cpu"), dtype=torch.float32)
+    )
+    surrogate.fit(single_fidelity_observations)
+
+    train_X, train_Y = surrogate.get_train_data()
+    encoded = surrogate.encode_candidates([Candidate(x=[1.5, 2.5])])
+    model_parameter = next(surrogate.get_model().parameters())
+
+    assert train_X.dtype == torch.float32
+    assert train_Y.dtype == torch.float32
+    assert encoded.dtype == torch.float32
+    assert train_X.device == torch.device("cpu")
+    assert train_Y.device == torch.device("cpu")
+    assert encoded.device == torch.device("cpu")
+    assert model_parameter.dtype == torch.float32
+    assert model_parameter.device == torch.device("cpu")
 
 
 def test_tensor_parsing_shapes(multi_fidelity_observations):

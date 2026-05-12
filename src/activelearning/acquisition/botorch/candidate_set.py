@@ -147,12 +147,17 @@ class HypercubeCandidateSetSpec(CandidateSetSpec):
     # Private helpers
     # ------------------------------------------------------------------
 
-    def _sample_unit(self) -> torch.Tensor:
+    def _sample_unit(
+        self,
+        *,
+        dtype: torch.dtype,
+        device: torch.device,
+    ) -> torch.Tensor:
         """Return ``(n_points, n_dims)`` samples in ``[0, 1]^d``."""
         n_dims = len(self.bounds)
         if self.strategy == "lhs":
-            return latin_hypercube(self.n_points, n_dims)
-        return torch.rand(self.n_points, n_dims, dtype=torch.float64)
+            return latin_hypercube(self.n_points, n_dims, dtype=dtype, device=device)
+        return torch.rand(self.n_points, n_dims, dtype=dtype, device=device)
 
     # ------------------------------------------------------------------
     # Public API
@@ -169,7 +174,8 @@ class HypercubeCandidateSetSpec(CandidateSetSpec):
         Parameters
         ----------
         surrogate : Surrogate
-            A fitted surrogate. Not used by this implementation.
+            A fitted surrogate whose training tensor device and dtype are reused
+            so the candidate set stays compatible with the model runtime.
         target_fidelity_value : float, optional
             When provided, appended as the fidelity column of every candidate
             in the returned tensor (e.g. ``1.0`` for the highest-confidence
@@ -181,13 +187,20 @@ class HypercubeCandidateSetSpec(CandidateSetSpec):
             Tensor of shape ``(n_points, d)`` or ``(n_points, d + 1)`` when
             ``target_fidelity_value`` is provided.
         """
-        lowers = torch.tensor([lo for lo, _ in self.bounds], dtype=torch.float64)
-        ranges = torch.tensor([hi - lo for lo, hi in self.bounds], dtype=torch.float64)
-        feature_points = lowers + self._sample_unit() * ranges  # (N, d)
+        train_X, _ = surrogate.get_train_data()
+        tensor_kwargs: dict[str, torch.dtype | torch.device] = {
+            "dtype": train_X.dtype,
+            "device": train_X.device,
+        }
+        lowers = torch.tensor([lo for lo, _ in self.bounds], **tensor_kwargs)
+        ranges = torch.tensor([hi - lo for lo, hi in self.bounds], **tensor_kwargs)
+        feature_points = lowers + self._sample_unit(**tensor_kwargs) * ranges  # (N, d)
 
         if target_fidelity_value is not None:
             fid_col = torch.full(
-                (self.n_points, 1), target_fidelity_value, dtype=torch.float64
+                (self.n_points, 1),
+                target_fidelity_value,
+                **tensor_kwargs,
             )
             return torch.cat([feature_points, fid_col], dim=-1)
 
@@ -296,18 +309,26 @@ class TensorCandidateSetSpec(CandidateSetSpec):
         *,
         target_fidelity_value: Optional[float] = None,
     ) -> torch.Tensor:
-        """Return the stored tensor unchanged.
+        """Return the stored tensor, aligning it with the surrogate runtime when needed.
 
         Parameters
         ----------
         surrogate : Surrogate
-            Not used.
+            Used only to align the stored tensor with the fitted surrogate's
+            device and dtype when the surrogate is already initialized.
         target_fidelity_value : float, optional
             Not used.
 
         Returns
         -------
         candidate_set : torch.Tensor
-            The tensor passed at construction time.
+            The stored tensor, moved to the fitted surrogate's device and dtype
+            when the surrogate is already initialized.
         """
-        return self.tensor
+        if not surrogate.is_fitted():
+            return self.tensor
+
+        train_X, _ = surrogate.get_train_data()
+        if self.tensor.device == train_X.device and self.tensor.dtype == train_X.dtype:
+            return self.tensor
+        return self.tensor.to(device=train_X.device, dtype=train_X.dtype)

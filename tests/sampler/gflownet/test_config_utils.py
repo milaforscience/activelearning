@@ -85,7 +85,7 @@ def test_compose_gflownet_conf_has_all_required_keys():
 
 
 def test_compose_gflownet_conf_env_target():
-    """Default env must be the Grid environment."""
+    """Default env must be the upstream Grid environment."""
     conf = compose_gflownet_conf()
     assert conf.env._target_ == "gflownet.envs.grid.Grid"
 

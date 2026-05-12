@@ -94,6 +94,14 @@ class BoTorchGPSurrogate(Surrogate):
         self._fidelity_confidences: dict[int, float] = {}
         self._pending_state_dict: Optional[dict[str, torch.Tensor]] = None
 
+    def _runtime_tensor_kwargs(self) -> dict[str, torch.dtype | torch.device]:
+        """Return device and dtype kwargs for runtime-aware floating tensors."""
+        return {"device": self.device, "dtype": self.dtype}
+
+    def _move_to_runtime(self, tensor: torch.Tensor) -> torch.Tensor:
+        """Move a floating tensor onto the bound runtime device and dtype."""
+        return tensor.to(**self._runtime_tensor_kwargs())
+
     def set_fidelity_confidences(self, confidences: dict[int, float]) -> None:
         """Stores fidelity confidences and passes them to the custom kernel if supported.
 
@@ -298,8 +306,8 @@ class BoTorchGPSurrogate(Surrogate):
         with torch.no_grad():
             posterior = model.posterior(test_X)
 
-        mean = posterior.mean
-        std = posterior.variance.sqrt()
+        mean = posterior.mean.detach().cpu()
+        std = posterior.variance.sqrt().detach().cpu()
 
         if mean.ndim >= 2 and mean.shape[-1] == 1:
             mean_out = mean.squeeze(-1).tolist()
@@ -445,10 +453,14 @@ class BoTorchGPSurrogate(Surrogate):
 
         fidelity_confidences = self._fidelity_confidences or None
         test_X, fidelities = candidates_to_tensor(cand_list, fidelity_confidences)
-        test_X = self._ensure_batch_shape(test_X)
+        test_X = self._move_to_runtime(self._ensure_batch_shape(test_X))
 
         if self._is_multi_fidelity:
-            fid_tensor = torch.tensor(fidelities, dtype=torch.float64).view(-1, 1)
+            fid_tensor = torch.tensor(
+                fidelities,
+                device=self.device,
+                dtype=self.dtype,
+            ).view(-1, 1)
             test_X = torch.cat([test_X, fid_tensor], dim=-1)
 
         return test_X
@@ -616,8 +628,8 @@ class BoTorchGPSurrogate(Surrogate):
 
         fidelity_confidences = self._fidelity_confidences or None
         X, y, fidelities = observations_to_tensors(obs_list, fidelity_confidences)
-        train_X = self._ensure_batch_shape(X)
-        train_Y = self._ensure_batch_shape(y)
+        train_X = self._move_to_runtime(self._ensure_batch_shape(X))
+        train_Y = self._move_to_runtime(self._ensure_batch_shape(y))
         obs_count = len(obs_list)
 
         if is_multi_fidelity:
@@ -626,7 +638,11 @@ class BoTorchGPSurrogate(Surrogate):
                     "If using multi-fidelity observations, all observations must "
                     "provide a fidelity value present in the fidelity-confidence map."
                 )
-            fid_tensor = torch.tensor(fidelities, dtype=torch.float64).view(-1, 1)
+            fid_tensor = torch.tensor(
+                fidelities,
+                device=self.device,
+                dtype=self.dtype,
+            ).view(-1, 1)
             train_X = torch.cat([train_X, fid_tensor], dim=-1)
 
         return train_X, train_Y, is_multi_fidelity
@@ -641,6 +657,9 @@ class BoTorchGPSurrogate(Surrogate):
         train_Y : torch.Tensor
             Training target tensor.
         """
+
+        train_X = self._move_to_runtime(train_X)
+        train_Y = self._move_to_runtime(train_Y)
 
         # 1. Setup Transforms
         # When multi-fidelity, scale only the feature columns (all except the last),
@@ -659,6 +678,8 @@ class BoTorchGPSurrogate(Surrogate):
         outcome_transform = (
             Standardize(m=train_Y.shape[-1]) if self.standardize_outputs else None
         )
+        if self.covar_module is not None:
+            self.covar_module = self.covar_module.to(**self._runtime_tensor_kwargs())
 
         # 2. Build Model Configuration
         # Use BoTorch's default MF model only when MF data is present and no custom
@@ -684,7 +705,10 @@ class BoTorchGPSurrogate(Surrogate):
                 input_transform=input_transform,
             )
 
-        self.mll = ExactMarginalLogLikelihood(self.model.likelihood, self.model)
+        self.model = self.model.to(**self._runtime_tensor_kwargs())
+        self.mll = ExactMarginalLogLikelihood(self.model.likelihood, self.model).to(
+            **self._runtime_tensor_kwargs()
+        )
 
         # 3. Inject pre-trained hyperparameters if the user provided them before fitting
         if self._pending_state_dict is not None:
