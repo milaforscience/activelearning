@@ -23,10 +23,15 @@ Examples
 """
 
 import argparse
-from omegaconf import OmegaConf
+from typing import TYPE_CHECKING
+
+from omegaconf import DictConfig, OmegaConf
 
 from activelearning.logger.config import bootstrap_logger_backend_imports
 from activelearning.utils.config_loader import load_config
+
+if TYPE_CHECKING:
+    from activelearning.config import ActiveLearningConfig
 
 
 def _parse_args() -> tuple[argparse.Namespace, list[str]]:
@@ -50,12 +55,12 @@ def _parse_args() -> tuple[argparse.Namespace, list[str]]:
     return parser.parse_known_args()
 
 
-def main() -> None:
-    """Load config, build components, run the active learning loop."""
+def process_arguments() -> tuple[DictConfig, "ActiveLearningConfig"]:
+    """Parse CLI arguments, load configs, and validate the merged config."""
     args, unknown = _parse_args()
 
-    configs = [a for a in args.args if "=" not in a]
-    overrides = [a for a in args.args if "=" in a]
+    configs = [arg for arg in args.args if "=" not in arg]
+    overrides = [arg for arg in args.args if "=" in arg]
 
     if unknown:
         import warnings
@@ -79,12 +84,19 @@ def main() -> None:
     )
     bootstrap_logger_backend_imports(OmegaConf.to_container(raw_cfg, resolve=False))
 
-    from activelearning.active_learning import active_learning
     from activelearning.config import ActiveLearningConfig
     from activelearning.utils.config_loader import parse_config
-    from activelearning.runtime import bind_runtime_context
 
     cfg = parse_config(raw_cfg, ActiveLearningConfig)
+    return raw_cfg, cfg
+
+
+def main() -> None:
+    """Load config, build components, run the active learning loop."""
+    raw_cfg, cfg = process_arguments()
+
+    from activelearning.active_learning import active_learning
+    from activelearning.runtime import bind_runtime_context
 
     dataset = cfg.dataset.build()
     surrogate = cfg.surrogate.build()
