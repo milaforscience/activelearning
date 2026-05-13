@@ -1,4 +1,5 @@
 import pytest
+import torch
 from unittest.mock import Mock, patch
 
 from activelearning.oracle.augmented_function_oracle import (
@@ -147,6 +148,45 @@ class TestBraninOracleQuery:
         logger.log_figure.assert_called_once_with("branin_landscape_query", figure)
         close_figure.assert_called_once_with(figure)
 
+    def test_bind_runtime_context_moves_test_function(
+        self, branin_fidelity_costs, monkeypatch
+    ):
+        oracle = BraninOracle(fidelity_costs=branin_fidelity_costs)
+        target_dtype = (
+            torch.float32
+            if oracle._function.bounds.dtype == torch.float64
+            else torch.float64
+        )
+        runtime_context = RuntimeContext(
+            device=torch.device("cpu"),
+            dtype=target_dtype,
+        )
+        recorded: dict[str, torch.device | torch.dtype | None] = {}
+        original_to = oracle._function.to
+
+        def recording_to(*args, **kwargs):
+            recorded["device"] = kwargs.get("device")
+            recorded["dtype"] = kwargs.get("dtype")
+            return original_to(*args, **kwargs)
+
+        monkeypatch.setattr(oracle._function, "to", recording_to)
+
+        oracle.bind_runtime_context(runtime_context)
+
+        assert recorded["device"] == runtime_context.device
+        assert recorded["dtype"] == runtime_context.dtype
+        assert oracle._function.bounds.device == runtime_context.device
+        assert oracle._function.bounds.dtype == runtime_context.dtype
+
+    def test_query_respects_runtime_dtype_after_binding(self, branin_fidelity_costs):
+        oracle = BraninOracle(fidelity_costs=branin_fidelity_costs)
+        oracle.bind_runtime_context(RuntimeContext(dtype=torch.float32))
+
+        observation = oracle.query([Candidate(x=[0.5, 7.5], fidelity=3)])[0]
+
+        assert isinstance(observation.y, float)
+        assert oracle._function.bounds.dtype == torch.float32
+
 
 class TestHartmann6DOracleQuery:
     """Test Hartmann6DOracle.query() returns valid observations."""
@@ -191,3 +231,10 @@ class TestHartmann6DOracleQuery:
         ]
         costs = oracle.get_costs(candidates)
         assert costs == [0.125, 1.0]
+
+    def test_bind_runtime_context_moves_test_function(self, hartmann_fidelity_costs):
+        oracle = Hartmann6DOracle(fidelity_costs=hartmann_fidelity_costs)
+        oracle.bind_runtime_context(RuntimeContext(dtype=torch.float32))
+
+        assert oracle._function.bounds.device == torch.device("cpu")
+        assert oracle._function.bounds.dtype == torch.float32

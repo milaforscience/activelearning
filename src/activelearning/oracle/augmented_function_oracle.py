@@ -8,6 +8,7 @@ from botorch.test_functions.synthetic import SyntheticTestFunction
 
 from activelearning.oracle.multi_fidelity_oracle import MultiFidelityOracle
 from activelearning.oracle.plotting import build_augmented_2d_landscape_figure
+from activelearning.runtime import RuntimeContext
 from activelearning.utils.types import Candidate, Observation
 
 
@@ -58,18 +59,28 @@ class AugmentedFunctionOracle(MultiFidelityOracle):
             )
 
         self._function = function
+        self._move_function_to_runtime()
 
         fidelity_configs: dict[int, dict[str, Any]] = {
             fidelity: {
                 "cost_per_sample": fidelity_costs[fidelity],
                 "score_fn": self._make_score_fn(
-                    function, fidelity_confidences[fidelity]
+                    self._function, fidelity_confidences[fidelity]
                 ),
                 "fidelity_confidence": fidelity_confidences[fidelity],
             }
             for fidelity in fidelity_costs
         }
         super().__init__(fidelity_configs=fidelity_configs)
+
+    def bind_runtime_context(self, runtime_context: RuntimeContext) -> None:
+        """Bind runtime state and move the underlying BoTorch test function to it."""
+        super().bind_runtime_context(runtime_context)
+        self._move_function_to_runtime()
+
+    def _move_function_to_runtime(self) -> None:
+        """Align the wrapped BoTorch test function with the bound runtime context."""
+        self._function = self._function.to(device=self.device, dtype=self.dtype)
 
     def _make_score_fn(
         self,
