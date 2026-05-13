@@ -1,5 +1,5 @@
 runtime:
-  device: cpu
+  device: cuda
   precision: 64
   seed: 42
 
@@ -107,4 +107,4 @@ reproduce_paper:
     random_action_prob: 0.0
     reward_beta: 1.0
     reward_rho: 1.0
-    fidelity_action: first 
+    fidelity_action: any

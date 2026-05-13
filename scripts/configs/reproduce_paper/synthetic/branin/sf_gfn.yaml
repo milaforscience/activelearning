@@ -1,5 +1,5 @@
 runtime:
-  device: cuda 
+  device: cuda
   precision: 64
   seed: 42
 
@@ -9,6 +9,7 @@ dataset:
     path: ${reproduce_paper.initial_data.single}
     x_columns: [x1, x2]
     y_column: y
+    fidelity_column: fidelity
     metadata_columns: remaining
 
 surrogate:
@@ -24,6 +25,9 @@ sampler:
   n_samples: ${reproduce_paper.candidate_sample_count}
   output_bounds: ${reproduce_paper.domain_bounds}
   log_dir: ${run_writer.output_dir}/gflownet_logs
+  fidelity_policy:
+    type: fixed
+    value: 3
   conf:
     env:
       n_dim: ${reproduce_paper.gflownet.n_dim}
@@ -101,4 +105,4 @@ reproduce_paper:
     random_action_prob: 0.0
     reward_beta: 1.0
     reward_rho: 1.0
-    fidelity_action: first
+    fidelity_action: any

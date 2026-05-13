@@ -1,5 +1,5 @@
 runtime:
-  device: cpu
+  device: cuda
   precision: 64
   seed: 42
 

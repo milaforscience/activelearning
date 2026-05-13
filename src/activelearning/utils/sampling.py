@@ -40,5 +40,7 @@ def latin_hypercube(
         int_kwargs["device"] = device
 
     offsets = torch.rand(n_points, n_dims, **float_kwargs)
-    perms = torch.stack([torch.randperm(n_points, **int_kwargs) for _ in range(n_dims)], dim=1)
+    perms = torch.stack(
+        [torch.randperm(n_points, **int_kwargs) for _ in range(n_dims)], dim=1
+    )
     return (perms.to(dtype) + offsets) / n_points
