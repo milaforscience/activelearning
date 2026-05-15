@@ -1,3 +1,5 @@
+import csv
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -194,6 +196,21 @@ def test_multifidelity_reproduction_configs_resolve_costs_from_task_metadata(
     ) == pytest.approx(ORACLE_COSTS_BY_TASK[task])
 
 
+def test_branin_initial_data_csvs_match_paper_initialization_counts() -> None:
+    """Branin reproduction CSVs should match the paper's SF and MF initialization sizes."""
+
+    branin_data_root = REPRODUCE_PAPER_CONFIG_ROOT / "data" / "branin"
+
+    assert _read_fidelity_counts(branin_data_root / "initial_single_fidelity.csv") == {
+        3: 4
+    }
+    assert _read_fidelity_counts(branin_data_root / "initial_multi_fidelity.csv") == {
+        1: 20,
+        2: 20,
+        3: 2,
+    }
+
+
 def test_molecule_random_config_uses_random_token_sequence_sampler() -> None:
     """The molecule random baseline should stay a plain framework sampler config."""
 
@@ -236,3 +253,11 @@ def _normalize_numeric_key_dict(payload: dict[object, object]) -> dict[int, floa
     """Normalize OmegaConf dictionaries that may serialize numeric keys as strings."""
 
     return {int(key): float(value) for key, value in payload.items()}
+
+
+def _read_fidelity_counts(path: Path) -> dict[int, int]:
+    """Return the per-fidelity observation counts recorded in one initial-data CSV."""
+
+    with path.open(encoding="utf-8", newline="") as handle:
+        rows = csv.DictReader(handle)
+        return dict(sorted(Counter(int(row["fidelity"]) for row in rows).items()))
