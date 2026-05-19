@@ -64,6 +64,10 @@ class XTBIPEAOracleConfig(BaseModel):
         Empirical correction subtracted from adiabatic IP/EA (eV).
     mol_repr : str
         Input molecules representation: ``"selfies"`` or ``"smiles"``.
+    negate_score : bool, optional
+        Whether to negate the raw EA/IP value before it enters the active-
+        learning loop. Defaults to ``True`` for IP and ``False`` for EA when
+        omitted.
     log_molecule_visualizations : bool
         Whether to log queried molecule visualizations when a logger is bound.
     molecule_visualization_limit : int
@@ -82,6 +86,7 @@ class XTBIPEAOracleConfig(BaseModel):
     per_fidelity_num_conformers: dict[int, int] | None = None
     correction_factor: float = 4.8455
     mol_repr: str = "selfies"
+    negate_score: bool | None = None
     log_molecule_visualizations: bool = False
     molecule_visualization_limit: int = Field(default=25, ge=1)
 
@@ -123,6 +128,7 @@ class XTBIPEAOracleConfig(BaseModel):
             per_fidelity_num_conformers=self.per_fidelity_num_conformers,
             correction_factor=self.correction_factor,
             mol_repr=self.mol_repr,
+            negate_score=self.negate_score,
             log_molecule_visualizations=self.log_molecule_visualizations,
             molecule_visualization_limit=self.molecule_visualization_limit,
         )

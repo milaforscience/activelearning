@@ -256,6 +256,29 @@ class TestXTBIPEAOracleConstructionValidation:
         assert oracle.log_molecule_visualizations is True
         assert oracle._molecule_visualization_limit == 7
 
+    def test_config_build_passes_negate_score(self):
+        config = XTBIPEAOracleConfig(
+            task="ip",
+            fidelity_costs={1: 1.0},
+            negate_score=True,
+        )
+
+        oracle = config.build()
+
+        assert isinstance(oracle, XTBIPEAOracle)
+        assert oracle._negate_score is True
+
+    def test_config_build_defaults_ip_to_negated_objective(self):
+        config = XTBIPEAOracleConfig(
+            task="ip",
+            fidelity_costs={1: 1.0},
+        )
+
+        oracle = config.build()
+
+        assert isinstance(oracle, XTBIPEAOracle)
+        assert oracle._negate_score is True
+
     def test_config_build_passes_conformer_options(self):
         config = XTBIPEAOracleConfig(
             task="ea",
@@ -367,6 +390,26 @@ class TestXTBIPEAOracleQuery:
         with patch.object(oracle, "_xtb_score", return_value=1.0):
             obs = oracle.query([Candidate(x=BENZENE_SELFIES, fidelity=2)])
         assert obs[0].fidelity == 2
+
+    def test_query_negates_score_when_configured(self):
+        oracle = XTBIPEAOracle(
+            task="ip",
+            fidelity_costs={1: 1.0},
+            negate_score=True,
+        )
+
+        with patch.object(oracle, "_xtb_score", return_value=9.0):
+            obs = oracle.query([Candidate(x=BENZENE_SELFIES, fidelity=1)])
+
+        assert obs[0].y == pytest.approx(-9.0)
+
+    def test_query_negates_ip_by_default(self):
+        oracle = XTBIPEAOracle(task="ip", fidelity_costs={1: 1.0})
+
+        with patch.object(oracle, "_xtb_score", return_value=9.0):
+            obs = oracle.query([Candidate(x=BENZENE_SELFIES, fidelity=1)])
+
+        assert obs[0].y == pytest.approx(-9.0)
 
     def test_query_from_metadata_raw(self, oracle: XTBIPEAOracle):
         """Pre-embed path: original string in metadata['raw']."""

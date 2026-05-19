@@ -395,6 +395,11 @@ class XTBIPEAOracle(MultiFidelityOracle):
         Unlisted fidelities fall back to the global/default setting.
     mol_repr : str
         Input molecules representation: ``"selfies"`` or ``"smiles"``.
+    negate_score : bool, optional
+        Whether to negate the raw EA/IP value before returning it as the active-
+        learning objective. This is useful for lower-is-better properties such
+        as IP when the acquisition loop is formulated as a maximization problem.
+        Defaults to ``True`` for IP and ``False`` for EA when omitted.
     log_molecule_visualizations : bool
         Whether to log a 2-D RDKit grid of queried molecules when a runtime
         logger is bound.
@@ -421,6 +426,7 @@ class XTBIPEAOracle(MultiFidelityOracle):
         conformer_cfg: Optional[ConformerConfig] = None,
         per_fidelity_num_conformers: Optional[dict[int, int]] = None,
         mol_repr: str = "selfies",
+        negate_score: bool | None = None,
         log_molecule_visualizations: bool = False,
         molecule_visualization_limit: int = 25,
     ) -> None:
@@ -440,6 +446,7 @@ class XTBIPEAOracle(MultiFidelityOracle):
             per_fidelity_num_conformers, fidelity_costs
         )
         self._mol_repr = mol_repr
+        self._negate_score = task == "ip" if negate_score is None else negate_score
         self.log_molecule_visualizations = log_molecule_visualizations
         self._molecule_visualization_limit = molecule_visualization_limit
 
@@ -451,7 +458,9 @@ class XTBIPEAOracle(MultiFidelityOracle):
             fid: {
                 "cost_per_sample": fidelity_costs[fid],
                 "fidelity_confidence": confidences[fid],
-                "score_fn": lambda mol_str, _fid=fid: self._xtb_score(mol_str, _fid),
+                "score_fn": lambda mol_str, _fid=fid: self._objective_score(
+                    mol_str, _fid
+                ),
             }
             for fid in fidelity_costs
         }
@@ -469,7 +478,7 @@ class XTBIPEAOracle(MultiFidelityOracle):
                 candidate, self.fidelity_configs
             )
             mol_str = self._extract_molecule_string(candidate)
-            score = self._xtb_score(mol_str, fidelity)
+            score = self._objective_score(mol_str, fidelity)
             observations.append(
                 Observation(
                     x=candidate.x,
@@ -594,6 +603,12 @@ class XTBIPEAOracle(MultiFidelityOracle):
                 exc_info=True,
             )
             return float("nan")
+
+    def _objective_score(self, molecule: str, fidelity: int) -> float:
+        """Return the active-learning objective value for one molecule query."""
+
+        raw_score = self._xtb_score(molecule, fidelity)
+        return -raw_score if self._negate_score else raw_score
 
     @staticmethod
     def _validate_per_fidelity_num_conformers(
