@@ -65,6 +65,10 @@ The built-in [`XTBIPEAOracle`](../reference/activelearning/applications/molecule
 | `ea` | [Electron affinity](https://en.wikipedia.org/wiki/Electron_affinity) | Energy change when the molecule accepts an electron. |
 | `ip` | [Ionisation potential](https://en.wikipedia.org/wiki/Ionization_energy) | Energy required to remove an electron. |
 
+The active-learning loop is formulated as a maximization problem. EA is already
+in that form, while IP runs should negate the physical IP so MES maximizes
+`-IP` rather than raw IP.
+
 The three xTB fidelities trade cost for accuracy:
 
 | Fidelity | What happens | Cost in the provided configs |
