@@ -53,6 +53,11 @@ class JSONLinesRunWriter(RunWriter):
         self.write_config = write_config
         self.metadata = metadata or {}
         self._manifest: dict[str, Any] | None = None
+        self._method: str | None = None
+        self._seed: int | str | None = None
+        self._best_objective_value: float | None = None
+        self._experiment_rows: list[dict[str, int | float | str | None]] = []
+        self._next_experiment_row_index = 0
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._rounds_path = self.output_dir / "round_history.jsonl"
         self._rounds_handle = self._rounds_path.open("w", encoding="utf-8")
@@ -61,8 +66,11 @@ class JSONLinesRunWriter(RunWriter):
         """Write run metadata to disk."""
 
         self._manifest = _deep_merge(self.metadata, metadata)
+        self._method = _resolve_method(self._manifest, self.output_dir)
+        self._seed = _resolve_seed(self._manifest)
         if self.write_config:
             self._write_json("run_manifest.json", self._manifest)
+        self._write_experiment_log()
 
     def record_round(
         self,
@@ -97,13 +105,17 @@ class JSONLinesRunWriter(RunWriter):
 
         self._rounds_handle.write(json.dumps(record, sort_keys=True) + "\n")
         self._rounds_handle.flush()
+        self._append_experiment_row(
+            round_index=round_index,
+            observations=observations,
+            cumulative_cost=cumulative_cost,
+        )
 
     def end_run(self, summary: dict[str, Any]) -> None:
         """Write final summary and close the round-history file."""
 
         self._write_json("run_summary.json", summary)
-        if self._manifest is not None:
-            self._write_experiment_log(self._manifest, summary)
+        self._write_experiment_log()
         self._rounds_handle.close()
 
     def _write_json(self, filename: str, payload: dict[str, Any]) -> None:
@@ -113,23 +125,55 @@ class JSONLinesRunWriter(RunWriter):
             encoding="utf-8",
         )
 
-    def _write_experiment_log(
+    def _append_experiment_row(
         self,
-        manifest: dict[str, Any],
-        summary: dict[str, Any],
+        *,
+        round_index: int,
+        observations: Sequence[Observation],
+        cumulative_cost: float,
     ) -> None:
-        """Write a flat single-row CSV summary for quick experiment inspection."""
+        """Append the best-so-far objective trajectory for one completed round."""
 
-        row = _build_experiment_log_row(
-            manifest=_jsonable(manifest),
-            summary=_jsonable(summary),
-            output_dir=self.output_dir,
+        round_best_objective_value = _best_objective_value(observations)
+        if self._best_objective_value is None:
+            self._best_objective_value = round_best_objective_value
+        else:
+            self._best_objective_value = max(
+                self._best_objective_value,
+                round_best_objective_value,
+            )
+
+        self._experiment_rows.append(
+            {
+                "index": self._next_experiment_row_index,
+                "method": self._method,
+                "seed": self._seed,
+                "objective value": self._best_objective_value,
+                "cost": float(cumulative_cost),
+                "round": round_index - 1,
+            }
         )
+        self._next_experiment_row_index += 1
+        self._write_experiment_log()
+
+    def _write_experiment_log(self) -> None:
+        """Write the per-round objective CSV used for experiment inspection."""
+
         path = self.output_dir / "experiment_log.csv"
         with path.open("w", encoding="utf-8", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=list(row))
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=[
+                    "index",
+                    "method",
+                    "seed",
+                    "objective value",
+                    "cost",
+                    "round",
+                ],
+            )
             writer.writeheader()
-            writer.writerow(row)
+            writer.writerows(self._experiment_rows)
 
 
 class JSONLinesRunWriterConfig(BaseModel):
@@ -194,64 +238,52 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return merged
 
 
-def _build_experiment_log_row(
-    *,
-    manifest: dict[str, Any],
-    summary: dict[str, Any],
-    output_dir: Path,
-) -> dict[str, str]:
-    """Flatten the most useful run metadata into a CSV-friendly row."""
+def _resolve_seed(manifest: dict[str, Any]) -> int | str | None:
+    """Extract the run seed from the manifest when one is available."""
 
     config = manifest.get("config", {})
-    cli_metadata = manifest.get("cli", {})
-    provenance = manifest.get("provenance", {})
     run_metadata = manifest.get("run", {})
-    dataset = config.get("dataset", {})
-    initial_data = dataset.get("initial_data", {})
-    budget = config.get("budget", {})
-    schedule = budget.get("schedule", {})
-    logger = config.get("logger", {})
-    input_files = provenance.get("input_files", [])
-    input_file_md5s = {
-        str(item["path"]): str(item["md5"])
-        for item in input_files
-        if isinstance(item, dict) and "path" in item and "md5" in item
-    }
-
-    return {
-        "run_directory": str(output_dir),
-        "task_group": _string_or_empty(run_metadata.get("task_group")),
-        "task": _string_or_empty(run_metadata.get("task")),
-        "method": _string_or_empty(run_metadata.get("method")),
-        "seed": _string_or_empty(
-            run_metadata.get("seed", config.get("runtime", {}).get("seed"))
-        ),
-        "logger_project_name": _string_or_empty(logger.get("project_name")),
-        "logger_run_name": _string_or_empty(logger.get("run_name")),
-        "dataset_type": _string_or_empty(dataset.get("type")),
-        "dataset_initial_data_path": _string_or_empty(initial_data.get("path")),
-        "surrogate_type": _string_or_empty(config.get("surrogate", {}).get("type")),
-        "acquisition_type": _string_or_empty(config.get("acquisition", {}).get("type")),
-        "sampler_type": _string_or_empty(config.get("sampler", {}).get("type")),
-        "selector_type": _string_or_empty(config.get("selector", {}).get("type")),
-        "oracle_type": _string_or_empty(config.get("oracle", {}).get("type")),
-        "available_budget": _string_or_empty(budget.get("available_budget")),
-        "budget_schedule_type": _string_or_empty(schedule.get("type")),
-        "budget_schedule_value": _string_or_empty(schedule.get("value")),
-        "git_commit_sha": _string_or_empty(provenance.get("git_commit_sha")),
-        "resolved_config_md5": _string_or_empty(provenance.get("resolved_config_md5")),
-        "config_files": ";".join(cli_metadata.get("config_files", [])),
-        "config_overrides": ";".join(cli_metadata.get("config_overrides", [])),
-        "input_files": ";".join(input_file_md5s),
-        "input_file_md5s": json.dumps(input_file_md5s, sort_keys=True),
-        "reproduce_command": _string_or_empty(cli_metadata.get("command")),
-        "num_rounds": _string_or_empty(summary.get("num_rounds")),
-        "total_cost": _string_or_empty(summary.get("total_cost")),
-        "budget_remaining": _string_or_empty(summary.get("budget_remaining")),
-    }
+    return run_metadata.get("seed", config.get("runtime", {}).get("seed"))
 
 
-def _string_or_empty(value: Any) -> str:
-    """Convert optional values into CSV-friendly strings."""
+def _resolve_method(manifest: dict[str, Any], output_dir: Path) -> str | None:
+    """Extract the run method name for CSV output."""
 
-    return "" if value is None else str(value)
+    config = manifest.get("config", {})
+    run_metadata = manifest.get("run", {})
+    reproduce_paper = config.get("reproduce_paper", {})
+    raw_method = run_metadata.get("method", reproduce_paper.get("method"))
+    if raw_method is None and output_dir.parent != output_dir:
+        raw_method = output_dir.parent.name
+    if raw_method is None:
+        return None
+    return str(raw_method)
+
+
+def _best_objective_value(observations: Sequence[Observation]) -> float:
+    """Return the best scalar objective value observed in a completed round."""
+
+    objective_values = [
+        _coerce_scalar_float(observation.y) for observation in observations
+    ]
+    if not objective_values:
+        raise ValueError("Cannot write an experiment log row without observations.")
+    return max(objective_values)
+
+
+def _coerce_scalar_float(value: Any) -> float:
+    """Convert a scalar-like objective value into a float for CSV output."""
+
+    jsonable_value = _jsonable(value)
+    if isinstance(jsonable_value, bool):
+        raise TypeError(
+            "Boolean objective values cannot be written to experiment_log.csv."
+        )
+    if isinstance(jsonable_value, int | float):
+        return float(jsonable_value)
+    if isinstance(jsonable_value, list | tuple) and len(jsonable_value) == 1:
+        return _coerce_scalar_float(jsonable_value[0])
+    raise TypeError(
+        "experiment_log.csv only supports scalar objective values, "
+        f"received {type(jsonable_value).__name__}."
+    )
