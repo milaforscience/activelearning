@@ -5,12 +5,17 @@ import json
 from pathlib import Path
 import shutil
 from statistics import stdev
+import subprocess
+import sys
 from typing import Any, Iterator, Sequence
+from unittest.mock import patch
 
+from botorch.test_functions.multi_fidelity import AugmentedBranin
 import pytest
 import selfies as sf
 from rdkit import Chem, DataStructs
 from rdkit.Chem import rdFingerprintGenerator
+import torch
 
 from scripts.plot_reproduce_paper import main as plot_reproduce_paper_main
 from scripts.reproduce_paper_metrics import (
@@ -20,6 +25,7 @@ from scripts.reproduce_paper_metrics import (
 )
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "reproduce_paper"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 PAPER_METHODS: tuple[str, ...] = (
     "mf_gfn",
     "random_fid_gfn",
@@ -50,6 +56,7 @@ ORACLE_TYPE_BY_TASK = {
     "molecules_ea": "XTBIPEAOracle",
     "molecules_ip": "XTBIPEAOracle",
 }
+BRANIN_OPTIMAL_Y = float(AugmentedBranin(negate=True).optimal_value)
 
 
 @pytest.fixture
@@ -68,7 +75,7 @@ def plotting_output_root() -> Iterator[Path]:
 def test_plot_synthetic_results_writes_figure_and_plotting_table(
     plotting_output_root: Path,
 ) -> None:
-    """Synthetic plotting should save a figure and the exact aggregated CSV."""
+    """Synthetic plotting should aggregate rescored active-learning checkpoints."""
 
     run_root = plotting_output_root / "synthetic_runs"
     _write_synthetic_runs(run_root)
@@ -97,7 +104,7 @@ def test_plot_synthetic_results_writes_figure_and_plotting_table(
     assert figure_path.stat().st_size > 0
 
     rows = _read_csv_rows(table_path)
-    assert len(rows) == 16
+    assert len(rows) == 8
 
     mf_gfn_row = _find_plotting_row(
         rows,
@@ -106,8 +113,13 @@ def test_plot_synthetic_results_writes_figure_and_plotting_table(
         round_index="1",
     )
     expected_scores = [
-        -(11.0 + 13.0 + 10.0) / 3.0,
-        -(12.0 + 14.0 + 11.0) / 3.0,
+        _branin_full_fidelity_value([2.0, 2.0]),
+        _branin_full_fidelity_value([2.0, 2.0]),
+    ]
+    expected_best_so_far = expected_scores
+    expected_simple_regret = [
+        BRANIN_OPTIMAL_Y - expected_scores[0],
+        BRANIN_OPTIMAL_Y - expected_scores[1],
     ]
     expected_budgets = [1.2, 1.4]
 
@@ -119,12 +131,91 @@ def test_plot_synthetic_results_writes_figure_and_plotting_table(
     assert float(mf_gfn_row["mean_top_k_score_std"]) == pytest.approx(
         stdev(expected_scores)
     )
+    assert float(mf_gfn_row["best_so_far_y_mean"]) == pytest.approx(
+        sum(expected_best_so_far) / len(expected_best_so_far)
+    )
+    assert float(mf_gfn_row["best_so_far_y_std"]) == pytest.approx(
+        stdev(expected_best_so_far)
+    )
+    assert float(mf_gfn_row["simple_regret_mean"]) == pytest.approx(
+        sum(expected_simple_regret) / len(expected_simple_regret)
+    )
+    assert float(mf_gfn_row["simple_regret_std"]) == pytest.approx(
+        stdev(expected_simple_regret)
+    )
     assert float(mf_gfn_row["cumulative_budget_mean"]) == pytest.approx(
         sum(expected_budgets) / len(expected_budgets)
     )
     assert float(mf_gfn_row["cumulative_budget_std"]) == pytest.approx(
         stdev(expected_budgets)
     )
+
+
+def test_plot_synthetic_subset_supports_mf_gfn_stack(
+    plotting_output_root: Path,
+) -> None:
+    """Synthetic plotting should accept a Branin subset with MF-GFN-STACK."""
+
+    run_root = plotting_output_root / "synthetic_subset_runs"
+    _write_synthetic_subset_runs(run_root)
+
+    output_dir = plotting_output_root / "synthetic_subset_plots"
+    plot_reproduce_paper_main(
+        [
+            "--task-group",
+            "synthetic",
+            str(run_root / "branin" / "mf_gfn_stack"),
+            str(run_root / "branin" / "sf_gfn"),
+            "--output-dir",
+            str(output_dir),
+        ]
+    )
+
+    figure_path = output_dir / "synthetic_results.png"
+    table_path = output_dir / "synthetic_plotting_table.csv"
+    assert figure_path.is_file()
+    assert figure_path.stat().st_size > 0
+
+    rows = _read_csv_rows(table_path)
+    assert len(rows) == 2
+    assert {row["task"] for row in rows} == {"branin"}
+    assert {row["method"] for row in rows} == {"mf_gfn_stack", "sf_gfn"}
+
+    mf_gfn_stack_row = _find_plotting_row(
+        rows,
+        task="branin",
+        method="mf_gfn_stack",
+        round_index="1",
+    )
+    assert mf_gfn_stack_row["method_label"] == "MF-GFN-STACK"
+
+
+def test_plot_synthetic_cli_script_supports_subset_inputs(
+    plotting_output_root: Path,
+) -> None:
+    """Direct script invocation should render a Branin subset plot."""
+
+    run_root = plotting_output_root / "synthetic_subset_cli_runs"
+    _write_synthetic_subset_runs(run_root)
+
+    output_dir = plotting_output_root / "synthetic_subset_cli_plots"
+    subprocess.run(
+        [
+            sys.executable,
+            str(REPOSITORY_ROOT / "scripts" / "plot_reproduce_paper.py"),
+            "--task-group",
+            "synthetic",
+            str(run_root / "branin" / "mf_gfn_stack"),
+            str(run_root / "branin" / "sf_gfn"),
+            "--output-dir",
+            str(output_dir),
+        ],
+        check=True,
+        cwd=REPOSITORY_ROOT,
+    )
+
+    assert (output_dir / "synthetic_results.png").is_file()
+    assert (output_dir / "synthetic_plotting_table.csv").is_file()
 
 
 def test_plot_molecule_results_writes_figure_and_plotting_table(
@@ -136,15 +227,19 @@ def test_plot_molecule_results_writes_figure_and_plotting_table(
     _write_molecule_runs(run_root)
 
     output_dir = plotting_output_root / "molecule_plots"
-    plot_reproduce_paper_main(
-        [
-            "--task-group",
-            "molecules",
-            str(run_root),
-            "--output-dir",
-            str(output_dir),
-        ]
-    )
+    with patch(
+        "scripts.reproduce_paper_metrics._rescore_molecules_at_highest_fidelity",
+        side_effect=_mock_molecule_high_fidelity_scores,
+    ):
+        plot_reproduce_paper_main(
+            [
+                "--task-group",
+                "molecules",
+                str(run_root),
+                "--output-dir",
+                str(output_dir),
+            ]
+        )
 
     figure_path = output_dir / "molecule_results.png"
     table_path = output_dir / "molecule_plotting_table.csv"
@@ -152,7 +247,7 @@ def test_plot_molecule_results_writes_figure_and_plotting_table(
     assert figure_path.stat().st_size > 0
 
     rows = _read_csv_rows(table_path)
-    assert len(rows) == 16
+    assert len(rows) == 8
 
     mf_gfn_row = _find_plotting_row(
         rows,
@@ -160,10 +255,12 @@ def test_plot_molecule_results_writes_figure_and_plotting_table(
         method="mf_gfn",
         round_index="1",
     )
-    expected_energies = [-5.0, -5.5]
-    expected_scores = [-5.0, -5.5]
-    expected_budget_fractions = [28.0 / 1260.0, 35.0 / 1260.0]
-    expected_diversity = _expected_tanimoto_distance(["[C]", "[O]", "[N]", "[C][O]"])
+    expected_energies = [38.0 / 6.0, 41.0 / 6.0]
+    expected_scores = [-(38.0 / 6.0), -(41.0 / 6.0)]
+    expected_budgets = [28.0, 35.0]
+    expected_diversity = _expected_tanimoto_distance(
+        ["[C]", "[O]", "[N]", "[F]", "[C][O]", "[C][F]"]
+    )
 
     assert mf_gfn_row["task_label"] == "Molecules (IP)"
     assert mf_gfn_row["method_label"] == "MF-GFN"
@@ -179,9 +276,9 @@ def test_plot_molecule_results_writes_figure_and_plotting_table(
     assert float(mf_gfn_row["mean_top_k_score_std"]) == pytest.approx(
         stdev(expected_scores)
     )
-    assert float(
-        mf_gfn_row["budget_fraction_of_total_sf_gfn_budget_mean"]
-    ) == pytest.approx(sum(expected_budget_fractions) / len(expected_budget_fractions))
+    assert float(mf_gfn_row["cumulative_budget_mean"]) == pytest.approx(
+        sum(expected_budgets) / len(expected_budgets)
+    )
     assert float(mf_gfn_row["mean_pairwise_tanimoto_distance_mean"]) == pytest.approx(
         expected_diversity
     )
@@ -199,8 +296,8 @@ def _write_synthetic_runs(output_root: Path) -> None:
                 if task == "branin":
                     base_value = 10.0 + method_index + seed
                     initial_observations = [
-                        {"x": [0.0, 0.0], "y": base_value, "fidelity": 3},
-                        {"x": [1.0, 1.0], "y": base_value + 2.0, "fidelity": 3},
+                        {"x": [0.0, 0.0], "y": -base_value, "fidelity": 3},
+                        {"x": [1.0, 1.0], "y": -(base_value + 2.0), "fidelity": 3},
                     ]
                     round_history = [
                         {
@@ -209,7 +306,7 @@ def _write_synthetic_runs(output_root: Path) -> None:
                             "new_observations": [
                                 {
                                     "x": [2.0, 2.0],
-                                    "y": base_value - 1.0,
+                                    "y": -(base_value - 1.0),
                                     "fidelity": 3,
                                 }
                             ],
@@ -245,6 +342,42 @@ def _write_synthetic_runs(output_root: Path) -> None:
                     initial_observations=initial_observations,
                     round_history=round_history,
                 )
+
+
+def _write_synthetic_subset_runs(output_root: Path) -> None:
+    """Write a Branin-only synthetic fixture for SF-GFN and MF-GFN-STACK."""
+
+    for method_index, method in enumerate(("mf_gfn_stack", "sf_gfn")):
+        for seed in (1, 2):
+            base_value = 20.0 + method_index + seed
+            initial_observations = [
+                {"x": [0.0, 0.0], "y": -base_value, "fidelity": 3},
+                {"x": [1.0, 1.0], "y": -(base_value + 2.0), "fidelity": 3},
+            ]
+            round_history = [
+                {
+                    "round_index": 1,
+                    "cumulative_cost": 1.5 + 0.1 * method_index + 0.2 * seed,
+                    "new_observations": [
+                        {
+                            "x": [2.0, 2.0],
+                            "y": -(base_value - 1.0),
+                            "fidelity": 3,
+                        }
+                    ],
+                }
+            ]
+
+            _write_recorded_run(
+                output_root=output_root,
+                task_group="synthetic",
+                task="branin",
+                method=method,
+                seed=seed,
+                initial_mode="multi_fidelity",
+                initial_observations=initial_observations,
+                round_history=round_history,
+            )
 
 
 def _write_molecule_runs(output_root: Path) -> None:
@@ -336,16 +469,30 @@ def _write_recorded_run(
         },
         "config": {
             "runtime": {"seed": seed},
-            "dataset": {"initial_data": config_initial_data},
+            "dataset": {
+                "initial_data": config_initial_data,
+                **({"negate_initial_targets": True} if task == "molecules_ip" else {}),
+            },
             "budget": {"available_budget": TOTAL_BUDGET_BY_TASK[task]},
             "oracle": {
                 "type": ORACLE_TYPE_BY_TASK[task],
                 "fidelity_costs": ORACLE_COSTS_BY_TASK[task],
+                **(
+                    {
+                        "task": task.removeprefix("molecules_"),
+                    }
+                    if task_group == "molecules"
+                    else {}
+                ),
             },
             "reproduce_paper": {
                 "task_group": task_group,
                 "top_k": TOP_K_BY_TASK[task],
-                "negate_score": task == "branin",
+                **(
+                    {"negate_score": task == "branin"}
+                    if task_group == "synthetic"
+                    else {}
+                ),
                 **(
                     {"molecule_representation": "selfies"}
                     if task_group == "molecules"
@@ -395,6 +542,26 @@ def _read_csv_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(handle))
 
 
+def _mock_molecule_high_fidelity_scores(
+    *,
+    descriptor: Any,
+    recorded_observations: Sequence[Any],
+    config: dict[str, Any],
+) -> dict[str, float]:
+    """Return deterministic highest-fidelity scores from recorded fixture payloads."""
+
+    del config
+    return {
+        str(observation.molecule_input): (
+            -float(observation.target_value)
+            if descriptor.negate_score
+            else float(observation.target_value)
+        )
+        for observation in recorded_observations
+        if observation.molecule_input is not None
+    }
+
+
 def _find_plotting_row(
     rows: Sequence[dict[str, str]],
     *,
@@ -431,3 +598,13 @@ def _expected_tanimoto_distance(molecules: Sequence[str]) -> float:
         for right in fingerprints[left_index + 1 :]:
             distances.append(1.0 - float(DataStructs.TanimotoSimilarity(left, right)))
     return sum(distances) / len(distances)
+
+
+def _branin_full_fidelity_value(x: Sequence[float]) -> float:
+    """Evaluate one Branin input at the highest fidelity used by the paper."""
+
+    return float(
+        AugmentedBranin(negate=True)(
+            torch.tensor([*x, 1.0], dtype=torch.float64).unsqueeze(0)
+        ).item()
+    )

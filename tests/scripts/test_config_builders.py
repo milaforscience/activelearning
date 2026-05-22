@@ -6,6 +6,7 @@ import pytest
 from omegaconf import OmegaConf
 
 from activelearning.config import ActiveLearningConfig
+from activelearning.dataset.config import CSVInitialDataConfig
 from activelearning.utils.config_loader import load_and_parse, load_config
 
 REPRODUCE_PAPER_CONFIG_ROOT = Path("scripts/configs/reproduce_paper")
@@ -60,6 +61,14 @@ ORACLE_COSTS_BY_TASK = {
     "hartmann": {1: 0.125, 2: 0.25, 3: 1.0},
     "molecules_ea": {1: 1.0, 2: 3.5, 3: 7.0},
     "molecules_ip": {1: 1.0, 2: 3.5, 3: 7.0},
+}
+MOLECULE_INITIAL_ROW_COUNT = {
+    "molecules_ea": {"single": 135, "multi": 699},
+    "molecules_ip": {"single": 135, "multi": 705},
+}
+MOLECULE_MULTI_FIDELITY_COUNTS = {
+    "molecules_ea": {1: 624, 2: 61, 3: 14},
+    "molecules_ip": {1: 630, 2: 61, 3: 14},
 }
 SYNTHETIC_GFLOWNET_CONFIG = {
     "branin": {
@@ -222,13 +231,52 @@ def test_molecule_random_config_uses_random_token_sequence_sampler() -> None:
     assert config["sampler"]["max_length"] == 64
 
 
-def test_molecule_ip_config_negates_only_seeded_initial_targets() -> None:
-    """The IP task should negate only seeded initial targets via the dataset config."""
+def test_molecule_ip_config_negates_runtime_targets_without_extra_metadata() -> None:
+    """The IP task should negate runtime targets without redundant YAML flags."""
 
     config = _resolved_config("molecules_ip", "mf_gfn")
 
     assert config["dataset"]["negate_initial_targets"] is True
     assert config["oracle"]["type"] == "XTBIPEAOracle"
+    assert config["oracle"].get("negate_score") in {None, False}
+    assert config["reproduce_paper"].get("negate_score") in {None, False}
+
+
+@pytest.mark.parametrize("task", ("molecules_ea", "molecules_ip"))
+@pytest.mark.parametrize("mode", ("single", "multi"))
+def test_molecule_initial_data_csvs_parse_with_expected_counts(
+    task: str,
+    mode: str,
+) -> None:
+    """Molecule reproduction CSVs should load cleanly through the dataset parser."""
+
+    csv_path = (
+        REPRODUCE_PAPER_CONFIG_ROOT / "data" / task / f"initial_{mode}_fidelity.csv"
+    )
+    observations = CSVInitialDataConfig(
+        path=csv_path,
+        x_columns="selfies",
+        y_column="y",
+        fidelity_column="fidelity" if mode == "multi" else None,
+    ).load_observations()
+
+    assert len(observations) == MOLECULE_INITIAL_ROW_COUNT[task][mode]
+    assert {
+        observation.metadata["source_split"]
+        for observation in observations
+        if observation.metadata is not None
+    } == {"train"}
+    if mode == "single":
+        assert all(observation.fidelity is None for observation in observations)
+    else:
+        assert (
+            Counter(
+                int(observation.fidelity)
+                for observation in observations
+                if observation.fidelity is not None
+            )
+            == MOLECULE_MULTI_FIDELITY_COUNTS[task]
+        )
 
 
 def _resolved_config(task: str, method: str) -> dict:

@@ -6,9 +6,10 @@ runtime:
 dataset:
   type: ListDataset
   initial_data:
-    path: ${reproduce_paper.initial_data.single}
+    path: ${reproduce_paper.initial_data.multi}
     x_columns: selfies
     y_column: y
+    fidelity_column: fidelity
     metadata_columns: remaining
 
 surrogate:
@@ -29,16 +30,25 @@ surrogate:
     pretrain_epochs: 0
   num_inducing: 64
   standardize_outputs: true
+  multi_fidelity: true
+  target_fidelity: 3
 
 acquisition:
-  type: QLowerBoundMaxValueEntropy
+  type: QMultiFidelityLowerBoundMaxValueEntropy
   candidate_set_spec:
     type: TrainDataCandidateSetSpec
+  cost_aware_utility:
+    type: FidelityCostUtility
+    fidelity_costs: ${reproduce_paper.oracle_costs}
 
 sampler:
   type: GFlowNetSampler
   n_samples: ${reproduce_paper.candidate_sample_count}
   log_dir: ${run_writer.output_dir}/gflownet_logs
+  fidelity_policy:
+    type: joint_sampling
+    n_fidelities: 3
+    action: last
   conf:
     env:
       _target_: gflownet.envs.sequences.selfies.Selfies
@@ -69,9 +79,11 @@ selector:
 oracle:
   type: XTBIPEAOracle
   task: ea
-  fidelity_costs:
-    3: 7.0
-  num_conformers: 4
+  fidelity_costs: ${reproduce_paper.oracle_costs}
+  per_fidelity_num_conformers:
+    1: 1
+    2: 2
+    3: 4
 
 budget:
   available_budget: 1260.0
@@ -92,8 +104,8 @@ reproduce_paper:
   task_group: molecules
   task: molecules_ea
   task_label: Molecules (EA)
-  method: sf_gfn
-  method_label: SF-GFN
+  method: mf_gfn_stack
+  method_label: MF-GFN-STACK
   top_k: 100
   initial_data:
     multi: scripts/configs/reproduce_paper/data/molecules_ea/initial_multi_fidelity.csv

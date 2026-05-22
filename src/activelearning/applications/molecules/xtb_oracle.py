@@ -56,6 +56,10 @@ _HARTREE_TO_EV: float = 27.2114
 logger = logging.getLogger(__name__)
 
 
+class XTBUnavailableError(RuntimeError):
+    """Raised when the external ``xtb`` executable is unavailable."""
+
+
 # ---------------------------------------------------------------------------
 # Geometry helpers (SELFIES/SMILES → XYZ file)
 # ---------------------------------------------------------------------------
@@ -228,7 +232,7 @@ def _run_xtb(
                 text=True,
             )
     except FileNotFoundError as error:
-        raise RuntimeError(
+        raise XTBUnavailableError(
             "xtb executable not found. Install xtb and ensure it is available on PATH."
         ) from error
 
@@ -412,7 +416,8 @@ class XTBIPEAOracle(MultiFidelityOracle):
     during RDKit/MMFF or xtb processing return ``NaN``. The dataset layer
     filters these failed evaluations before surrogate fitting, matching the
     original MF-GFN behavior where geometry-construction failures were treated
-    as invalid molecules.
+    as invalid molecules. A missing ``xtb`` binary is treated as a hard
+    environment error and aborts the run instead of silently producing ``NaN``.
     """
 
     def __init__(
@@ -589,6 +594,14 @@ class XTBIPEAOracle(MultiFidelityOracle):
                     charge=ionic_charge,
                 )
                 return self._adiabatic_score(neutral_log, ionic_log)
+        except XTBUnavailableError:
+            logger.error(
+                "Cannot evaluate molecule %r at fidelity %d because xtb is not "
+                "available on PATH.",
+                molecule,
+                fidelity,
+            )
+            raise
         except Exception as exc:
             logger.warning(
                 "Returning NaN for molecule %r at fidelity %d: %s.",

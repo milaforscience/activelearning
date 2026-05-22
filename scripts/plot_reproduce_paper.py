@@ -19,11 +19,17 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 import numpy as np
 
-from scripts.reproduce_paper_metrics import RUN_MANIFEST_FILENAME, collect_run_metrics
+if __package__ in {None, ""}:
+    from reproduce_paper_metrics import RUN_MANIFEST_FILENAME, collect_run_metrics
+else:
+    from scripts.reproduce_paper_metrics import (
+        RUN_MANIFEST_FILENAME,
+        collect_run_metrics,
+    )
 
 PlotTaskGroup = Literal["synthetic", "molecules"]
 
-EXPECTED_TASKS_BY_GROUP: dict[PlotTaskGroup, tuple[str, ...]] = {
+TASK_ORDER_BY_GROUP: dict[PlotTaskGroup, tuple[str, ...]] = {
     "synthetic": ("branin", "hartmann"),
     "molecules": ("molecules_ip", "molecules_ea"),
 }
@@ -37,6 +43,7 @@ TASK_LABELS: dict[str, str] = {
 
 METHOD_ORDER: tuple[str, ...] = (
     "mf_gfn",
+    "mf_gfn_stack",
     "random_fid_gfn",
     "sf_gfn",
     "random",
@@ -55,6 +62,11 @@ class MethodStyle:
 
 METHOD_STYLES: dict[str, MethodStyle] = {
     "mf_gfn": MethodStyle(label="MF-GFN", color="#1f77b4", linestyle="-"),
+    "mf_gfn_stack": MethodStyle(
+        label="MF-GFN-STACK",
+        color="#9467bd",
+        linestyle="--",
+    ),
     "random_fid_gfn": MethodStyle(
         label="Random fid. GFN",
         color="#ff7f0e",
@@ -77,8 +89,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         plotting_rows = aggregate_checkpoint_rows(
             checkpoint_rows,
             task_group="synthetic",
-            x_key="cumulative_budget",
-            y_keys=("mean_top_k_score",),
+            y_keys=("mean_top_k_score", "best_so_far_y", "simple_regret"),
         )
         write_rows_to_csv(
             plotting_rows,
@@ -90,7 +101,6 @@ def main(argv: Sequence[str] | None = None) -> None:
         plotting_rows = aggregate_checkpoint_rows(
             checkpoint_rows,
             task_group="molecules",
-            x_key="budget_fraction_of_total_sf_gfn_budget",
             y_keys=(
                 "mean_top_k_score",
                 "mean_top_k_energy",
@@ -138,12 +148,12 @@ def load_checkpoint_rows(
         )
         loaded_rows.extend(row.to_dict() for row in checkpoint_rows)
 
-    _validate_expected_coverage(loaded_rows, task_group=task_group)
+    _validate_plotting_rows(loaded_rows, task_group=task_group)
     return sorted(
         loaded_rows,
         key=lambda row: (
-            EXPECTED_TASKS_BY_GROUP[task_group].index(str(row["task"])),
-            METHOD_ORDER.index(str(row["method"])),
+            *_task_sort_key(str(row["task"]), task_group=task_group),
+            *_method_sort_key(str(row["method"])),
             int(row["seed"]),
             int(row["round_index"]),
         ),
@@ -154,7 +164,6 @@ def aggregate_checkpoint_rows(
     rows: Sequence[Mapping[str, Any]],
     *,
     task_group: PlotTaskGroup,
-    x_key: str,
     y_keys: Sequence[str],
 ) -> list[dict[str, Any]]:
     """Aggregate per-seed checkpoint rows into roundwise plotting tables."""
@@ -171,8 +180,9 @@ def aggregate_checkpoint_rows(
         grouped_rows[key].append(row)
 
     aggregated_rows: list[dict[str, Any]] = []
-    for task in EXPECTED_TASKS_BY_GROUP[task_group]:
-        for method in METHOD_ORDER:
+    for task in _ordered_tasks(rows, task_group=task_group):
+        task_rows = [row for row in rows if str(row["task"]) == task]
+        for method in _ordered_methods(task_rows):
             round_indices = sorted(
                 round_index
                 for grouped_task, grouped_method, round_index in grouped_rows
@@ -180,7 +190,7 @@ def aggregate_checkpoint_rows(
             )
             for round_index in round_indices:
                 group = grouped_rows[(task, method, round_index)]
-                x_values = [float(row[x_key]) for row in group]
+                x_values = [float(row["cumulative_budget"]) for row in group]
                 aggregated_row: dict[str, Any] = {
                     "task": task,
                     "task_label": task_label(task),
@@ -189,8 +199,8 @@ def aggregate_checkpoint_rows(
                     "round_index": round_index,
                     "top_k": int(group[0]["top_k"]),
                     "seed_count": len({int(row["seed"]) for row in group}),
-                    f"{x_key}_mean": fmean(x_values),
-                    f"{x_key}_std": _standard_deviation(x_values),
+                    "cumulative_budget_mean": fmean(x_values),
+                    "cumulative_budget_std": _standard_deviation(x_values),
                 }
                 for y_key in y_keys:
                     mean_value, std_value = _aggregate_optional_values(
@@ -218,7 +228,9 @@ def write_rows_to_csv(rows: Sequence[Mapping[str, Any]], path: Path) -> None:
             writer.writerow(dict(row))
 
 
-def build_synthetic_figure(plotting_rows: Sequence[dict[str, object]]) -> Figure:
+def build_synthetic_figure(
+    plotting_rows: Sequence[dict[str, object]],
+) -> Figure:
     """Render the synthetic paper-style figure from aggregated plotting rows."""
 
     plt.rcParams.update(
@@ -227,22 +239,29 @@ def build_synthetic_figure(plotting_rows: Sequence[dict[str, object]]) -> Figure
             "axes.spines.right": False,
         }
     )
-    tasks = EXPECTED_TASKS_BY_GROUP["synthetic"]
-    figure, axes = plt.subplots(1, len(tasks), figsize=(12.0, 4.6))
+    tasks = _ordered_tasks(plotting_rows, task_group="synthetic")
+    figure, axes = plt.subplots(
+        1,
+        len(tasks),
+        figsize=(max(6.0, 6.0 * len(tasks)), 4.6),
+        squeeze=False,
+    )
+    flat_axes = axes.ravel()
     figure.subplots_adjust(top=0.78, wspace=0.28)
 
     legend_handles = []
     legend_labels = []
-    for axis, task in zip(axes, tasks, strict=True):
+    seen_methods: set[str] = set()
+    for axis, task in zip(flat_axes, tasks, strict=True):
         task_rows = [row for row in plotting_rows if str(row["task"]) == task]
         top_k = int(task_rows[0]["top_k"])
         axis.set_title(f"{task_rows[0]['task_label']} (top-{top_k})")
         axis.set_xlabel("Cumulative budget")
         axis.grid(alpha=0.25)
-        if axis is axes[0]:
+        if axis is flat_axes[0]:
             axis.set_ylabel("Mean top-k score")
 
-        for method in METHOD_ORDER:
+        for method in _ordered_methods(task_rows):
             method_rows = [row for row in task_rows if str(row["method"]) == method]
             style = method_style(method)
             x_values = np.asarray(
@@ -270,15 +289,16 @@ def build_synthetic_figure(plotting_rows: Sequence[dict[str, object]]) -> Figure
                 color=style.color,
                 alpha=0.14,
             )
-            if task == tasks[0]:
+            if method not in seen_methods:
                 legend_handles.append(line)
                 legend_labels.append(style.label)
+                seen_methods.add(method)
 
     figure.legend(
         legend_handles,
         legend_labels,
         loc="upper center",
-        ncol=4,
+        ncol=min(4, len(legend_labels)),
         frameon=False,
         bbox_to_anchor=(0.5, 0.98),
     )
@@ -294,12 +314,19 @@ def build_molecule_figure(plotting_rows: Sequence[dict[str, object]]) -> Figure:
             "axes.spines.right": False,
         }
     )
-    tasks = EXPECTED_TASKS_BY_GROUP["molecules"]
-    figure, axes = plt.subplots(2, len(tasks), figsize=(12.0, 7.2), sharex="col")
+    tasks = _ordered_tasks(plotting_rows, task_group="molecules")
+    figure, axes = plt.subplots(
+        2,
+        len(tasks),
+        figsize=(max(6.0, 6.0 * len(tasks)), 7.2),
+        sharex="col",
+        squeeze=False,
+    )
     figure.subplots_adjust(top=0.78, hspace=0.28, wspace=0.25)
 
     legend_handles = []
     legend_labels = []
+    seen_methods: set[str] = set()
     for column_index, task in enumerate(tasks):
         task_rows = [row for row in plotting_rows if str(row["task"]) == task]
         top_k = int(task_rows[0]["top_k"])
@@ -308,21 +335,18 @@ def build_molecule_figure(plotting_rows: Sequence[dict[str, object]]) -> Figure:
         energy_axis.set_title(f"{task_rows[0]['task_label']} (top-{top_k})")
         energy_axis.grid(alpha=0.25)
         diversity_axis.grid(alpha=0.25)
-        diversity_axis.set_xlabel("Fraction of total SF-GFN budget")
+        diversity_axis.set_xlabel("Cumulative budget")
         diversity_axis.set_ylim(0.0, 1.0)
 
         if column_index == 0:
             energy_axis.set_ylabel("Mean top-k energy")
             diversity_axis.set_ylabel("Mean pairwise Tanimoto distance")
 
-        for method in METHOD_ORDER:
+        for method in _ordered_methods(task_rows):
             method_rows = [row for row in task_rows if str(row["method"]) == method]
             style = method_style(method)
             x_values = np.asarray(
-                [
-                    float(row["budget_fraction_of_total_sf_gfn_budget_mean"])
-                    for row in method_rows
-                ],
+                [float(row["cumulative_budget_mean"]) for row in method_rows],
                 dtype=float,
             )
 
@@ -373,15 +397,16 @@ def build_molecule_figure(plotting_rows: Sequence[dict[str, object]]) -> Figure:
                 alpha=0.14,
             )
 
-            if column_index == 0:
+            if method not in seen_methods:
                 legend_handles.append(line)
                 legend_labels.append(style.label)
+                seen_methods.add(method)
 
     figure.legend(
         legend_handles,
         legend_labels,
         loc="upper center",
-        ncol=4,
+        ncol=min(4, len(legend_labels)),
         frameon=False,
         bbox_to_anchor=(0.5, 0.98),
     )
@@ -442,47 +467,55 @@ def _load_rows_from_metrics_catalog(
     return [dict(row) for row in rows]
 
 
-def _validate_expected_coverage(
+def _validate_plotting_rows(
     rows: Sequence[Mapping[str, Any]],
     *,
     task_group: PlotTaskGroup,
 ) -> None:
-    """Reject incomplete inputs that cannot reproduce the requested paper plots."""
+    """Reject empty plotting inputs for the requested task group."""
 
     if not rows:
         raise ValueError(f"No {task_group} checkpoint rows were found in the inputs.")
 
-    expected_tasks = EXPECTED_TASKS_BY_GROUP[task_group]
-    observed_methods_by_task: dict[str, set[str]] = {
-        task: set() for task in expected_tasks
-    }
-    for row in rows:
-        task = str(row["task"])
-        method = str(row["method"])
-        if task in observed_methods_by_task:
-            observed_methods_by_task[task].add(method)
 
-    missing_tasks = [
-        task for task in expected_tasks if not observed_methods_by_task[task]
+def _ordered_tasks(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    task_group: PlotTaskGroup,
+) -> tuple[str, ...]:
+    """Return observed tasks ordered by the paper's preferred task order."""
+
+    observed_tasks = {str(row["task"]) for row in rows}
+    ordered_tasks = [
+        task for task in TASK_ORDER_BY_GROUP[task_group] if task in observed_tasks
     ]
-    if missing_tasks:
-        missing_list = ", ".join(missing_tasks)
-        raise ValueError(
-            f"Plotting inputs are missing recorded data for: {missing_list}."
-        )
+    ordered_tasks.extend(sorted(observed_tasks.difference(ordered_tasks)))
+    return tuple(ordered_tasks)
 
-    for task in expected_tasks:
-        missing_methods = [
-            method
-            for method in METHOD_ORDER
-            if method not in observed_methods_by_task[task]
-        ]
-        if missing_methods:
-            missing_method_list = ", ".join(missing_methods)
-            raise ValueError(
-                f"Task {task!r} is missing plotting data for methods: "
-                f"{missing_method_list}."
-            )
+
+def _ordered_methods(rows: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
+    """Return observed methods ordered by the preferred plotting order."""
+
+    observed_methods = {str(row["method"]) for row in rows}
+    ordered_methods = [method for method in METHOD_ORDER if method in observed_methods]
+    ordered_methods.extend(sorted(observed_methods.difference(ordered_methods)))
+    return tuple(ordered_methods)
+
+
+def _task_sort_key(task: str, *, task_group: PlotTaskGroup) -> tuple[int, int | str]:
+    """Return a stable sort key for one task name."""
+
+    if task in TASK_ORDER_BY_GROUP[task_group]:
+        return (0, TASK_ORDER_BY_GROUP[task_group].index(task))
+    return (1, task)
+
+
+def _method_sort_key(method: str) -> tuple[int, int | str]:
+    """Return a stable sort key for one plotting method name."""
+
+    if method in METHOD_ORDER:
+        return (0, METHOD_ORDER.index(method))
+    return (1, method)
 
 
 def _aggregate_optional_values(

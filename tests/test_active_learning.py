@@ -425,7 +425,11 @@ def test_active_learning_records_round_artifacts(tmp_path):
 
     run_writer = JSONLinesRunWriter(
         output_dir=tmp_path,
-        metadata={"name": "run-writer-test"},
+        metadata={
+            "name": "run-writer-test",
+            "config": {"runtime": {"seed": 7}},
+            "run": {"method": "dummy_method"},
+        },
     )
 
     dataset_out, total_cost, num_rounds = active_learning(
@@ -467,8 +471,96 @@ def test_active_learning_records_round_artifacts(tmp_path):
     assert len(dataset_out.get_observations_iterable()) == 1
     assert manifest["name"] == "run-writer-test"
     assert summary["total_cost"] == 1.0
-    assert experiment_log_rows[0]["run_directory"] == str(tmp_path)
-    assert experiment_log_rows[0]["total_cost"] == "1.0"
+    assert experiment_log_rows == [
+        {
+            "index": "0",
+            "method": "dummy_method",
+            "seed": "7",
+            "objective value": "1.0",
+            "cost": "1.0",
+            "round": "0",
+        }
+    ]
     assert len(round_records) == 1
     assert round_records[0]["selected_candidates"][0]["x"] in {1, 2}
     assert round_records[0]["selected_costs"] == [1.0]
+
+
+def test_run_writer_records_best_objective_trajectory(tmp_path):
+    """The experiment CSV should track the best objective value after each round."""
+
+    run_writer = JSONLinesRunWriter(
+        output_dir=tmp_path,
+        metadata={
+            "config": {"runtime": {"seed": 11}},
+            "run": {"method": "sf_gfn"},
+        },
+        write_samples=False,
+        write_config=False,
+    )
+    run_writer.start_run({})
+    run_writer.record_round(
+        round_index=1,
+        sampled_candidates=[],
+        sampled_scores=[],
+        selected_candidates=[Candidate(1)],
+        selected_scores=[0.0],
+        selected_costs=[1.0],
+        observations=[Observation(x=1, y=1.5)],
+        cumulative_cost=1.0,
+        remaining_budget=2.0,
+    )
+    run_writer.record_round(
+        round_index=2,
+        sampled_candidates=[],
+        sampled_scores=[],
+        selected_candidates=[Candidate(2)],
+        selected_scores=[0.0],
+        selected_costs=[1.0],
+        observations=[Observation(x=2, y=0.25)],
+        cumulative_cost=2.0,
+        remaining_budget=1.0,
+    )
+    run_writer.record_round(
+        round_index=3,
+        sampled_candidates=[],
+        sampled_scores=[],
+        selected_candidates=[Candidate(3)],
+        selected_scores=[0.0],
+        selected_costs=[1.0],
+        observations=[Observation(x=3, y=2.0)],
+        cumulative_cost=3.0,
+        remaining_budget=0.0,
+    )
+    run_writer.end_run({"num_rounds": 3, "total_cost": 3.0, "budget_remaining": 0.0})
+
+    experiment_log_rows = list(
+        csv.DictReader((tmp_path / "experiment_log.csv").open(encoding="utf-8"))
+    )
+
+    assert experiment_log_rows == [
+        {
+            "index": "0",
+            "method": "sf_gfn",
+            "seed": "11",
+            "objective value": "1.5",
+            "cost": "1.0",
+            "round": "0",
+        },
+        {
+            "index": "1",
+            "method": "sf_gfn",
+            "seed": "11",
+            "objective value": "1.5",
+            "cost": "2.0",
+            "round": "1",
+        },
+        {
+            "index": "2",
+            "method": "sf_gfn",
+            "seed": "11",
+            "objective value": "2.0",
+            "cost": "3.0",
+            "round": "2",
+        },
+    ]

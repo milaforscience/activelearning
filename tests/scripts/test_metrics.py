@@ -5,17 +5,20 @@ from pathlib import Path
 import shutil
 from statistics import fmean
 from typing import Any, Iterator, Sequence
+from unittest.mock import patch
 
+from botorch.test_functions.multi_fidelity import AugmentedBranin, AugmentedHartmann
 import pytest
 import selfies as sf
 from rdkit import Chem, DataStructs
 from rdkit.Chem import rdFingerprintGenerator
+import torch
 
 from scripts.reproduce_paper_metrics import (
-    MoleculeRunMetrics,
     ROUND_HISTORY_FILENAME,
     RUN_MANIFEST_FILENAME,
-    SyntheticRunMetrics,
+    RunDescriptor,
+    _build_molecule_rescoring_oracle,
     collect_run_metrics,
     compute_run_metrics,
 )
@@ -45,6 +48,8 @@ ORACLE_TYPE_BY_TASK = {
     "molecules_ea": "XTBIPEAOracle",
     "molecules_ip": "XTBIPEAOracle",
 }
+BRANIN_OPTIMAL_Y = float(AugmentedBranin(negate=True).optimal_value)
+HARTMANN_OPTIMAL_Y = float(AugmentedHartmann(negate=True).optimal_value)
 
 
 @pytest.fixture
@@ -63,7 +68,7 @@ def metrics_output_root() -> Iterator[Path]:
 def test_compute_run_metrics_builds_branin_high_fidelity_trace(
     metrics_output_root: Path,
 ) -> None:
-    """Synthetic metrics should expose Branin top-k scores and HF trace rows."""
+    """Synthetic metrics should rescore AL selections at Branin full fidelity."""
 
     run_directory = _write_recorded_run(
         output_root=metrics_output_root,
@@ -75,14 +80,14 @@ def test_compute_run_metrics_builds_branin_high_fidelity_trace(
         initial_observations=[
             {
                 "x": [-5.0, 0.0],
-                "y": 10.0,
+                "y": -10.0,
                 "fidelity": 3,
                 "metadata": {"identifier": "hf-a"},
             },
             {"x": [0.0, 0.0], "y": 20.0, "fidelity": 1},
             {
                 "x": [10.0, 15.0],
-                "y": 5.0,
+                "y": -5.0,
                 "fidelity": 3,
                 "metadata": {"identifier": "hf-b"},
             },
@@ -92,7 +97,7 @@ def test_compute_run_metrics_builds_branin_high_fidelity_trace(
                 "round_index": 1,
                 "cumulative_cost": 1.1,
                 "new_observations": [
-                    {"x": [2.0, 3.0], "y": 8.0, "fidelity": 3},
+                    {"x": [2.0, 3.0], "y": -8.0, "fidelity": 3},
                     {"x": [4.0, 5.0], "y": 30.0, "fidelity": 2},
                 ],
             },
@@ -100,26 +105,43 @@ def test_compute_run_metrics_builds_branin_high_fidelity_trace(
                 "round_index": 2,
                 "cumulative_cost": 2.1,
                 "new_observations": [
-                    {"x": [6.0, 7.0], "y": 2.0, "fidelity": 3},
-                    {"x": [8.0, 9.0], "y": 12.0, "fidelity": 3},
+                    {"x": [6.0, 7.0], "y": -2.0, "fidelity": 3},
+                    {"x": [8.0, 9.0], "y": -12.0, "fidelity": 3},
                 ],
             },
         ],
     )
 
     metrics = compute_run_metrics(run_directory)
+    round_1_scores = [
+        _branin_full_fidelity_value([2.0, 3.0]),
+        _branin_full_fidelity_value([4.0, 5.0]),
+    ]
+    round_2_scores = [
+        *round_1_scores,
+        _branin_full_fidelity_value([6.0, 7.0]),
+        _branin_full_fidelity_value([8.0, 9.0]),
+    ]
 
-    assert isinstance(metrics, SyntheticRunMetrics)
-    assert [row.round_index for row in metrics.checkpoint_rows] == [0, 1, 2]
+    assert metrics.run.task_group == "synthetic"
+    assert [row.round_index for row in metrics.checkpoint_rows] == [1, 2]
     assert [row.high_fidelity_observation_count for row in metrics.checkpoint_rows] == [
         2,
-        3,
-        5,
+        4,
     ]
-    assert [row.top_k for row in metrics.checkpoint_rows] == [50, 50, 50]
-    assert [row.top_k_observation_count for row in metrics.checkpoint_rows] == [2, 3, 5]
+    assert [row.top_k for row in metrics.checkpoint_rows] == [50, 50]
+    assert [row.top_k_observation_count for row in metrics.checkpoint_rows] == [2, 4]
     assert [row.mean_top_k_score for row in metrics.checkpoint_rows] == pytest.approx(
-        [-7.5, (-5.0 - 8.0 - 10.0) / 3.0, (-2.0 - 5.0 - 8.0 - 10.0 - 12.0) / 5.0]
+        [fmean(round_1_scores), fmean(round_2_scores)]
+    )
+    assert [row.best_so_far_y for row in metrics.checkpoint_rows] == pytest.approx(
+        [max(round_1_scores), max(round_2_scores)]
+    )
+    assert [row.simple_regret for row in metrics.checkpoint_rows] == pytest.approx(
+        [
+            BRANIN_OPTIMAL_Y - max(round_1_scores),
+            BRANIN_OPTIMAL_Y - max(round_2_scores),
+        ]
     )
     assert metrics.checkpoint_rows[
         -1
@@ -133,12 +155,15 @@ def test_compute_run_metrics_builds_branin_high_fidelity_trace(
         2.1,
     ]
     assert [row.target_value for row in metrics.high_fidelity_trace_rows] == [
-        10.0,
-        5.0,
-        8.0,
-        2.0,
-        12.0,
+        -10.0,
+        -5.0,
+        -8.0,
+        -2.0,
+        -12.0,
     ]
+    assert [
+        row.paper_score for row in metrics.high_fidelity_trace_rows
+    ] == pytest.approx([-10.0, -5.0, -8.0, -2.0, -12.0])
     assert [row.identifier for row in metrics.high_fidelity_trace_rows[:2]] == [
         "hf-a",
         "hf-b",
@@ -173,18 +198,25 @@ def test_compute_run_metrics_treats_single_fidelity_hartmann_rows_as_high_fideli
     )
 
     metrics = compute_run_metrics(run_directory)
+    round_1_score = _hartmann_full_fidelity_value([0.2] * 6)
 
-    assert isinstance(metrics, SyntheticRunMetrics)
+    assert metrics.run.task_group == "synthetic"
     assert [row.fidelity for row in metrics.high_fidelity_trace_rows] == [3, 3, 3]
     assert [row.mean_top_k_score for row in metrics.checkpoint_rows] == pytest.approx(
-        [1.5, 2.0]
+        [round_1_score]
+    )
+    assert [row.best_so_far_y for row in metrics.checkpoint_rows] == pytest.approx(
+        [round_1_score]
+    )
+    assert [row.simple_regret for row in metrics.checkpoint_rows] == pytest.approx(
+        [HARTMANN_OPTIMAL_Y - round_1_score]
     )
 
 
 def test_compute_run_metrics_builds_molecule_ip_top100_and_tanimoto_metrics(
     metrics_output_root: Path,
 ) -> None:
-    """Molecule metrics should expose score, energy, budget fraction, and diversity."""
+    """Molecule metrics should rescore all observed molecules at highest fidelity."""
 
     run_directory = _write_recorded_run(
         output_root=metrics_output_root,
@@ -194,10 +226,25 @@ def test_compute_run_metrics_builds_molecule_ip_top100_and_tanimoto_metrics(
         seed=9,
         initial_mode="multi_fidelity",
         initial_observations=[
-            {"x": "[C]", "y": -5.0, "fidelity": 3, "metadata": {"identifier": "mol-c"}},
-            {"x": "[O]", "y": -4.0, "fidelity": 3, "metadata": {"identifier": "mol-o"}},
-            {"x": "[N]", "y": -6.0, "fidelity": 3, "metadata": {"identifier": "mol-n"}},
-            {"x": "[F]", "y": -7.0, "fidelity": 1},
+            {
+                "x": "[C]",
+                "y": -5.0,
+                "fidelity": 3,
+                "metadata": {"identifier": "mol-c"},
+            },
+            {
+                "x": "[O]",
+                "y": -4.0,
+                "fidelity": 3,
+                "metadata": {"identifier": "mol-o"},
+            },
+            {
+                "x": "[N]",
+                "y": -6.0,
+                "fidelity": 3,
+                "metadata": {"identifier": "mol-n"},
+            },
+            {"x": "[F]", "y": -1.5, "fidelity": 1},
         ],
         round_history=[
             {
@@ -216,38 +263,85 @@ def test_compute_run_metrics_builds_molecule_ip_top100_and_tanimoto_metrics(
                         "fidelity": 3,
                         "metadata": {"identifier": "mol-cn"},
                     },
-                    {"x": "[C][F]", "y": -8.0, "fidelity": 2},
+                    {"x": "[C][F]", "y": -0.5, "fidelity": 2},
                 ],
             }
         ],
     )
 
-    metrics = compute_run_metrics(run_directory)
+    rescored_values = {
+        "[C]": 5.0,
+        "[O]": 4.0,
+        "[N]": 6.0,
+        "[F]": 1.5,
+        "[C][O]": 3.0,
+        "[C][N]": 2.0,
+        "[C][F]": 0.5,
+    }
+    with patch(
+        "scripts.reproduce_paper_metrics._rescore_molecules_at_highest_fidelity",
+        return_value=rescored_values,
+    ):
+        metrics = compute_run_metrics(run_directory)
 
-    assert isinstance(metrics, MoleculeRunMetrics)
-    assert [row.round_index for row in metrics.checkpoint_rows] == [0, 1]
+    assert metrics.run.task_group == "molecules"
+    assert [row.round_index for row in metrics.checkpoint_rows] == [1]
     assert [row.high_fidelity_observation_count for row in metrics.checkpoint_rows] == [
-        3,
-        5,
+        7,
     ]
     assert [row.mean_top_k_score for row in metrics.checkpoint_rows] == pytest.approx(
-        [-5.0, -4.0]
+        [-(sum(rescored_values.values()) / len(rescored_values))]
     )
     assert [row.mean_top_k_energy for row in metrics.checkpoint_rows] == pytest.approx(
-        [-5.0, -4.0]
+        [sum(rescored_values.values()) / len(rescored_values)]
     )
-    assert metrics.checkpoint_rows[
-        1
-    ].budget_fraction_of_total_sf_gfn_budget == pytest.approx(21.0 / 1260.0)
+    assert metrics.checkpoint_rows[0].cumulative_budget == pytest.approx(21.0)
     assert metrics.checkpoint_rows[0].mean_pairwise_tanimoto_distance == pytest.approx(
-        _expected_tanimoto_distance(["[C]", "[O]", "[N]"])
+        _expected_tanimoto_distance(
+            ["[C]", "[O]", "[N]", "[F]", "[C][O]", "[C][N]", "[C][F]"]
+        )
     )
-    assert metrics.checkpoint_rows[1].mean_pairwise_tanimoto_distance == pytest.approx(
-        _expected_tanimoto_distance(["[C]", "[O]", "[N]", "[C][O]", "[C][N]"])
-    )
+    assert [row.fidelity for row in metrics.high_fidelity_trace_rows] == [3] * 7
+    assert [
+        row.target_value for row in metrics.high_fidelity_trace_rows
+    ] == pytest.approx([5.0, 4.0, 6.0, 1.5, 3.0, 2.0, 0.5])
     assert [
         row.paper_score for row in metrics.high_fidelity_trace_rows
-    ] == pytest.approx([-5.0, -4.0, -6.0, -3.0, -2.0])
+    ] == pytest.approx([-5.0, -4.0, -6.0, -1.5, -3.0, -2.0, -0.5])
+
+
+def test_build_molecule_rescoring_oracle_ignores_runtime_ip_negation() -> None:
+    """Offline molecule rescoring should recover raw IP, not the runtime objective."""
+
+    descriptor = RunDescriptor(
+        task_group="molecules",
+        task="molecules_ip",
+        method="mf_gfn",
+        seed=7,
+        run_directory=Path("outputs/reproduce_paper/molecules_ip/mf_gfn/seed_0007"),
+        manifest_path=Path("run_manifest.json"),
+        round_history_path=Path("round_history.jsonl"),
+        highest_fidelity=3,
+        initial_data_mode="multi_fidelity",
+        total_active_learning_budget=1260.0,
+        top_k=100,
+        negate_score=True,
+        molecule_representation="selfies",
+    )
+
+    oracle = _build_molecule_rescoring_oracle(
+        descriptor=descriptor,
+        config={
+            "oracle": {
+                "type": "XTBIPEAOracle",
+                "task": "ip",
+                "fidelity_costs": {1: 1.0, 2: 3.5, 3: 7.0},
+                "negate_score": True,
+            }
+        },
+    )
+
+    assert oracle._negate_score is False
 
 
 def test_collect_run_metrics_flattens_cross_run_rows(metrics_output_root: Path) -> None:
@@ -261,7 +355,13 @@ def test_collect_run_metrics_flattens_cross_run_rows(metrics_output_root: Path) 
         seed=1,
         initial_mode="multi_fidelity",
         initial_observations=[{"x": [0.0, 0.0], "y": 1.0, "fidelity": 3}],
-        round_history=[],
+        round_history=[
+            {
+                "round_index": 1,
+                "cumulative_cost": 0.1,
+                "new_observations": [{"x": [2.0, 3.0], "y": 0.5, "fidelity": 1}],
+            }
+        ],
     )
     _write_recorded_run(
         output_root=metrics_output_root,
@@ -274,15 +374,21 @@ def test_collect_run_metrics_flattens_cross_run_rows(metrics_output_root: Path) 
         round_history=[],
     )
 
-    catalog = collect_run_metrics(metrics_output_root)
+    with patch(
+        "scripts.reproduce_paper_metrics._rescore_molecules_at_highest_fidelity",
+        return_value={"[C]": 1.0},
+    ):
+        catalog = collect_run_metrics(metrics_output_root)
     payload = catalog.to_dict()
 
     assert len(catalog.synthetic_runs) == 1
     assert len(catalog.molecule_runs) == 1
     assert len(catalog.synthetic_checkpoint_rows()) == 1
-    assert len(catalog.molecule_checkpoint_rows()) == 1
+    assert len(catalog.molecule_checkpoint_rows()) == 0
     assert len(payload["synthetic_high_fidelity_rows"]) == 1
     assert len(payload["molecule_high_fidelity_rows"]) == 1
+    assert "best_so_far_y" in payload["synthetic_checkpoint_rows"][0]
+    assert "simple_regret" in payload["synthetic_checkpoint_rows"][0]
     assert payload["schema_version"] == 1
 
 
@@ -317,7 +423,7 @@ def test_compute_run_metrics_can_infer_identity_from_layered_config_paths(
     assert metrics.run.seed == 7
     assert metrics.run.initial_data_mode == "multi_fidelity"
     assert metrics.run.top_k == 50
-    assert metrics.run.negate_score is True
+    assert metrics.run.negate_score is False
 
 
 def _write_recorded_run(
@@ -344,16 +450,30 @@ def _write_recorded_run(
         "schema_version": 1,
         "config": {
             "runtime": {"seed": seed},
-            "dataset": {"initial_data": config_initial_data},
+            "dataset": {
+                "initial_data": config_initial_data,
+                **({"negate_initial_targets": True} if task == "molecules_ip" else {}),
+            },
             "budget": {"available_budget": TOTAL_BUDGET_BY_TASK[task]},
             "oracle": {
                 "type": ORACLE_TYPE_BY_TASK[task],
                 "fidelity_costs": ORACLE_COSTS_BY_TASK[task],
+                **(
+                    {
+                        "task": task.removeprefix("molecules_"),
+                    }
+                    if task_group == "molecules"
+                    else {}
+                ),
             },
             "reproduce_paper": {
                 "task_group": task_group,
                 "top_k": TOP_K_BY_TASK[task],
-                "negate_score": task == "branin",
+                **(
+                    {"negate_score": task == "branin"}
+                    if task_group == "synthetic"
+                    else {}
+                ),
                 **(
                     {"molecule_representation": "selfies"}
                     if task_group == "molecules"
@@ -426,3 +546,23 @@ def _expected_tanimoto_distance(molecules: Sequence[str]) -> float:
         for right in fingerprints[left_index + 1 :]:
             distances.append(1.0 - float(DataStructs.TanimotoSimilarity(left, right)))
     return fmean(distances)
+
+
+def _branin_full_fidelity_value(x: Sequence[float]) -> float:
+    """Evaluate one Branin input at the highest fidelity used by the paper."""
+
+    return float(
+        AugmentedBranin(negate=True)(
+            torch.tensor([*x, 1.0], dtype=torch.float64).unsqueeze(0)
+        ).item()
+    )
+
+
+def _hartmann_full_fidelity_value(x: Sequence[float]) -> float:
+    """Evaluate one Hartmann input at the highest fidelity used by the paper."""
+
+    return float(
+        AugmentedHartmann(negate=True)(
+            torch.tensor([*x, 1.0], dtype=torch.float64).unsqueeze(0)
+        ).item()
+    )

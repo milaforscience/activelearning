@@ -15,6 +15,7 @@ from activelearning.applications.molecules.plotting import (
 from activelearning.applications.molecules.xtb_oracle import (
     ConformerConfig,
     XTBIPEAOracle,
+    XTBUnavailableError,
     hartree_to_ev,
     _decode_to_smiles,
     _parse_vertical_ipea,
@@ -818,6 +819,23 @@ class TestXTBScoreFidelityRouting:
             result = oracle._xtb_score(BENZENE_SMILES, fidelity=1)
 
         assert math.isnan(result)
+
+    def test_missing_xtb_binary_raises_instead_of_returning_nan(self, tmp_path):
+        oracle = XTBIPEAOracle(task="ea", fidelity_costs={1: 1.0}, mol_repr="smiles")
+        fake_xyz = tmp_path / "neutral.xyz"
+
+        with (
+            patch(
+                "activelearning.applications.molecules.xtb_oracle._write_best_rdkit_xyz",
+                return_value=fake_xyz,
+            ),
+            patch(
+                "activelearning.applications.molecules.xtb_oracle._run_xtb",
+                side_effect=XTBUnavailableError("xtb executable not found"),
+            ),
+            pytest.raises(XTBUnavailableError, match="xtb executable not found"),
+        ):
+            oracle._xtb_score(BENZENE_SMILES, fidelity=1)
 
 
 # ---------------------------------------------------------------------------
