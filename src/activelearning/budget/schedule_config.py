@@ -1,3 +1,5 @@
+"""Pydantic model for the configuration of the budget schedules."""
+
 import torch
 from typing import Annotated, Callable, Literal, Union
 

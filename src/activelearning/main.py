@@ -98,6 +98,7 @@ def main() -> None:
     from activelearning.active_learning import active_learning
     from activelearning.runtime import bind_runtime_context
 
+    # Build instances of active learning components from pydantic config models
     dataset = cfg.dataset.build()
     surrogate = cfg.surrogate.build()
     acquisition = cfg.acquisition.build()
@@ -116,6 +117,7 @@ def main() -> None:
     if logger is not None:
         logger.log_config(OmegaConf.to_container(raw_cfg, resolve=True))
 
+    # Run active learning campaign
     dataset, total_cost, num_rounds = active_learning(
         dataset=dataset,
         surrogate=surrogate,

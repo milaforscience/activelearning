@@ -1,3 +1,5 @@
+"""Pydantic model for the configuration of the budget."""
+
 from pydantic import BaseModel, Field
 
 from activelearning.budget.budget import Budget

@@ -1,3 +1,10 @@
+"""Pydantic models of acquisition functions.
+
+Changes in the interface of existing acquisition functions should be reflected in this
+configuration. New acquisition functions should define their corresponding pydantic
+model here and be added to ``AcquisitionConfig``.
+"""
+
 from typing import Annotated, Literal, Optional, Union
 
 from pydantic import BaseModel, Field

@@ -1,3 +1,16 @@
+"""Pydantic model for the configuration of an active learning run.
+
+The definition of configurations is based on pydantic. The class ActiveLearningConfig
+is a pydantic models which defines the inputs of an active learning run (dataset,
+surrofate, acquisition, etc.), which are defined within the corresponding modules.
+
+Changes in the active learning interface should be reflected in this configuration to
+ensure consistency.
+
+See the `Pydantic Docs <https://pydantic.dev/docs/validation/latest/get-started/>`_ for
+further reference.
+"""
+
 from pydantic import BaseModel, Field
 
 from activelearning.acquisition.config import AcquisitionConfig
