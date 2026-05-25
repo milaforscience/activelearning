@@ -90,7 +90,7 @@ For full details, see the [Installation guide](https://milaforscience.github.io/
 
 ## Quickstart
 
-Run the minimal single-fidelity Branin baseline:
+Run the minimal single-fidelity discretized Branin baseline:
 
 ```sh
 uv run activelearning config/branin_single_fidelity.yaml \
