@@ -2,7 +2,7 @@
 
 A Python framework for **multi-fidelity active learning** over combinatorially large and structured design spaces, with expensive black-box functions.
 
-To evaluate candidates on a limited budget, this framework queries **oracles** (evaluation environments like simulations, model training, or lab experiments) across different **fidelity levels**. By blending fast, approximate estimates (low fidelity) with slow, highly precise measurements (high fidelity), it intelligently decides not just which candidate to try next, but at what fidelity.
+To evaluate candidates on a limited budget, this framework queries **oracles** (evaluation environments like simulations, pre-trained ML models, or lab experiments) across different **fidelity levels**. By blending fast, approximate estimates (low fidelity) with slow, highly precise measurements (high fidelity), it intelligently decides not just which candidate to try next, but at what fidelity.
 
 Designed with a modular architecture, it provides a flexible foundation that allows users to easily swap components and extend the framework for novel research or custom workflows.
 
