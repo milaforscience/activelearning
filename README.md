@@ -74,7 +74,7 @@ uv run activelearning config/branin_toy_example.yaml
 
 | Component | Details |
 |-----------|---------|
-| **Oracle** | Negated Augmented Branin with 3 fidelity levels (costs: 0.01 / 0.1 / 1.0) |
+| **Oracles** | Negated Augmented Branin with 3 fidelity levels (costs: 0.01 / 0.1 / 1.0) |
 | **Surrogate** | BoTorch GP (`SingleTaskMultiFidelityGP`) |
 | **Acquisition** | qMFLBMES (lower-bound multi-fidelity max-value entropy search) |
 | **Sampler** | Latin Hypercube Sampling over the 2D domain (10 000 candidates) |
