@@ -2,7 +2,7 @@
 
 Usage
 -----
-    python -m activelearning <config.yaml> [<config2.yaml> ...] [key=value ...]
+    uv run activelearning <config.yaml> [<config2.yaml> ...] [key=value ...]
 
 Positional arguments
 --------------------
