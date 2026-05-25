@@ -70,7 +70,7 @@ uv run activelearning config/branin_toy_example.yaml
 
 ### What the Example Does
 
-`config/branin_toy_example.yaml` runs a multi-fidelity active learning loop on the 2D Augmented Branin benchmark. Key components:
+`config/branin_toy_example.yaml` runs a multi-fidelity active learning loop on the discretized (100x100) Augmented Branin benchmark. Key components:
 
 | Component | Details |
 |-----------|---------|
