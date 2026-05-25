@@ -30,7 +30,7 @@ Dataset → Surrogate → Acquisition → Sampler → Selector → Oracle → (b
 | **Dataset** | Records observed queries and their outcomes |
 | **Surrogate** | Probabilistic model fitted on the dataset (e.g. BoTorch GP) |
 | **Acquisition** | Scores candidate-fidelity pairs by expected utility |
-| **Sampler** | Generates candidate proposals (e.g. Latin Hypercube, GFlowNet) |
+| **Sampler** | Generates candidate proposals (e.g. GFlowNet, Latin Hypercube) |
 | **Selector** | Filters proposals to fit within the round budget |
 | **Oracle** | Evaluates the true objective at the requested fidelity |
 | **Budget** | Enforces per-round and total cost constraints |
