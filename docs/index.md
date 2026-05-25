@@ -1,6 +1,6 @@
 # **Multi-Fidelity Active Learning**
 
-A Python framework for **multi-fidelity active learning** over expensive black-box functions.
+A Python framework for **multi-fidelity active learning** over combinatorially large and structured design spaces, with expensive black-box functions.
 
 To evaluate candidates on a limited budget, this framework queries **oracles** (evaluation environments like simulations, model training, or lab experiments) across different **fidelity levels**. By blending fast, approximate estimates (low fidelity) with slow, highly precise measurements (high fidelity), it intelligently decides not just which candidate to try next, but at what fidelity.
 
