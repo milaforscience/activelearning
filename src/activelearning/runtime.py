@@ -33,7 +33,7 @@ class RuntimeContextConfig(BaseModel):
     device: str = "cpu"
     precision: Literal[32, 64] = 64
 
-    def build_context(self, logger: Logger | None = None) -> RuntimeContext:
+    def build(self, logger: Logger | None = None) -> RuntimeContext:
         """Materialize the configured runtime context."""
         return RuntimeContext(
             logger=logger,

@@ -153,7 +153,7 @@ def test_active_learning_loop_runs_from_merged_configs(base_config, acquisition_
     selector = cfg.selector.build()
     oracle = cfg.oracle.build()
     budget = cfg.budget.build()
-    runtime_context = cfg.runtime.build_context(logger=None)
+    runtime_context = cfg.runtime.build(logger=None)
 
     bind_runtime_context(
         [dataset, surrogate, acquisition, sampler, selector, oracle],
@@ -193,7 +193,7 @@ def test_active_learning_loop_budget_override_reduces_rounds(
         selector = cfg.selector.build()
         oracle = cfg.oracle.build()
         budget = cfg.budget.build()
-        runtime_context = cfg.runtime.build_context(logger=None)
+        runtime_context = cfg.runtime.build(logger=None)
         bind_runtime_context(
             [dataset, surrogate, acquisition, sampler, selector, oracle],
             runtime_context,

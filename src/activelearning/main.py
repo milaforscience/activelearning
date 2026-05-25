@@ -107,7 +107,7 @@ def main() -> None:
     oracle = cfg.oracle.build()
     budget = cfg.budget.build()
     logger = cfg.logger.build() if cfg.logger is not None else None
-    runtime_context = cfg.runtime.build_context(logger=logger)
+    runtime_context = cfg.runtime.build(logger=logger)
 
     bind_runtime_context(
         [dataset, surrogate, acquisition, sampler, selector, oracle],
