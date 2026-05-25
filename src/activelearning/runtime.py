@@ -27,7 +27,7 @@ def resolve_torch_dtype(precision: int) -> torch.dtype:
     raise ValueError(f"Unsupported precision {precision}. Expected 32 or 64.")
 
 
-class RuntimeConfig(BaseModel):
+class RuntimeContextConfig(BaseModel):
     """Configuration for global torch runtime defaults."""
 
     device: str = "cpu"

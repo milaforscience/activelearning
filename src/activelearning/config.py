@@ -21,11 +21,11 @@ from activelearning.oracle.config import OracleConfig
 from activelearning.sampler.config import SamplerConfig
 from activelearning.selector.config import SelectorConfig
 from activelearning.surrogate.config import SurrogateConfig
-from activelearning.runtime import RuntimeConfig
+from activelearning.runtime import RuntimeContextConfig
 
 
 class ActiveLearningConfig(BaseModel):
-    runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
+    runtime: RuntimeContextConfig = Field(default_factory=RuntimeContextConfig)
     dataset: DatasetConfig
     surrogate: SurrogateConfig
     acquisition: AcquisitionConfig
