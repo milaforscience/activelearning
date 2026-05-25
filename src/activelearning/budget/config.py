@@ -1,15 +1,33 @@
 """Pydantic model for the configuration of the budget."""
 
 from pydantic import BaseModel, Field
-
+from typing import Annotated, Literal, Union
 from activelearning.budget.budget import Budget
-from activelearning.budget.schedule_config import (
-    ConstantScheduleConfig,
-    ScheduleConfig,
-    SigmoidIterationScheduleConfig,
+from activelearning.budget.budget_schedule import (
     constant_schedule,
     sigmoid_iteration_schedule,
 )
+
+
+class ConstantScheduleConfig(BaseModel):
+    type: Literal["constant"] = "constant"
+    value: float = Field(ge=0.0)
+
+
+class SigmoidIterationScheduleConfig(BaseModel):
+    type: Literal["sigmoid_iterations"] = "sigmoid_iterations"
+    num_iterations: int = Field(gt=0)
+    midpoint_fraction: float = Field(default=0.5, gt=0.0, lt=1.0)
+    steepness: float = Field(default=10.0, gt=0.0)
+
+
+ScheduleConfig = Annotated[
+    Union[
+        ConstantScheduleConfig,
+        SigmoidIterationScheduleConfig,
+    ],
+    Field(discriminator="type"),
+]
 
 
 class BudgetConfig(BaseModel):

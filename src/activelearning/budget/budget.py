@@ -1,3 +1,5 @@
+"""Budget tracking utilities for active learning runs."""
+
 import logging
 from typing import Callable
 from activelearning.runtime import ALRuntimeMixin
