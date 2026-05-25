@@ -1,4 +1,4 @@
-# Toy experiment: 2D Augmented Branin benchmark with the BoTorch GP surrogate
+# Toy experiment: Discrete 100x100 Augmented Branin benchmark with the BoTorch GP surrogate
 #
 # Run with:
 #   uv run activelearning config/branin_toy_example.yaml
