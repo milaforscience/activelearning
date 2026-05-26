@@ -6,7 +6,7 @@ extreme-but-valid steepness values.
 
 import pytest
 
-from activelearning.budget.schedule_config import sigmoid_iteration_schedule
+from activelearning.budget.budget_schedule import sigmoid_iteration_schedule
 
 
 class TestSigmoidIterationSchedule:

@@ -1,3 +1,10 @@
+"""Pydantic models of oracles.
+
+Changes in the interface of existing oracles should be reflected in this configuration.
+New oracles should define their corresponding pydantic model here and be added to
+``OracleConfig``.
+"""
+
 from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field

@@ -1,5 +1,5 @@
 import torch
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from dataclasses import dataclass
 from typing import Iterable, Literal
 
@@ -13,7 +13,6 @@ class RuntimeContext:
     logger: Logger | None = None
     device: torch.device = torch.device("cpu")
     dtype: torch.dtype = torch.float64
-    seed: int = 42
 
 
 DEFAULT_RUNTIME_CONTEXT = RuntimeContext()
@@ -28,20 +27,18 @@ def resolve_torch_dtype(precision: int) -> torch.dtype:
     raise ValueError(f"Unsupported precision {precision}. Expected 32 or 64.")
 
 
-class RuntimeConfig(BaseModel):
+class RuntimeContextConfig(BaseModel):
     """Configuration for global torch runtime defaults."""
 
     device: str = "cpu"
     precision: Literal[32, 64] = 64
-    seed: int = Field(default=42, ge=0)
 
-    def build_context(self, logger: Logger | None = None) -> RuntimeContext:
+    def build(self, logger: Logger | None = None) -> RuntimeContext:
         """Materialize the configured runtime context."""
         return RuntimeContext(
             logger=logger,
             device=torch.device(self.device),
             dtype=resolve_torch_dtype(self.precision),
-            seed=self.seed,
         )
 
 
