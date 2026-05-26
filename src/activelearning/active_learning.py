@@ -99,13 +99,18 @@ def active_learning(
         if surrogate.is_fitted():
             acquisition.update(surrogate, observations)
 
-        # Sampler can use acquisition for scoring candidates and observations to avoid re-sampling
-        samples = sampler.sample(acquisition=acquisition, observations=observations)
+        # Let the sampler build its candidate pool from the current acquisition,
+        # observations, and oracle cost model.
+        samples = sampler.sample(
+            acquisition=acquisition,
+            observations=observations,
+            cost_fn=oracle.get_costs,
+        )
 
-        # Get round budget and pass to selector along with cost function
+        # Get the current round budget and pass the same oracle cost model to
+        # the selector for ranking/filtering.
         round_budget = budget.get_round_budget(num_rounds)
 
-        # Pass acquisition, cost_fn, and round budget to selector for cost-aware selection
         selected_samples = selector(
             samples,
             acquisition=acquisition,

@@ -1,6 +1,6 @@
 import torch
 
-from typing import Iterable, Optional, Sequence
+from typing import Callable, Iterable, Optional, Sequence
 
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.sampler import Sampler
@@ -8,7 +8,7 @@ from activelearning.utils.types import Candidate, Observation
 
 
 class HypercubeUniformSampler(Sampler):
-    """Generates candidates by sampling uniformly from a bounded hypercube.
+    """Generate candidates uniformly from a bounded hypercube.
 
     Unlike pool-based samplers, this sampler is generative: it draws fresh
     random candidates on every ``sample()`` call. This makes it suitable for
@@ -66,6 +66,7 @@ class HypercubeUniformSampler(Sampler):
         self,
         acquisition: Optional[Acquisition] = None,
         observations: Optional[Iterable[Observation]] = None,
+        cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
     ) -> list[Candidate]:
         """Generate candidates by sampling uniformly from the hypercube.
 
@@ -78,6 +79,8 @@ class HypercubeUniformSampler(Sampler):
             Unused. Present for interface compatibility.
         observations : Optional[Iterable[Observation]]
             Unused. Present for interface compatibility.
+        cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
+            Unused. Present for interface compatibility.
 
         Returns
         -------
@@ -85,9 +88,9 @@ class HypercubeUniformSampler(Sampler):
             ``num_samples`` candidates with ``x`` as a plain Python list of
             floats and ``fidelity`` drawn uniformly from ``fidelities``.
         """
-        # Shape: (num_samples, n_dims)
+        # Draw points in [0, 1]^d and rescale them into the configured bounds.
         uniform = torch.rand(self.num_samples, len(self.bounds), dtype=torch.float64)
-        points = self._lower + uniform * self._range  # broadcast scaling
+        points = self._lower + uniform * self._range
 
         if self.fidelities is not None:
             fidelity_indices = torch.randint(

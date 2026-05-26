@@ -100,14 +100,8 @@ def test_molecule_dkl_exact_multi_fidelity_gflownet_config_parses() -> None:
     assert config.selector.type == "TopKAcquisitionSelector"
     assert config.oracle.type == "XTBIPEAOracle"
     assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
-    assert config.acquisition.cost_aware_utility is not None
     assert config.oracle.num_conformers == 2
     assert config.oracle.per_fidelity_num_conformers == {1: 1, 2: 2, 3: 4}
-    assert config.acquisition.cost_aware_utility.fidelity_costs == {
-        1: 1.0,
-        2: 3.5,
-        3: 7.0,
-    }
 
 
 def test_molecule_dkl_variational_multi_fidelity_gflownet_config_parses() -> None:
@@ -127,14 +121,8 @@ def test_molecule_dkl_variational_multi_fidelity_gflownet_config_parses() -> Non
     assert config.selector.type == "TopKAcquisitionSelector"
     assert config.oracle.type == "XTBIPEAOracle"
     assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
-    assert config.acquisition.cost_aware_utility is not None
     assert config.oracle.num_conformers == 2
     assert config.oracle.per_fidelity_num_conformers == {1: 1, 2: 2, 3: 4}
-    assert config.acquisition.cost_aware_utility.fidelity_costs == {
-        1: 1.0,
-        2: 3.5,
-        3: 7.0,
-    }
 
 
 def test_molecule_dkl_exact_pool_config_parses() -> None:
@@ -159,7 +147,6 @@ def test_molecule_dkl_exact_multi_fidelity_pool_config_parses() -> None:
     assert config.sampler.type == "PoolFileSampler"
     assert config.surrogate.type == "ExactSelfiesDKLSurrogate"
     assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
-    assert config.acquisition.cost_aware_utility is None
     assert config.selector.type == "CostAwareSelector"
     assert config.oracle.type == "XTBIPEAOracle"
     assert config.sampler.fidelities == [1, 2, 3]

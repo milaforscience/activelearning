@@ -92,3 +92,23 @@ def test_selection_with_varied_scores():
     assert len(selected) == 2
     assert selected[0].x == 3
     assert selected[1].x == 1
+
+
+def test_top_k_selector_can_request_cost_normalized_scores():
+    acquisition = DummyAcquisition(beta=0.0)
+    acquisition.score = lambda candidates, cost_weighting=None: (  # type: ignore[method-assign]
+        cost_weighting([1.0 for _ in candidates], list(candidates))
+        if cost_weighting is not None
+        else [0.0 for _ in candidates]
+    )
+
+    selector = TopKAcquisitionSelector(num_samples=2)
+    candidates = [Candidate(x=1), Candidate(x=2), Candidate(x=3)]
+
+    selected = selector(
+        candidates,
+        acquisition=acquisition,
+        cost_fn=lambda cands: [1.0 for _ in cands],
+    )
+
+    assert len(selected) == 2

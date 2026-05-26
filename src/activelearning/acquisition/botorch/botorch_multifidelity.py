@@ -2,8 +2,9 @@
 
 All multi-fidelity acquisitions in BoTorch are q-batch / Monte Carlo.
 Each class subclasses :class:`QBatchBoTorchAcquisition` and implements
-:meth:`_build_botorch_acquisition`, wiring the resolved cost-aware utility
-and target-fidelity projection from the base class into the BoTorch object.
+:meth:`_build_botorch_acquisition`, wiring the resolved target-fidelity
+projection and other shared helpers from the base class into the BoTorch
+object.
 """
 
 from typing import Any, Callable, ClassVar, Iterable, Optional
@@ -125,8 +126,6 @@ class _QMultiFidelityEntropyBase(QBatchBoTorchAcquisition):
             "maximize": self.maximize,
         }
 
-        if self._cost_aware_utility_override is not None:
-            build_kwargs["cost_aware_utility"] = self._cost_aware_utility_override
         if self._resolved_project_to_target_fidelity_fn is not None:
             build_kwargs["project"] = self._resolved_project_to_target_fidelity_fn
         if self._expand is not None:
@@ -206,10 +205,9 @@ class QMultiFidelityLowerBoundMaxValueEntropy(_QMultiFidelityEntropyBase):
 class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
     """Multi-fidelity q-Knowledge Gradient (qMFKG).
 
-    Extends qKG with cost-aware utility, target-fidelity projection, and
-    trace-observation expansion. When cost-aware / projection helpers are
-    configured on the base class (via constructor kwargs or surrogate
-    metadata), they are wired in automatically.
+    Extends qKG with target-fidelity projection and trace-observation
+    expansion. Shared multi-fidelity helpers configured on the base class
+    are wired in automatically.
 
     Parameters
     ----------
@@ -275,8 +273,6 @@ class QMultiFidelityKnowledgeGradient(QBatchBoTorchAcquisition):
                 weights=torch.tensor([-1.0], dtype=train_X.dtype, device=train_X.device)
             )
 
-        if self._cost_aware_utility_override is not None:
-            build_kwargs["cost_aware_utility"] = self._cost_aware_utility_override
         if self._resolved_project_to_target_fidelity_fn is not None:
             build_kwargs["project"] = self._resolved_project_to_target_fidelity_fn
         if self._expand is not None:

@@ -46,12 +46,6 @@ acquisition:
   num_mv_samples: 10
   num_y_samples: 64
   maximize: true
-  cost_aware_utility:
-    type: FidelityCostUtility
-    fidelity_costs:
-      1: 1.0
-      2: 3.5
-      3: 7.0
 
 sampler:
   type: GFlowNetSampler

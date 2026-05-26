@@ -1,6 +1,6 @@
 import torch
 
-from typing import Iterable, Literal, Optional, Sequence, Union
+from typing import Callable, Iterable, Literal, Optional, Sequence, Union
 
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.sampler import Sampler
@@ -9,12 +9,15 @@ from activelearning.utils.types import Candidate, Observation
 
 
 class HypercubeSampler(Sampler):
-    """Generates candidates by sampling from a bounded hypercube.
+    """Generate fresh candidates from a bounded hypercube.
 
-    Supports sampling strategies for both point generation and fidelity assignment:
-    - Point generation: "uniform" (i.i.d. random) or "lhs" (Latin Hypercube Sampling,
-      one point per stratum per dimension, improving space-filling).
-    - Fidelity assignment:  controlled by the ``fidelities`` parameter type.
+    This sampler is purely generative: every :meth:`sample` call draws a new
+    batch of points inside ``bounds``. It supports both point-generation
+    strategy selection and optional fidelity assignment.
+
+    - Point generation: ``"uniform"`` for i.i.d. random draws or ``"lhs"``
+      for Latin hypercube sampling.
+    - Fidelity assignment: controlled by the type of ``fidelities``.
 
     Parameters
     ----------
@@ -149,6 +152,7 @@ class HypercubeSampler(Sampler):
         self,
         acquisition: Optional[Acquisition] = None,
         observations: Optional[Iterable[Observation]] = None,
+        cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
     ) -> list[Candidate]:
         """Generate candidates from the hypercube.
 
@@ -158,6 +162,8 @@ class HypercubeSampler(Sampler):
             Unused. Present for interface compatibility.
         observations : Optional[Iterable[Observation]]
             Unused. Present for interface compatibility.
+        cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
+            Unused. Present for interface compatibility.
 
         Returns
         -------
@@ -165,7 +171,7 @@ class HypercubeSampler(Sampler):
             ``num_samples`` candidates with ``x`` as a plain Python list of
             floats and ``fidelity`` drawn from the configured fidelity strategy.
         """
-        # Generate points in [0,1]^d then scale to bounds
+        # Generate points in [0, 1]^d and scale them into the configured bounds.
         lower, ranges = self._get_bounds_tensors()
         unit_points = self._generate_points()
         points = lower + unit_points * ranges

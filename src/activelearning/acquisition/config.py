@@ -22,19 +22,6 @@ from activelearning.acquisition.botorch.botorch_multifidelity import (
     QMultiFidelityLowerBoundMaxValueEntropy,
     QMultiFidelityMaxValueEntropy,
 )
-from activelearning.acquisition.botorch.cost_utility import FidelityCostUtility
-
-
-class FidelityCostUtilityConfig(BaseModel):
-    type: Literal["FidelityCostUtility"] = "FidelityCostUtility"
-    fidelity_costs: dict[int, float]
-    fixed_cost: float = 0.0
-
-    def build(self) -> object:
-        return FidelityCostUtility(
-            fidelity_costs=self.fidelity_costs,
-            fixed_cost=self.fixed_cost,
-        )
 
 
 class HypercubeCandidateSetSpecConfig(BaseModel):
@@ -162,7 +149,6 @@ class QMultiFidelityMaxValueEntropyConfig(BaseModel):
     num_y_samples: int = Field(default=128, gt=0)
     maximize: bool = True
     target_fidelity_value: Optional[float] = None
-    cost_aware_utility: Optional[FidelityCostUtilityConfig] = None
 
     def build(self) -> Acquisition:
         return QMultiFidelityMaxValueEntropy(
@@ -172,11 +158,6 @@ class QMultiFidelityMaxValueEntropyConfig(BaseModel):
             num_y_samples=self.num_y_samples,
             maximize=self.maximize,
             target_fidelity_value=self.target_fidelity_value,
-            cost_aware_utility=(
-                self.cost_aware_utility.build()
-                if self.cost_aware_utility is not None
-                else None
-            ),
         )
 
 
@@ -190,7 +171,6 @@ class QMultiFidelityLowerBoundMaxValueEntropyConfig(BaseModel):
     num_y_samples: int = Field(default=128, gt=0)
     maximize: bool = True
     target_fidelity_value: Optional[float] = None
-    cost_aware_utility: Optional[FidelityCostUtilityConfig] = None
 
     def build(self) -> Acquisition:
         return QMultiFidelityLowerBoundMaxValueEntropy(
@@ -200,11 +180,6 @@ class QMultiFidelityLowerBoundMaxValueEntropyConfig(BaseModel):
             num_y_samples=self.num_y_samples,
             maximize=self.maximize,
             target_fidelity_value=self.target_fidelity_value,
-            cost_aware_utility=(
-                self.cost_aware_utility.build()
-                if self.cost_aware_utility is not None
-                else None
-            ),
         )
 
 

@@ -109,10 +109,9 @@ class Acquisition(ABC, ALRuntimeMixin):
             scores. The caller has full control over how cost is incorporated,
             for example dividing by per-candidate cost for cost-efficiency:
             ``lambda scores, cands: [s / cost(c) for s, c in
-            zip(scores, cands)]``. Has no effect before ``update()`` has been
-            called. Applied after any acquisition-level weighting already built
-            into the acquisition object.
-
+            zip(scores, cands)]``. Applied after the acquisition computes its
+            raw scores, so callers can reuse the same acquisition with
+            different ranking rules in samplers and selectors.
         Returns
         -------
         result : list[float]

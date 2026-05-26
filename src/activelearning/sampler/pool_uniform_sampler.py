@@ -1,5 +1,5 @@
 import random
-from typing import Iterable, Optional, Sequence
+from typing import Callable, Iterable, Optional, Sequence
 
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.sampler import Sampler
@@ -25,15 +25,18 @@ class PoolUniformSampler(Sampler):
         self,
         acquisition: Optional[Acquisition] = None,
         observations: Optional[Iterable[Observation]] = None,
+        cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
     ) -> list[Candidate]:
         """Samples uniformly from the candidate pool.
 
         Parameters
         ----------
         acquisition : Optional[Acquisition]
-            Optional acquisition function (not used by this sampler).
+            Unused. Present for interface compatibility.
         observations : Optional[Iterable[Observation]]
-            Optional iterable of observations (not used by this sampler).
+            Unused. Present for interface compatibility.
+        cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
+            Unused. Present for interface compatibility.
 
         Returns
         -------

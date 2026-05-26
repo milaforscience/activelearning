@@ -4,7 +4,7 @@ from dataclasses import replace
 import logging
 import hydra
 import torch
-from typing import Any, Iterable, Literal, Optional
+from typing import Any, Callable, Iterable, Literal, Optional, Sequence
 from omegaconf import DictConfig, OmegaConf
 from gflownet.utils.common import gflownet_from_config
 from activelearning.sampler.gflownet.logger_wrapper import RuntimeGFlowNetLoggerWrapper
@@ -43,8 +43,8 @@ class GFlowNetSampler(Sampler):
         - ``"first"`` — fidelity is chosen before any base-env action (Stack).
         - ``"last"`` — fidelity is chosen after all base-env actions (Stack).
     fixed_fidelity : int, optional
-        Stamps the same fidelity onto every sampled candidate. Intended for
-        single-fidelity tutorial runs that still query a multi-fidelity oracle.
+        Stamps the same fidelity onto every sampled candidate after sampling.
+        This is only supported when ``n_fidelities == 1``.
     """
 
     def __init__(
@@ -80,7 +80,11 @@ class GFlowNetSampler(Sampler):
         """Return floating-point precision as an integer (32 or 64)."""
         return 32 if self.dtype == torch.float32 else 64
 
-    def _build_agent(self, acquisition: Any) -> Any:
+    def _build_agent(
+        self,
+        acquisition: Any,
+        cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
+    ) -> Any:
         """Build and return a ``GFlowNetAgent`` ready for training.
 
         Merges runtime device/precision into the config, then calls
@@ -92,6 +96,9 @@ class GFlowNetSampler(Sampler):
         ----------
         acquisition : Any
             Acquisition function used as the GFlowNet reward proxy.
+        cost_fn : callable, optional
+            Candidate cost function forwarded to the proxy so acquisition
+            scores can be reweighted before GFlowNet uses them as rewards.
         """
 
         device = self._device_str()
@@ -115,6 +122,7 @@ class GFlowNetSampler(Sampler):
 
         agent = gflownet_from_config(conf, env=env)
         agent.proxy.set_acquisition(acquisition)
+        agent.proxy.set_cost_fn(cost_fn)
 
         if self.logger is not None:
             agent.logger = RuntimeGFlowNetLoggerWrapper(
@@ -163,6 +171,7 @@ class GFlowNetSampler(Sampler):
         self,
         acquisition: Optional[Any] = None,
         observations: Optional[Iterable[Observation]] = None,
+        cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
     ) -> list[Candidate]:
         """Train a GFlowNet agent and return sampled candidates.
 
@@ -172,6 +181,9 @@ class GFlowNetSampler(Sampler):
             Acquisition function used as the GFlowNet reward proxy. Required.
         observations : Optional[Iterable[Observation]]
             Unused; reserved for future warm-starting.
+        cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
+            Optional candidate cost function forwarded to the proxy so
+            acquisition scores can be reweighted before sampling.
 
         Returns
         -------
@@ -186,7 +198,7 @@ class GFlowNetSampler(Sampler):
         if acquisition is None:
             raise ValueError("GFlowNetSampler requires an acquisition function.")
 
-        agent = self._build_agent(acquisition)
+        agent = self._build_agent(acquisition, cost_fn=cost_fn)
         agent.train()
 
         batch, _ = agent.sample_batch(n_forward=self.n_samples, train=False)

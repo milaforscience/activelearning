@@ -1,9 +1,11 @@
-import torch
 import numpy.typing as npt
-from typing import Any, List, Optional, Union
+from typing import Any, Callable, List, Optional, Sequence, Union
+import torch
 from torchtyping import TensorType
 from gflownet.proxy.base import Proxy
+from activelearning.acquisition.cost_utility import cost_weighting_from_cost_fn
 from activelearning.sampler.gflownet.utils import proxy_states_to_candidates
+from activelearning.utils.types import Candidate
 
 
 class AcquisitionProxy(Proxy):
@@ -29,14 +31,23 @@ class AcquisitionProxy(Proxy):
         :meth:`~activelearning.acquisition.acquisition.Acquisition.score`.
         Set to ``None`` at init; must be set via :meth:`set_acquisition`
         before the proxy is used.
+    cost_fn : callable, optional
+        Optional candidate cost function. When provided, proxy scores are
+        reweighted by inverse cost before they are returned to GFlowNet.
     **kwargs
         Forwarded to :class:`gflownet.proxy.base.Proxy` (device,
         float_precision, reward_function, reward_min, etc.).
     """
 
-    def __init__(self, acquisition: Any = None, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        acquisition: Any = None,
+        cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.acquisition = acquisition
+        self.cost_fn = cost_fn
         self._env: Optional[Any] = None
 
     def setup(self, env: Any = None) -> None:
@@ -46,6 +57,12 @@ class AcquisitionProxy(Proxy):
     def set_acquisition(self, acquisition: Any) -> None:
         """Replace the wrapped acquisition function."""
         self.acquisition = acquisition
+
+    def set_cost_fn(
+        self, cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]]
+    ) -> None:
+        """Replace the optional candidate cost function."""
+        self.cost_fn = cost_fn
 
     def __call__(self, states: Union[TensorType, List, npt.NDArray]) -> TensorType:
         """Evaluate proxy values for a batch of states in proxy format.
@@ -76,5 +93,11 @@ class AcquisitionProxy(Proxy):
             )
 
         candidates = proxy_states_to_candidates(states, self._env)
-        acq_values = self.acquisition.score(candidates)
+        if self.cost_fn is None:
+            acq_values = self.acquisition.score(candidates)
+        else:
+            acq_values = self.acquisition.score(
+                candidates,
+                cost_weighting=cost_weighting_from_cost_fn(self.cost_fn),
+            )
         return torch.tensor(acq_values, dtype=self.float, device=self.device)

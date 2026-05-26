@@ -254,8 +254,13 @@ class RuntimeLoggingSampler(PoolScoreSampler):
         self,
         acquisition: Optional[DummyAcquisition] = None,
         observations: Optional[Iterable[Observation]] = None,
+        cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
     ) -> list[Candidate]:
-        samples = super().sample(acquisition=acquisition, observations=observations)
+        samples = super().sample(
+            acquisition=acquisition,
+            observations=observations,
+            cost_fn=cost_fn,
+        )
         if self.logger is not None:
             self.logger.log_metric("sampler_num_samples", len(samples))
         return samples

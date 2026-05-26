@@ -1,6 +1,6 @@
 import random
 from pathlib import Path
-from typing import Iterable, Optional, Sequence, Union
+from typing import Callable, Iterable, Optional, Sequence, Union
 
 import torch
 
@@ -96,15 +96,18 @@ class PoolFileSampler(Sampler):
         self,
         acquisition: Optional[Acquisition] = None,
         observations: Optional[Iterable[Observation]] = None,
+        cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
     ) -> list[Candidate]:
         """Sample candidates from the pool file.
 
         Parameters
         ----------
         acquisition : Optional[Acquisition]
-            Unused; present for interface compatibility.
+            Unused. Present for interface compatibility.
         observations : Optional[Iterable[Observation]]
-            Unused; present for interface compatibility.
+            Unused. Present for interface compatibility.
+        cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
+            Unused. Present for interface compatibility.
 
         Returns
         -------

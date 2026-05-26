@@ -235,9 +235,6 @@ class TestPropertiesBeforeUpdate:
     def test_resolved_project_fn_is_none(self, acq: StubAnalytic) -> None:
         assert acq._resolved_project_to_target_fidelity_fn is None
 
-    def test_cost_aware_utility_is_none_by_default(self, acq: StubAnalytic) -> None:
-        assert acq._cost_aware_utility_override is None
-
 
 # ===================================================================
 # update() — surrogate validation
@@ -617,35 +614,6 @@ class TestMultiFidelityResolution:
         acq = StubAnalytic(project_to_target_fidelity_fn=custom_fn)
         acq.update(fitted_mf_surrogate, multi_fidelity_observations)
         assert acq._resolved_project_to_target_fidelity_fn is custom_fn
-
-
-# ===================================================================
-# Cost-aware resolution
-# ===================================================================
-
-
-class TestCostAwareResolution:
-    """Verify cost model / cost-aware utility resolution."""
-
-    def test_no_cost_by_default(
-        self,
-        fitted_surrogate: BoTorchGPSurrogate,
-        single_fidelity_observations: list[Observation],
-    ) -> None:
-        acq = StubAnalytic()
-        acq.update(fitted_surrogate, single_fidelity_observations)
-        assert acq._cost_aware_utility_override is None
-
-    def test_custom_cost_aware_utility_override(
-        self,
-        fitted_surrogate: BoTorchGPSurrogate,
-        single_fidelity_observations: list[Observation],
-    ) -> None:
-        """A user-provided cost-aware utility is stored and accessible."""
-        sentinel = object()
-        acq = StubAnalytic(cost_aware_utility=sentinel)
-        acq.update(fitted_surrogate, single_fidelity_observations)
-        assert acq._cost_aware_utility_override is sentinel
 
 
 # ===================================================================
