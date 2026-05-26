@@ -4,7 +4,9 @@ import torch
 
 
 def latin_hypercube(
-    n_points: int, n_dims: int, dtype: torch.dtype = torch.float64
+    n_points: int,
+    n_dims: int,
+    dtype: torch.dtype = torch.float64,
 ) -> torch.Tensor:
     """Generate a Latin Hypercube Sample (LHS) in the unit hypercube ``[0, 1]^d``.
 
@@ -19,8 +21,8 @@ def latin_hypercube(
         Number of sample points to generate.
     n_dims : int
         Dimensionality of the hypercube.
-    dtype : torch.dtype
-        Floating-point dtype for the returned tensor. Defaults to ``torch.float64``.
+    dtype : torch.dtype, optional
+        Dtype for the returned tensor. Defaults to ``torch.float64``.
 
     Returns
     -------

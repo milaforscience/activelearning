@@ -9,7 +9,7 @@ class Surrogate(ABC, ALRuntimeMixin):
     """Abstract surrogate interface for approximating the objective function.
 
     Surrogate models approximate the objective based on observed data, enabling
-    efficient candidate evaluation without querying the oracle directly.
+    efficient candidate evaluation without querying the oracles directly.
 
     Surrogates declare whether they support incremental updates or require full
     retraining via ``updates_from_latest()``.
