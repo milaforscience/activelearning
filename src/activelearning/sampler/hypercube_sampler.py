@@ -136,17 +136,11 @@ class HypercubeSampler(Sampler):
             )
             weights = costs.reciprocal()
             indices = torch.multinomial(
-                weights,
-                num_samples=self.num_samples,
-                replacement=True,
+                weights, num_samples=self.num_samples, replacement=True
             )
         else:
             # Uniform sampling across fidelity levels
-            indices = torch.randint(
-                0,
-                len(self._fidelity_levels),
-                (self.num_samples,),
-            )
+            indices = torch.randint(0, len(self._fidelity_levels), (self.num_samples,))
 
         selected = fidelity_tensor[indices]
         return selected.tolist()

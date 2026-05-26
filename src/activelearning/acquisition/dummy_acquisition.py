@@ -50,8 +50,9 @@ class DummyAcquisition(Acquisition):
         ValueError
             If predict() does not return required "mean" key.
         """
+        candidate_list = list(candidates)
         if self.surrogate is None:
-            return [0.0 for _ in candidates]
+            return [0.0 for _ in candidate_list]
 
         candidate_list = list(candidates)
         try:
