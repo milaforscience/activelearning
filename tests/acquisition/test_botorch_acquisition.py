@@ -10,6 +10,7 @@ import torch
 
 from activelearning.acquisition.botorch.botorch_acquisition import (
     AnalyticBoTorchAcquisition,
+    BatchScoringMixin,
     QBatchBoTorchAcquisition,
 )
 from activelearning.acquisition.botorch.candidate_set import TrainDataCandidateSetSpec
@@ -37,7 +38,7 @@ class StubAnalytic(AnalyticBoTorchAcquisition):
         return lambda X: X.squeeze(-2).sum(dim=-1)
 
 
-class StubQBatch(QBatchBoTorchAcquisition):
+class StubQBatch(BatchScoringMixin, QBatchBoTorchAcquisition):
     """Q-batch stub that wraps a callable as the BoTorch acquisition function."""
 
     def __init__(self, acqf_fn: Optional[Any] = None, **kwargs: Any) -> None:
@@ -123,7 +124,7 @@ class TestCapabilityFlags:
     def test_qbatch_flags(self) -> None:
         acq = StubQBatch()
         assert acq.supports_singleton_scoring is True
-        assert acq.supports_batch_scoring is False
+        assert acq.supports_batch_scoring is True
 
     def test_maximize_default(self) -> None:
         assert StubAnalytic().maximize is True
@@ -206,6 +207,51 @@ class TestParameterValidation:
             QMultiFidelityMaxValueEntropy(
                 candidate_set_spec=spec,
                 num_y_samples=0,
+            )
+
+    def test_qkg_num_fantasies_must_be_positive(self) -> None:
+        """QKnowledgeGradient.num_fantasies must be > 0."""
+        from activelearning.acquisition.botorch.botorch_qbatch import (
+            QKnowledgeGradient,
+        )
+
+        with pytest.raises(ValueError, match="num_fantasies must be > 0"):
+            QKnowledgeGradient(num_fantasies=0)
+
+    def test_qmes_num_fantasies_must_be_positive(self) -> None:
+        """QMaxValueEntropy.num_fantasies must be > 0."""
+        from activelearning.acquisition.botorch.botorch_qbatch import QMaxValueEntropy
+        from activelearning.acquisition.botorch.candidate_set import (
+            TrainDataCandidateSetSpec,
+        )
+
+        with pytest.raises(ValueError, match="num_fantasies must be > 0"):
+            QMaxValueEntropy(
+                candidate_set_spec=TrainDataCandidateSetSpec(), num_fantasies=0
+            )
+
+    def test_qmes_num_mv_samples_must_be_positive(self) -> None:
+        """QMaxValueEntropy.num_mv_samples must be > 0."""
+        from activelearning.acquisition.botorch.botorch_qbatch import QMaxValueEntropy
+        from activelearning.acquisition.botorch.candidate_set import (
+            TrainDataCandidateSetSpec,
+        )
+
+        with pytest.raises(ValueError, match="num_mv_samples must be > 0"):
+            QMaxValueEntropy(
+                candidate_set_spec=TrainDataCandidateSetSpec(), num_mv_samples=0
+            )
+
+    def test_qmes_num_y_samples_must_be_positive(self) -> None:
+        """QMaxValueEntropy.num_y_samples must be > 0."""
+        from activelearning.acquisition.botorch.botorch_qbatch import QMaxValueEntropy
+        from activelearning.acquisition.botorch.candidate_set import (
+            TrainDataCandidateSetSpec,
+        )
+
+        with pytest.raises(ValueError, match="num_y_samples must be > 0"):
+            QMaxValueEntropy(
+                candidate_set_spec=TrainDataCandidateSetSpec(), num_y_samples=0
             )
 
 
@@ -525,6 +571,63 @@ class TestQBatchScore:
         acq.update(fitted_surrogate, single_fidelity_observations)
         scores = acq.score([])
         assert scores == []
+
+    def test_empty_batch_list_returns_empty(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+    ) -> None:
+        """score_batches([]) should return [] to match score([]) behaviour."""
+        acq = StubQBatch()
+        acq.update(fitted_surrogate, single_fidelity_observations)
+        scores = acq.score_batches([])
+        assert scores == []
+
+    def test_batch_returns_ones_before_update(
+        self, candidate_batches: list[list[Candidate]]
+    ) -> None:
+        """Before update(), score_batches() returns constant 1.0 for every batch."""
+        acq = StubQBatch()
+        scores = acq.score_batches(candidate_batches)
+        assert scores == [1.0] * len(candidate_batches)
+
+    def test_batch_returns_one_score_per_batch(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+        candidate_batches: list[list[Candidate]],
+    ) -> None:
+        """After update(), score_batches() returns one float per batch."""
+        acq = StubQBatch()
+        acq.update(fitted_surrogate, single_fidelity_observations)
+        scores = acq.score_batches(candidate_batches)
+        assert len(scores) == len(candidate_batches)
+        assert all(isinstance(s, float) for s in scores)
+
+    def test_batch_cost_weighting_applied_after_update(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+        candidate_batches: list[list[Candidate]],
+    ) -> None:
+        """cost_weighting post-processes batch scores after update()."""
+        acq = StubQBatch()
+        acq.update(fitted_surrogate, single_fidelity_observations)
+        raw_scores = acq.score_batches(candidate_batches)
+        cost_weighting = lambda scores, batches: [s / 2.0 for s in scores]  # noqa: E731
+        weighted = acq.score_batches(candidate_batches, cost_weighting=cost_weighting)
+        assert len(weighted) == len(raw_scores)
+        for raw, ws in zip(raw_scores, weighted):
+            assert math.isclose(ws, raw / 2.0, rel_tol=1e-6)
+
+    def test_batch_cost_weighting_not_applied_before_update(
+        self, candidate_batches: list[list[Candidate]]
+    ) -> None:
+        """cost_weighting has no effect before update() — all batch scores remain 1.0."""
+        acq = StubQBatch()
+        cost_weighting = lambda scores, batches: [s * 999 for s in scores]  # noqa: E731
+        scores = acq.score_batches(candidate_batches, cost_weighting=cost_weighting)
+        assert scores == [1.0] * len(candidate_batches)
 
 
 # ===================================================================
@@ -1092,3 +1195,336 @@ class TestMultiFidelityAcquisitionIntegration:
         scores_min = acq_min.score(mf_cands)
 
         assert scores_max != scores_min
+
+    def test_qmfmes_stale_cache_warning(
+        self,
+        mf_surrogate: BoTorchGPSurrogate,
+        mf_obs: list[Observation],
+        train_data_spec: TrainDataCandidateSetSpec,
+    ) -> None:
+        """Calling update() without observations after a prior round warns about stale cache."""
+        from activelearning.acquisition.botorch.botorch_multifidelity import (
+            QMultiFidelityMaxValueEntropy,
+        )
+
+        acq = QMultiFidelityMaxValueEntropy(
+            candidate_set_spec=train_data_spec,
+            num_fantasies=2,
+            num_mv_samples=5,
+            num_y_samples=16,
+        )
+        acq.update(mf_surrogate, mf_obs)
+
+        with pytest.warns(UserWarning, match="called without observations"):
+            acq.update(mf_surrogate, None)
+
+
+# ===================================================================
+# Concrete qbatch acquisition integration tests
+# ===================================================================
+
+
+class TestQBatchAcquisitionIntegration:
+    """Integration tests for concrete qbatch acquisition wrappers.
+
+    Verifies that each class can be updated with a fitted surrogate and
+    produces valid float scores, and that constructor parameters are
+    correctly forwarded to BoTorch.
+    """
+
+    @pytest.fixture()
+    def sf_obs(self) -> list[Observation]:
+        return [
+            Observation(x=[1.0, 2.0], y=5.0),
+            Observation(x=[3.0, 4.0], y=7.0),
+            Observation(x=[5.0, 6.0], y=9.0),
+        ]
+
+    @pytest.fixture()
+    def sf_surrogate(self, sf_obs: list[Observation]) -> BoTorchGPSurrogate:
+        s = BoTorchGPSurrogate()
+        s.fit(sf_obs)
+        return s
+
+    @pytest.fixture()
+    def cands(self) -> list[Candidate]:
+        return [Candidate(x=[2.0, 3.0]), Candidate(x=[4.0, 5.0])]
+
+    def _scores_valid(self, scores: list[float], n: int = 2) -> None:
+        assert len(scores) == n
+        assert all(isinstance(s, float) for s in scores)
+        assert all(math.isfinite(s) for s in scores)
+
+    def test_qmes_scores(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_qbatch import QMaxValueEntropy
+        from activelearning.acquisition.botorch.candidate_set import (
+            TrainDataCandidateSetSpec,
+        )
+
+        acq = QMaxValueEntropy(
+            candidate_set_spec=TrainDataCandidateSetSpec(),
+            num_fantasies=2,
+            num_mv_samples=5,
+            num_y_samples=16,
+        )
+        acq.update(sf_surrogate, sf_obs)
+        self._scores_valid(acq.score(cands))
+
+    def test_qmes_maximize_false_differs_from_maximize_true(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        """maximize=False should produce different scores than maximize=True."""
+        from activelearning.acquisition.botorch.botorch_qbatch import QMaxValueEntropy
+        from activelearning.acquisition.botorch.candidate_set import (
+            TrainDataCandidateSetSpec,
+        )
+
+        acq_max = QMaxValueEntropy(
+            candidate_set_spec=TrainDataCandidateSetSpec(),
+            num_fantasies=2,
+            num_mv_samples=5,
+            num_y_samples=16,
+            maximize=True,
+        )
+        acq_max.update(sf_surrogate, sf_obs)
+        scores_max = acq_max.score(cands)
+
+        acq_min = QMaxValueEntropy(
+            candidate_set_spec=TrainDataCandidateSetSpec(),
+            num_fantasies=2,
+            num_mv_samples=5,
+            num_y_samples=16,
+            maximize=False,
+        )
+        acq_min.update(sf_surrogate, sf_obs)
+        scores_min = acq_min.score(cands)
+
+        assert scores_max != scores_min
+
+    def test_qei_scores(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_qbatch import (
+            QExpectedImprovement,
+        )
+
+        acq = QExpectedImprovement()
+        acq.update(sf_surrogate, sf_obs)
+        self._scores_valid(acq.score(cands))
+
+    def test_qei_maximize_false(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        """maximize=False should produce different scores than maximize=True."""
+        from activelearning.acquisition.botorch.botorch_qbatch import (
+            QExpectedImprovement,
+        )
+
+        torch.manual_seed(0)
+        acq_max = QExpectedImprovement(maximize=True)
+        acq_max.update(sf_surrogate, sf_obs)
+        scores_max = acq_max.score(cands)
+
+        torch.manual_seed(0)
+        acq_min = QExpectedImprovement(maximize=False)
+        acq_min.update(sf_surrogate, sf_obs)
+        scores_min = acq_min.score(cands)
+
+        assert scores_max != scores_min
+
+    def test_qlogei_scores(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_qbatch import (
+            QLogExpectedImprovement,
+        )
+
+        acq = QLogExpectedImprovement()
+        acq.update(sf_surrogate, sf_obs)
+        self._scores_valid(acq.score(cands))
+
+    def test_qnei_scores(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_qbatch import (
+            QNoisyExpectedImprovement,
+        )
+
+        acq = QNoisyExpectedImprovement()
+        acq.update(sf_surrogate, sf_obs)
+        self._scores_valid(acq.score(cands))
+
+    def test_qnei_maximize_false(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        """maximize=False should produce different scores than maximize=True."""
+        from activelearning.acquisition.botorch.botorch_qbatch import (
+            QNoisyExpectedImprovement,
+        )
+
+        torch.manual_seed(0)
+        acq_max = QNoisyExpectedImprovement(maximize=True)
+        acq_max.update(sf_surrogate, sf_obs)
+        scores_max = acq_max.score(cands)
+
+        torch.manual_seed(0)
+        acq_min = QNoisyExpectedImprovement(maximize=False)
+        acq_min.update(sf_surrogate, sf_obs)
+        scores_min = acq_min.score(cands)
+
+        assert scores_max != scores_min
+
+    def test_qlognei_scores(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_qbatch import (
+            QLogNoisyExpectedImprovement,
+        )
+
+        acq = QLogNoisyExpectedImprovement()
+        acq.update(sf_surrogate, sf_obs)
+        self._scores_valid(acq.score(cands))
+
+    def test_qucb_scores(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_qbatch import (
+            QUpperConfidenceBound,
+        )
+
+        acq = QUpperConfidenceBound(beta=2.0)
+        acq.update(sf_surrogate, sf_obs)
+        self._scores_valid(acq.score(cands))
+
+    def test_qucb_maximize_false(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        """maximize=False should produce different scores than maximize=True."""
+        from activelearning.acquisition.botorch.botorch_qbatch import (
+            QUpperConfidenceBound,
+        )
+
+        torch.manual_seed(0)
+        acq_max = QUpperConfidenceBound(beta=2.0, maximize=True)
+        acq_max.update(sf_surrogate, sf_obs)
+        scores_max = acq_max.score(cands)
+
+        torch.manual_seed(0)
+        acq_min = QUpperConfidenceBound(beta=2.0, maximize=False)
+        acq_min.update(sf_surrogate, sf_obs)
+        scores_min = acq_min.score(cands)
+
+        assert scores_max != scores_min
+
+    def test_qpi_scores(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_qbatch import (
+            QProbabilityOfImprovement,
+        )
+
+        acq = QProbabilityOfImprovement()
+        acq.update(sf_surrogate, sf_obs)
+        self._scores_valid(acq.score(cands))
+
+    def test_qsr_scores(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_qbatch import QSimpleRegret
+
+        acq = QSimpleRegret()
+        acq.update(sf_surrogate, sf_obs)
+        self._scores_valid(acq.score(cands))
+
+    def test_qsr_maximize_false(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        """maximize=False should produce different scores than maximize=True."""
+        from activelearning.acquisition.botorch.botorch_qbatch import QSimpleRegret
+
+        torch.manual_seed(0)
+        acq_max = QSimpleRegret(maximize=True)
+        acq_max.update(sf_surrogate, sf_obs)
+        scores_max = acq_max.score(cands)
+
+        torch.manual_seed(0)
+        acq_min = QSimpleRegret(maximize=False)
+        acq_min.update(sf_surrogate, sf_obs)
+        scores_min = acq_min.score(cands)
+
+        assert scores_max != scores_min
+
+    def test_qkg_scores(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+        cands: list[Candidate],
+    ) -> None:
+        from activelearning.acquisition.botorch.botorch_qbatch import QKnowledgeGradient
+
+        acq = QKnowledgeGradient(num_fantasies=1)
+        acq.update(sf_surrogate, sf_obs)
+        self._scores_valid(acq.score(cands))
+
+    def test_qmes_stale_cache_warning(
+        self,
+        sf_surrogate: BoTorchGPSurrogate,
+        sf_obs: list[Observation],
+    ) -> None:
+        """Calling update() without observations after a prior round warns about stale cache."""
+        from activelearning.acquisition.botorch.botorch_qbatch import QMaxValueEntropy
+        from activelearning.acquisition.botorch.candidate_set import (
+            TrainDataCandidateSetSpec,
+        )
+
+        acq = QMaxValueEntropy(
+            candidate_set_spec=TrainDataCandidateSetSpec(),
+            num_fantasies=2,
+            num_mv_samples=5,
+            num_y_samples=16,
+        )
+        acq.update(sf_surrogate, sf_obs)
+
+        with pytest.warns(UserWarning, match="called without observations"):
+            acq.update(sf_surrogate, None)
