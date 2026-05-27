@@ -2,6 +2,7 @@ import csv
 import json
 from abc import ABC, abstractmethod
 from dataclasses import asdict, is_dataclass
+import math
 from pathlib import Path
 from typing import Any, Literal, Sequence
 
@@ -135,7 +136,9 @@ class JSONLinesRunWriter(RunWriter):
         """Append the best-so-far objective trajectory for one completed round."""
 
         round_best_objective_value = _best_objective_value(observations)
-        if self._best_objective_value is None:
+        if round_best_objective_value is None:
+            pass
+        elif self._best_objective_value is None:
             self._best_objective_value = round_best_objective_value
         else:
             self._best_objective_value = max(
@@ -260,15 +263,22 @@ def _resolve_method(manifest: dict[str, Any], output_dir: Path) -> str | None:
     return str(raw_method)
 
 
-def _best_objective_value(observations: Sequence[Observation]) -> float:
-    """Return the best scalar objective value observed in a completed round."""
+def _best_objective_value(observations: Sequence[Observation]) -> float | None:
+    """Return the best finite scalar objective value observed in a round."""
 
     objective_values = [
         _coerce_scalar_float(observation.y) for observation in observations
     ]
     if not objective_values:
         raise ValueError("Cannot write an experiment log row without observations.")
-    return max(objective_values)
+    finite_objective_values = [
+        objective_value
+        for objective_value in objective_values
+        if math.isfinite(objective_value)
+    ]
+    if not finite_objective_values:
+        return None
+    return max(finite_objective_values)
 
 
 def _coerce_scalar_float(value: Any) -> float:

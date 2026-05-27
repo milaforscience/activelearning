@@ -1,5 +1,6 @@
 import csv
 import json
+import math
 import pytest
 from unittest.mock import Mock
 from typing import Callable, Iterable, Optional, Sequence
@@ -562,5 +563,72 @@ def test_run_writer_records_best_objective_trajectory(tmp_path):
             "objective value": "2.0",
             "cost": "3.0",
             "round": "2",
+        },
+    ]
+
+
+def test_run_writer_ignores_non_finite_objectives_in_best_trajectory(tmp_path):
+    """The experiment CSV should ignore NaN objectives when tracking best-so-far."""
+
+    run_writer = JSONLinesRunWriter(
+        output_dir=tmp_path,
+        metadata={
+            "config": {"runtime": {"seed": 13}},
+            "run": {"method": "sf_gfn"},
+        },
+        write_samples=False,
+        write_config=False,
+    )
+    run_writer.start_run({})
+    run_writer.record_round(
+        round_index=1,
+        sampled_candidates=[],
+        sampled_scores=[],
+        selected_candidates=[Candidate(1), Candidate(2)],
+        selected_scores=[0.0, 0.0],
+        selected_costs=[1.0, 1.0],
+        observations=[
+            Observation(x=1, y=math.nan),
+            Observation(x=2, y=1.5),
+        ],
+        cumulative_cost=2.0,
+        remaining_budget=2.0,
+    )
+    run_writer.record_round(
+        round_index=2,
+        sampled_candidates=[],
+        sampled_scores=[],
+        selected_candidates=[Candidate(3), Candidate(4)],
+        selected_scores=[0.0, 0.0],
+        selected_costs=[1.0, 1.0],
+        observations=[
+            Observation(x=3, y=math.nan),
+            Observation(x=4, y=0.25),
+        ],
+        cumulative_cost=4.0,
+        remaining_budget=0.0,
+    )
+    run_writer.end_run({"num_rounds": 2, "total_cost": 4.0, "budget_remaining": 0.0})
+
+    experiment_log_rows = list(
+        csv.DictReader((tmp_path / "experiment_log.csv").open(encoding="utf-8"))
+    )
+
+    assert experiment_log_rows == [
+        {
+            "index": "0",
+            "method": "sf_gfn",
+            "seed": "13",
+            "objective value": "1.5",
+            "cost": "2.0",
+            "round": "0",
+        },
+        {
+            "index": "1",
+            "method": "sf_gfn",
+            "seed": "13",
+            "objective value": "1.5",
+            "cost": "4.0",
+            "round": "1",
         },
     ]
