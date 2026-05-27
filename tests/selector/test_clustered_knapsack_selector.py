@@ -18,7 +18,7 @@ from activelearning.utils.types import Candidate
 def _mock_acquisition(values: list[float]) -> Mock:
     """Return a Mock acquisition that returns *values*."""
     acq = Mock()
-    acq.return_value = values
+    acq.score.return_value = values
     return acq
 
 

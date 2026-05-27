@@ -43,7 +43,7 @@ def test_knapsack_selector_finds_exact_solution_when_greedy_misses(warm_start):
     """Test exact knapsack solve beats the greedy warm-start heuristic."""
     candidates = [Candidate(x=0), Candidate(x=1)]
     acquisition = Mock()
-    acquisition.return_value = [10.0, 9.0]
+    acquisition.score.return_value = [10.0, 9.0]
 
     def cost_fn(_candidates):
         return [6.0, 5.0]
@@ -57,7 +57,7 @@ def test_knapsack_selector_finds_exact_solution_when_greedy_misses(warm_start):
     )
 
     assert [candidate.x for candidate in selected] == [0]
-    acquisition.assert_called_once_with(candidates)
+    acquisition.score.assert_called_once_with(candidates)
 
 
 @pytest.mark.parametrize(("warm_start", "expected_calls"), [(False, 0), (True, 1)])
@@ -79,7 +79,7 @@ def test_knapsack_selector_uses_greedy_helper_only_for_warm_start(
     )
 
     acquisition = Mock()
-    acquisition.return_value = [8.0, 5.0]
+    acquisition.score.return_value = [8.0, 5.0]
 
     selector = KnapsackSelector(warm_start=warm_start)
     selector(
@@ -111,7 +111,8 @@ def test_knapsack_selector_returns_empty_for_empty_candidates():
 def test_knapsack_selector_rejects_negative_costs():
     """Test selector rejects negative per-candidate costs."""
     selector = KnapsackSelector()
-    acquisition = Mock(return_value=[3.0, 2.0])
+    acquisition = Mock()
+    acquisition.score.return_value = [3.0, 2.0]
 
     with pytest.raises(ValueError, match="negative cost"):
         selector(
@@ -140,7 +141,8 @@ def test_knapsack_selector_uses_acquisition_callable_interface():
 def test_knapsack_selector_raises_for_unusable_solver_status(monkeypatch):
     """Test selector raises cleanly on infeasible solver outcomes."""
     selector = KnapsackSelector()
-    acquisition = Mock(return_value=[3.0, 2.0])
+    acquisition = Mock()
+    acquisition.score.return_value = [3.0, 2.0]
 
     def fake_solve(self, _solver):
         return pulp.LpStatusInfeasible
@@ -159,7 +161,8 @@ def test_knapsack_selector_raises_for_unusable_solver_status(monkeypatch):
 def test_knapsack_selector_raises_when_not_solved_has_no_incumbent(monkeypatch):
     """Test selector rejects time-limited runs without variable assignments."""
     selector = KnapsackSelector()
-    acquisition = Mock(return_value=[3.0, 2.0])
+    acquisition = Mock()
+    acquisition.score.return_value = [3.0, 2.0]
 
     def fake_solve(self, _solver):
         return pulp.LpStatusNotSolved
@@ -178,7 +181,8 @@ def test_knapsack_selector_raises_when_not_solved_has_no_incumbent(monkeypatch):
 def test_knapsack_selector_uses_incumbent_when_not_solved(monkeypatch, capsys):
     """Test selector can use CBC incumbents from a non-optimal solve."""
     selector = KnapsackSelector()
-    acquisition = Mock(return_value=[3.0, 2.0])
+    acquisition = Mock()
+    acquisition.score.return_value = [3.0, 2.0]
 
     def fake_solve(self, _solver):
         for variable, value in zip(self.variables(), [1.0, 0.0]):
@@ -201,7 +205,8 @@ def test_knapsack_selector_uses_incumbent_when_not_solved(monkeypatch, capsys):
 def test_knapsack_selector_raises_when_cbc_is_unavailable(monkeypatch):
     """Test selector fails early with a clear CBC availability error."""
     selector = KnapsackSelector()
-    acquisition = Mock(return_value=[3.0, 2.0])
+    acquisition = Mock()
+    acquisition.score.return_value = [3.0, 2.0]
 
     monkeypatch.setattr(
         knapsack_selector_module.pulp.PULP_CBC_CMD,

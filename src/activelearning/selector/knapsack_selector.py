@@ -77,7 +77,7 @@ class KnapsackSelector(Selector):
             return []
 
         # Acquisition scores should be non-negative
-        acq_values = [max(0, v) for v in acquisition(candidates)]
+        acq_values = [max(0, v) for v in acquisition.score(candidates)]
         costs = cost_fn(candidates)
         if any(cost < 0 for cost in costs):
             raise ValueError("Cost function returned a negative cost.")
