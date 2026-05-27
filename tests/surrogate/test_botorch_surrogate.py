@@ -286,18 +286,21 @@ def test_direct_update_full_refits_when_partial_updates_disabled(
 
     surrogate.update([single_fidelity_observations[2]])
 
+    train_X, train_Y = surrogate.get_train_data()
     assert surrogate.model is not initial_model
-    assert surrogate._train_X.shape == (3, 2)
-    assert surrogate._train_Y.shape == (3, 1)
+    assert train_X.shape == (3, 2)
+    assert train_Y.shape == (3, 1)
 
 
-def test_train_data_after_multi_output_fit(multi_output_observations):
+def test_get_train_data_after_multi_output_fit(multi_output_observations):
     """Test that multi-output training tensors retain their output width."""
     surrogate = BoTorchGPSurrogate()
     surrogate.fit(multi_output_observations)
 
-    assert surrogate._train_X.shape == (3, 2)
-    assert surrogate._train_Y.shape == (3, 2)
+    train_X, train_Y = surrogate.get_train_data()
+
+    assert train_X.shape == (3, 2)
+    assert train_Y.shape == (3, 2)
 
 
 def test_multi_output_predict_preserves_nested_output_shape(multi_output_observations):
@@ -486,7 +489,7 @@ def test_custom_covar_module_routing(multi_fidelity_observations):
     assert isinstance(surrogate.model, SingleTaskGP), (
         "Should use SingleTaskGP when covar_module is provided"
     )
-    assert surrogate._is_multi_fidelity is True, (
+    assert surrogate.is_multi_fidelity is True, (
         "Should still track that the data has fidelity columns"
     )
 
@@ -757,7 +760,7 @@ def test_update_ignores_empty_observations(single_fidelity_observations):
 def test_is_multi_fidelity_resets_between_fits(
     single_fidelity_observations, multi_fidelity_observations
 ):
-    """Test that _is_multi_fidelity resets correctly when re-fitting on different data.
+    """Test that is_multi_fidelity resets correctly when re-fitting on different data.
 
     Regression test: previously the flag was never cleared, so fitting on MF data
     followed by SF data would attempt to build a SingleTaskMultiFidelityGP without
@@ -768,11 +771,11 @@ def test_is_multi_fidelity_resets_between_fits(
     # First fit: multi-fidelity
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
-    assert surrogate._is_multi_fidelity is True
+    assert surrogate.is_multi_fidelity is True
 
     # Second fit: single-fidelity — must reset the flag and build SingleTaskGP
     surrogate.fit(single_fidelity_observations)
-    assert surrogate._is_multi_fidelity is False
+    assert surrogate.is_multi_fidelity is False
     assert isinstance(surrogate.model, SingleTaskGP)
 
     # Predictions must work without fidelity values
