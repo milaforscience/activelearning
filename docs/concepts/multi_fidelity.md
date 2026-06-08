@@ -12,7 +12,7 @@ The [`Oracle`](../reference/activelearning/oracle/oracle/#activelearning.oracle.
 - The cost $c(x, m)$ associated with each fidelity level.
 - The confidence $\kappa(m)$ associated with each fidelity level.
 
-Fidelity costs are required; fidelity confidences are optional. When confidences are omitted, they are derived from relative cost: the highest-cost fidelity is assigned $\kappa(m) = 1.0$, and lower-fidelity levels carry signal proportional to their relative cost.
+Fidelity costs are required. Fidelity confidences are also generally required; a simple default is to scale them by relative cost, assigning the highest-cost fidelity $\kappa(m) = 1.0$ and lower-fidelity levels confidence proportional to their cost. This heuristic is the default in [`AugmentedFunctionOracle`](../reference/activelearning/oracle/augmented_function_oracle/#activelearning.oracle.augmented_function_oracle.AugmentedFunctionOracle) when `fidelity_confidences` is omitted.
 
 ## **Fidelity Integration Across Components**
 
