@@ -8,9 +8,8 @@ In the multi-fidelity setting, the action space is the set of candidate-fidelity
 
 The [`Oracle`](../reference/activelearning/oracle/oracle/#activelearning.oracle.oracle.Oracle) defines the multi-fidelity structure of the experiment. It specifies:
 
-- The valid fidelity levels $m \in \mathcal{M}$.
-- The cost $c(x, m)$ associated with each fidelity level.
-- The confidence $\kappa(m)$ associated with each fidelity level.
+- The valid fidelity levels $m \in \mathcal{M}$ and confidence $\kappa(m)$ associated with each fidelity level.
+- The cost $c(x, m)$ associated with querying each candidate $x$ at fidelity level $m$.
 
 Fidelity costs are required. Fidelity confidences are also generally required; a simple default is to scale them by relative cost, assigning the highest-cost fidelity $\kappa(m) = 1.0$ and lower-fidelity levels confidence proportional to their cost. This heuristic is the default in [`AugmentedFunctionOracle`](../reference/activelearning/oracle/augmented_function_oracle/#activelearning.oracle.augmented_function_oracle.AugmentedFunctionOracle) when `fidelity_confidences` is omitted.
 
@@ -18,18 +17,18 @@ Fidelity costs are required. Fidelity confidences are also generally required; a
 
 ### **Sampler**
 
-The [`Sampler`](../reference/activelearning/sampler/sampler/#activelearning.sampler.sampler.Sampler) is responsible for emitting explicit candidate-fidelity pairs $(x, m)$ rather than candidates alone. Two strategies are supported:
+The [`Sampler`](../reference/activelearning/sampler/sampler/#activelearning.sampler.sampler.Sampler) interface is responsible for emitting explicit candidate-fidelity pairs $(x, m)$ rather than candidates alone. As an example, the built-in [`HypercubeSampler`](../reference/activelearning/sampler/hypercube_sampler/#activelearning.sampler.hypercube_sampler.HypercubeSampler), fidelity assignment supports two strategies:
 
 - **Uniform fidelity sampling**: fidelity levels are drawn uniformly over $\mathcal{M}$.
 - **Cost-weighted fidelity sampling**: fidelity levels are sampled inversely proportional to $c(x, m)$, increasing the proportion of lower-fidelity proposals and preserving budget headroom for high-fidelity queries in later rounds.
 
 ### **Surrogate**
 
-Prior to loop execution, the [`Oracle`](../reference/activelearning/oracle/oracle/#activelearning.oracle.oracle.Oracle) passes fidelity confidences $\kappa(m)$ to the [`Surrogate`](../reference/activelearning/surrogate/surrogate/#activelearning.surrogate.surrogate.Surrogate) via [`set_fidelity_confidences()`](../reference/activelearning/surrogate/surrogate/#activelearning.surrogate.surrogate.Surrogate.set_fidelity_confidences). The surrogate uses these confidences to condition its probabilistic model on fidelity level, producing a posterior that accounts for the reduced reliability of lower-fidelity observations.
+Prior to loop execution, the [`Oracle`](../reference/activelearning/oracle/oracle/#activelearning.oracle.oracle.Oracle) passes fidelity confidences $\kappa(m)$ to the [`Surrogate`](../reference/activelearning/surrogate/surrogate/#activelearning.surrogate.surrogate.Surrogate) interface via [`set_fidelity_confidences()`](../reference/activelearning/surrogate/surrogate/#activelearning.surrogate.surrogate.Surrogate.set_fidelity_confidences). In the built-in [`BoTorchGPSurrogate`](../reference/activelearning/surrogate/botorch_surrogate/#activelearning.surrogate.botorch_surrogate.BoTorchGPSurrogate), these confidences condition the probabilistic model on fidelity level, producing a posterior that accounts for the reduced reliability of lower-fidelity observations.
 
 ### **Acquisition**
 
-A multi-fidelity [`Acquisition`](../reference/activelearning/acquisition/acquisition/#activelearning.acquisition.acquisition.Acquisition) function $\alpha(x, m)$ scores candidate-fidelity pairs by expected utility per unit cost $c(x, m)$, balancing information gain against the cost of obtaining it. This cost-normalisation ensures that lower-fidelity queries remain competitive when they provide sufficient information gain relative to their cost.
+The [`Acquisition`](../reference/activelearning/acquisition/acquisition/#activelearning.acquisition.acquisition.Acquisition) interface is generic, but the built-in multi-fidelity behaviour is implemented by q-batch BoTorch classes such as [`QMultiFidelityKnowledgeGradient`](../reference/activelearning/acquisition/botorch/botorch_multifidelity/#activelearning.acquisition.botorch.botorch_multifidelity.QMultiFidelityKnowledgeGradient) and [`QMultiFidelityLowerBoundMaxValueEntropy`](../reference/activelearning/acquisition/botorch/botorch_multifidelity/#activelearning.acquisition.botorch.botorch_multifidelity.QMultiFidelityLowerBoundMaxValueEntropy). These acquisition functions score candidate-fidelity pairs by expected utility per unit cost $c(x, m)$, balancing information gain against the cost of obtaining it. This cost-normalisation ensures that lower-fidelity queries remain competitive when they provide sufficient information gain relative to their cost.
 
 ### **Selector and Budget**
 
@@ -43,7 +42,7 @@ Lower-fidelity queries support cost-effective allocation: they can fit within th
 
 ## **Fidelity in the Configuration**
 
-Multi-fidelity behaviour is activated by specifying a fidelity cost map (and optionally a confidence map) consistently across the oracle, sampler, and acquisition blocks of the YAML configuration. The sampler uses the cost map to weight its fidelity proposals; the acquisition uses it to normalise utility scores; and the oracle uses it to compute query costs and derive default confidences.
+Multi-fidelity behaviour is activated by specifying a fidelity cost map (and optionally a confidence map) consistently across the YAML blocks for the relevant concrete components, typically [`AugmentedFunctionOracle`](../reference/activelearning/oracle/augmented_function_oracle/#activelearning.oracle.augmented_function_oracle.AugmentedFunctionOracle), [`HypercubeSampler`](../reference/activelearning/sampler/hypercube_sampler/#activelearning.sampler.hypercube_sampler.HypercubeSampler), a q-batch multi-fidelity BoTorch acquisition such as [`QMultiFidelityLowerBoundMaxValueEntropy`](../reference/activelearning/acquisition/botorch/botorch_multifidelity/#activelearning.acquisition.botorch.botorch_multifidelity.QMultiFidelityLowerBoundMaxValueEntropy), and [`CostAwareSelector`](../reference/activelearning/selector/cost_aware_selector/#activelearning.selector.cost_aware_selector.CostAwareSelector). The sampler uses the cost map to weight its fidelity proposals; the acquisition uses it to normalise utility scores; and the oracle uses it to compute query costs and derive default confidences.
 
 For concrete configuration examples, see [Runtime and Configuration](runtime_and_configuration.md) and the [Quickstart](../getting-started/quickstart.md).
 
