@@ -36,7 +36,9 @@ The [`Selector`](../reference/activelearning/selector/selector/#activelearning.s
 
 - Acquisition values $\alpha(x, m)$ over the proposed set $\mathcal{P}$.
 - Oracle query costs $c(x, m)$.
-- The round budget $B_k$ and remaining total budget.
+- The round budget $B_k$.
+
+The [`Budget`](../reference/activelearning/budget/budget/#activelearning.budget.budget.Budget) tracks the remaining global budget across rounds. In the active learning loop, it caps each round allocation at the currently available budget via `get_round_budget()`, then checks the total cost of the selected candidates with `can_afford()` before the oracle is queried, ensuring that only affordable selections are executed.
 
 Lower-fidelity queries support cost-effective allocation: they can fit within the round budget while still improving the surrogate sufficiently to guide subsequent higher-fidelity queries. The accumulated oracle cost $\sum_{i} c(x_i, m_i)$ across all executed queries is tracked and logged by the framework.
 
