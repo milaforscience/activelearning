@@ -30,16 +30,23 @@ framework — a modular, config-driven Python ML framework for budget-constraine
 learning experiments. Your task is to keep the documentation accurate and in sync with
 recent code changes.
 
-## Step 1 — Check for an existing open docs-update PR
+## Step 1 — Find uncovered PRs merged to main
 
-Before doing anything else, check whether an open pull request with the label `documentation`
-and a title starting with `[ai] ` already exists in this repository. If one exists, output
-a **noop** explaining that a docs-update PR is already open and stop.
+Find the newest pull request in this repository with the label `documentation` and a title
+starting with `[ai] ` (check both open and merged PRs). Use its **creation time** as the
+coverage checkpoint — this is the moment up to which code PRs have already been analyzed.
+If no such PR exists, fall back to the current time minus 7 days.
 
-## Step 2 — Find PRs merged to main in the last 7 days
+List all pull requests merged into `main` after the coverage checkpoint. Then exclude any PRs
+already listed as analyzed in the newest docs-update PR's description (if one exists).
 
-List all pull requests merged into `main` within the last 7 days. If none were merged, output
-a **noop** stating there were no merged PRs this week and stop.
+If no uncovered merged PRs remain, output a **noop** and stop.
+
+## Step 2 — If a docs-update PR is already open, prepare to update it
+
+If the newest docs-update PR is still open, you will update its branch later in Step 6 rather
+than opening a new PR. Do **not** stop — an open docs-update PR does not mean newer merged PRs
+are already covered.
 
 ## Step 3 — Collect and filter the diffs
 
@@ -75,8 +82,8 @@ If no update is needed, output a **noop** explaining why and stop.
 
 ## Step 6 — Make the changes and open a PR
 
-Edit the relevant files under `docs/` to reflect the code changes. Then create a pull
-request with those changes.
+Edit the relevant files under `docs/` to reflect the code changes. If an open docs-update PR
+already exists, update that PR branch; otherwise create a new pull request with those changes.
 
 **PR description must include:**
 
