@@ -8,14 +8,14 @@ Most general-purpose active learning libraries share a common design: they opera
 
 | Library | Primary Capabilities | Limitations |
 | --- | --- | --- |
-| **modAL** (Danka & Horvath, 2018) | Pool-based AL, scikit-learn estimators, uncertainty sampling, query-by-committee | Single fidelity; pool-based only; no budget constraints |
-| **scikit-activeml** | Pool-based AL; broad query strategy set; classification and regression | Single fidelity; pool-based only; no scientific discovery focus |
-| **BMDAL_reg** | Batch mode deep AL for regression | Single fidelity; pool-based only; neural networks only |
-| **ALiPy** | Comprehensive pool-based AL toolbox; broad query strategy set | Single fidelity; pool-based only; no multi-fidelity or continuous input support |
-| **libact** | Pool-based AL with active learning by learning | Single fidelity; pool-based only; classification focus |
-| **Baal** ([baal-org/baal](https://github.com/baal-org/baal)) | Bayesian deep AL via Monte Carlo Dropout and ensemble uncertainty; image and text classification loops | Single fidelity; pool-based only; deep learning classifiers/regressors only; no multi-fidelity or de novo synthesis |
+| **modAL** ([modAL-python/modAL](https://github.com/modAL-python/modAL)) | Pool-based AL, scikit-learn estimators, uncertainty sampling, query-by-committee | No multi-fidelity; pool-based only |
+| **scikit-activeml** ([scikit-activeml/scikit-activeml](https://github.com/scikit-activeml/scikit-activeml)) | Pool-based AL; broad query strategy set; classification and regression | No multi-fidelity; pool-based only |
+| **BMDAL_reg** ([dholzmueller/bmdal_reg](https://github.com/dholzmueller/bmdal_reg)) | Batch mode deep AL for regression | No multi-fidelity; pool-based only; neural networks only |
+| **ALiPy** ([NUAA-AL/ALiPy](https://github.com/NUAA-AL/ALiPy)) | Comprehensive pool-based AL toolbox; broad query strategy set | No multi-fidelity; pool-based only |
+| **libact** ([ntucllab/libact](https://github.com/ntucllab/libact)) | Pool-based AL with active learning by learning | No multi-fidelity; pool-based only; classification focus |
+| **Baal** ([baal-org/baal](https://github.com/baal-org/baal)) | Bayesian deep AL via Monte Carlo Dropout and ensemble uncertainty; image and text classification loops | No multi-fidelity; pool-based only; PyTorch models only |
 
- To our knowledge, no existing open-source framework addresses multi-fidelity experimentation, de novo synthesis over continuous or structured spaces, or budget-constrained discovery of diverse high-scoring candidates.
+All libraries listed above share two key limitations: they do not support multi-fidelity queries (querying the same candidate at different cost-accuracy trade-offs), and they are pool or stream-based only (selecting from a pre-enumerated set of candidates rather than generating novel candidates over continuous or structured spaces). To our knowledge, no existing open-source AL framework supports multi-fidelity surrogate modelling over candidate-fidelity pairs $(x, m)$, cost-aware budget accounting that tracks heterogeneous oracle costs $c(x, m)$ rather than simple query counts, or de novo candidate synthesis over continuous and structured input spaces.
 
 ## **Bayesian Optimization Libraries**
 

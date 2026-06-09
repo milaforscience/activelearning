@@ -50,11 +50,11 @@ For concrete configuration examples, see [Runtime and Configuration](runtime_and
 
 ## **Single-Fidelity vs. Multi-Fidelity**
 
-| Dimension | Single-Fidelity | Multi-Fidelity |
-| --- | --- | --- |
-| Query action | Select $x \in \mathcal{X}$ | Select pair $(x, m)$ |
-| Query cost | Uniform | $c(x, m)$ varies by fidelity $m \in \mathcal{M}$ |
-| Surrogate scope | One observation regime | Objective across fidelity levels |
-| Budget role | Limits query count | Constrains query count and fidelity allocation |
+| Dimension | Single-Fidelity            | Multi-Fidelity                                                       |
+| --- |----------------------------|----------------------------------------------------------------------|
+| Query action | Select $x \in \mathcal{X}$ | Select pair $(x, m)$                                                 |
+| Query cost | Uniform                    | $c(x, m)$ varies by fidelity $m \in \mathcal{M}$                     |
+| Surrogate scope | One observation regime     | Objective across fidelity levels                                     |
+| Budget role | Constrains query costs     | Constrains query costs considering allocation across fidelity levels |
 
 For concrete configuration examples, see the [Synthetic Function Examples](../tutorials/synthetic_function_experiment.md) tutorial, which walks through both settings side by side.
