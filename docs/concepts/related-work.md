@@ -1,6 +1,6 @@
 # **Related Work and Positioning**
 
-The Multi-Fidelity Active Learning framework, described in Hernandez-Garcia et al. (2024), addresses a combination of research objectives not covered by existing active learning or Bayesian optimization libraries. The sections below identify the nearest related systems and characterize the specific gaps this framework fills.
+This Multi-Fidelity Active Learning framework addresses a combination of research objectives not covered by existing active learning or Bayesian optimization libraries. The sections below identify the nearest related systems and characterize the specific gaps this framework fills.
 
 ## **Existing Active Learning Frameworks**
 
