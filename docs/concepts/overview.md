@@ -8,7 +8,7 @@ Let $x \in \mathcal{X}$ denote a candidate within the object space, and let $m \
 
 Each query $(x, m)$ executed by the framework:
 
-- Incurs a computational or oracle cost $c(x, m)$ dependent on the fidelity $m$.
+- Incurs a computational or oracle cost $c(x, m)$ dependent on the candidate $x$ and fidelity $m$.
 - Returns an observation $y$ evaluated at the requested fidelity.
 - Updates the surrogate model to inform subsequent rounds.
 
