@@ -61,10 +61,6 @@ The framework is flexible enough to support classical pool-based active learning
 !!! info "Why de novo synthesis for scientific discovery?"
     In scientific discovery settings — materials design, drug discovery, automated experimentation — frequently no exhaustive candidate pool exists upfront. The goal is also not global prediction accuracy, but to isolate a diverse set of candidates with high objective values. *De novo* synthesis is therefore the paradigm of primary interest for these use cases.
 
-## **Relationship to Standard Optimization Paradigms**
-
-This framework synthesises Bayesian Optimization (BO), Active Learning, and Active Search: it uses BO-style surrogates and acquisitions within an iterative active learning loop, pursuing diversity among high-scoring candidates (as in active search), all bounded by multi-fidelity budget constraints.
-
 For a more detailed discussion of how this framework relates to prior work, see [Related Work and Positioning](related-work.md).
 
 ## **Suggested Reading Order**
