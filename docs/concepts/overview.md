@@ -52,7 +52,7 @@ The underlying execution architecture remains invariant across single-fidelity a
 - In **multi-fidelity** mode, $m$ becomes an explicit decision variable, and the acquisition function must weigh the cost-utility trade-off of querying $(x, m)$ pairs.
 
 !!! tip "Same config structure for both settings"
-    The same YAML schema works for both settings. Adding fidelity levels is as simple as extending `oracle.fidelity_costs` and `sampler.fidelities`. The [Synthetic Function Examples](../tutorials/synthetic_function_experiment.md) tutorial walks through both side-by-side.
+    The same YAML schema works for both settings, provided you use multi-fidelity-compatible components. When doing so, extending `oracle.fidelity_costs` and `sampler.fidelities` is all that is required. Note that some components are single-fidelity only — for example, `TopKAcquisitionSelector` ignores cost entirely and should be replaced by `CostAwareSelector` in a multi-fidelity setting; similarly, analytic acquisition functions (e.g. `UpperConfidenceBound`, `ExpectedImprovement`) do not support multi-fidelity, and a dedicated multi-fidelity acquisition such as `QMultiFidelityLowerBoundMaxValueEntropy` must be used instead. The [Synthetic Function Examples](../tutorials/synthetic_function_experiment.md) tutorial walks through both side-by-side.
 
 ## **Pool-Based Learning vs. *De Novo* Query Synthesis**
 
