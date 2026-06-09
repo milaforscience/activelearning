@@ -32,14 +32,14 @@ This decomposition guarantees experimental isolation: researchers can independen
 
 ## **Component Architecture**
 
-| Component | Methodological Role | Operational Objective |
-| --- | --- | --- |
+| Component | Methodological Role  | Operational Objective |
+| --- |----------------------| --- |
 | **Dataset** | State ($\mathcal{D}$) | Records observed candidate-fidelity queries and their outcomes. |
-| **Surrogate** | Probabilistic model | Computes the predictive distribution over $(x, m)$ pairs. |
-| **Acquisition** | Utility function | Quantifies the cost-aware expected utility of proposed queries. |
-| **Sampler** | Proposal mechanism | Generates a tractable set of candidate-fidelity pairs for evaluation. |
-| **Selector** | Budget-aware filter | Subsets proposed queries to satisfy per-iteration budget constraints. |
-| **Oracle** | Black-box evaluator | Evaluates the objective $f(x)$ at fidelity $m$, realizing cost $c(x, m)$. |
+| **Surrogate** | Multi-fidelity probabilistic model of the oracle | Computes the predictive distribution over $(x, m)$ pairs. |
+| **Acquisition** | Utility function     | Quantifies the cost-aware expected utility of proposed queries. |
+| **Sampler** | Proposal mechanism   | Generates a tractable set of candidate-fidelity pairs for evaluation. |
+| **Selector** | Budget-aware filter  | Subsets proposed queries to satisfy per-iteration budget constraints. |
+| **Oracle** | Black-box evaluator  | Evaluates the objective $f(x)$ at fidelity $m$, realizing cost $c(x, m)$. |
 | **Budget** | Constraint scheduler | Enforces strict per-iteration and total computational cost limits. |
 | **Logger** | Experiment telemetry | Persists runtime metrics, model artifacts, and configurations. |
 | **Runtime Context** | Infrastructure state | Synchronizes device (`cuda`/`cpu`) and tensor dtypes across modules. |
