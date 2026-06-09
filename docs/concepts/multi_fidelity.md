@@ -56,6 +56,5 @@ For concrete configuration examples, see [Runtime and Configuration](runtime_and
 | Query cost | Uniform | $c(x, m)$ varies by fidelity $m \in \mathcal{M}$ |
 | Surrogate scope | One observation regime | Objective across fidelity levels |
 | Budget role | Limits query count | Constrains query count and fidelity allocation |
-| Search strategy | Targets best-so-far improvement | Mixes fidelities for cost-effective discovery |
 
 For concrete configuration examples, see the [Synthetic Function Examples](../tutorials/synthetic_function_experiment.md) tutorial, which walks through both settings side by side.
