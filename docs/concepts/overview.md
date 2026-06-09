@@ -54,12 +54,12 @@ The underlying execution architecture remains invariant across single-fidelity a
 !!! tip "Same config structure for both settings"
     The same YAML schema works for both settings, provided you use multi-fidelity-compatible components. When doing so, extending `oracle.fidelity_costs` and `sampler.fidelities` is all that is required. Note that some components are single-fidelity only — for example, `TopKAcquisitionSelector` ignores cost entirely and should be replaced by `CostAwareSelector` in a multi-fidelity setting; similarly, analytic acquisition functions (e.g. `UpperConfidenceBound`, `ExpectedImprovement`) do not support multi-fidelity, and a dedicated multi-fidelity acquisition such as `QMultiFidelityLowerBoundMaxValueEntropy` must be used instead. The [Synthetic Function Examples](../tutorials/synthetic_function_experiment.md) tutorial walks through both side-by-side.
 
-## **Pool-Based Learning vs. *De Novo* Query Synthesis**
+## **Pool-Based, Stream-Based, and *De Novo* Query Synthesis**
 
-Classical active learning typically selects from a finite, pre-computed pool of unlabelled candidates. This framework instead performs ***de novo* query synthesis**: the algorithm generates and evaluates samples directly from the continuous or combinatorially large object space $\mathcal{X}$.
+The framework is flexible enough to support classical pool-based active learning (selecting from a finite pre-computed candidate set), stream-based active learning (deciding whether to label each incoming candidate), or ***de novo* query synthesis** (generating candidates directly from the object space $\mathcal{X}$). The sampler abstraction is the key: it can draw proposals from a fixed pool, a data stream, or synthesize them from scratch.
 
-!!! info "Why de novo synthesis?"
-    In scientific discovery settings — materials design, drug discovery, automated experimentation — no exhaustive candidate pool exists upfront. The goal is also not global prediction accuracy, but to isolate a diverse set of candidates with maximised objective values. *De novo* synthesis is the right paradigm for this.
+!!! info "Why de novo synthesis for scientific discovery?"
+    In scientific discovery settings — materials design, drug discovery, automated experimentation — frequently no exhaustive candidate pool exists upfront. The goal is also not global prediction accuracy, but to isolate a diverse set of candidates with high objective values. *De novo* synthesis is therefore the paradigm of primary interest for these use cases.
 
 ## **Relationship to Standard Optimization Paradigms**
 
