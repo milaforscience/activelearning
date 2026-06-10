@@ -1,12 +1,12 @@
 # **Adding a New Selector**
 
 Selectors choose the final subset of candidates from the pool the sampler
-produces. A selector implements the **round budget allocation policy**. Implement a new
-selector to:
+produces. A selector implements the **within-round candidate selection policy**
+under the round budget provided by `Budget`. Implement a new selector to:
 
 - Apply custom constraints (diversity, domain rules, batch coverage).
-- Implement a new budget allocation policy (fractional fidelity budget, risk
-  thresholds).
+- Implement a new feasibility/ranking policy under a round budget (fractional
+  fidelity spending, risk thresholds).
 - Mix cost awareness with acquisition scoring in a custom way.
 
 Before implementing a new selector, verify that [`TopKAcquisitionSelector`](../reference/activelearning/selector/score_selector/#activelearning.selector.score_selector.TopKAcquisitionSelector) or
