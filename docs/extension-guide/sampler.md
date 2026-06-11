@@ -68,8 +68,14 @@ fidelity = random.choice([0, 1])
 candidates.append(Candidate(x=x, fidelity=fidelity))
 ```
 
-The fidelity ids you stamp must match exactly the ids declared in the oracle's
-`get_fidelity_confidences()`. A mismatch causes a `ValueError` at query time.
+The convention is to keep fidelity ids consistent in config:
+define the oracle-supported ids under `oracle.fidelity_costs` (or your oracle's
+equivalent config) and configure the sampler to emit that same set (for
+example via `sampler.fidelities` or custom sampler init/config fields). This
+keeps `Candidate.fidelity` aligned with the ids declared by the oracle's
+`get_fidelity_confidences()`; mismatches raise a `ValueError` at query time.
+The bundled multi-fidelity configs follow this pattern (e.g.,
+`config/branin_multi_fidelity.yaml` and `config/hartmann_multi_fidelity.yaml`).
 See the [Oracle guide](oracle.md#fidelity-id-alignment-with-the-sampler) for
 details.
 
