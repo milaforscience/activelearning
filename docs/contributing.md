@@ -23,17 +23,16 @@ cd activelearning
 ### **Local setup**
 
 This project uses [`uv`](https://docs.astral.sh/uv/) for dependency management.
-A single command installs `uv` (if missing), syncs all development dependencies,
-and registers the pre-commit hooks:
-
-```sh
-make setup
-```
-
 If `uv` is not on your `PATH` yet, install it first:
 
 ```sh
 make install-uv
+```
+
+Then sync all development dependencies and register the pre-commit hooks:
+
+```sh
+make setup
 ```
 
 ### **Verify the setup**
