@@ -123,6 +123,21 @@ class Oracle(ABC, ALRuntimeMixin):
         pass
 
     @abstractmethod
+    def get_min_query_cost(self) -> float:
+        """Return the minimum cost of a single oracle query.
+
+        This is the cheapest possible cost to query one candidate at any
+        supported fidelity level. Used for budget validation to ensure
+        every round can afford at least one query.
+
+        Returns
+        -------
+        min_cost : float
+            Minimum cost for a single query across all fidelity levels.
+        """
+        pass
+
+    @abstractmethod
     def get_costs(self, candidates: Sequence[Candidate]) -> list[float]:
         """Calculate the cost of querying each candidate.
 

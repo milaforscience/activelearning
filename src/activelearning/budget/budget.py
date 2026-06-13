@@ -43,6 +43,54 @@ class Budget(ALRuntimeMixin):
         self.available_budget = available_budget
         self.schedule = schedule
 
+    def validate_schedule(self, min_query_cost: float) -> None:
+        """Validate that every round's budget can afford at least one query.
+
+        Infers the number of active rounds by iterating the schedule until it
+        returns 0 (out-of-range signal) or cumulative allocations exceed
+        ``available_budget``. Call this at experiment setup time to fail fast
+        when the schedule would produce rounds too cheap to query anything.
+
+        Parameters
+        ----------
+        min_query_cost : float
+            Cheapest possible single oracle query cost. The schedule must
+            allocate at least this much budget for every round.
+
+        Raises
+        ------
+        ValueError
+            If any round's scheduled allocation is less than
+            ``min_query_cost``.
+        """
+        underfunded_rounds = []
+        cumulative = 0.0
+        i = 0
+
+        while True:
+            allocation = self.schedule(i)
+            if allocation <= 0.0:
+                break
+            cumulative += allocation
+            if cumulative > self.available_budget:
+                break
+            if allocation < min_query_cost:
+                underfunded_rounds.append((i, allocation))
+            i += 1
+
+        if underfunded_rounds:
+            rounds_str = ", ".join(
+                f"round {r} (budget={b:.4g})" for r, b in underfunded_rounds
+            )
+            raise ValueError(
+                f"Budget schedule assigns less than the minimum oracle query "
+                f"cost ({min_query_cost:.4g}) for: {rounds_str}. "
+                f"The experiment would terminate prematurely because no oracle "
+                f"query can be afforded in these rounds. Adjust the schedule "
+                f"parameters so that every round receives at least "
+                f"{min_query_cost:.4g} budget."
+            )
+
     def get_round_budget(self, current_round: int) -> float:
         """Calculate the budget allocated for a specific active learning round.
 

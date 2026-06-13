@@ -233,7 +233,7 @@ def test_cli_separates_overrides_from_config_paths(base_config, acquisition_conf
     """
     from activelearning.main import main
 
-    override = "budget.available_budget=0.001"
+    override = "budget.available_budget=0.02"
 
     with patch.object(
         sys,

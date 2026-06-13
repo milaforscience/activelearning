@@ -220,3 +220,43 @@ def test_can_afford_no_side_effects():
 
     # Budget should remain unchanged
     assert budget.available_budget == initial_budget
+
+
+class TestValidateSchedule:
+    """Tests for Budget.validate_schedule method."""
+
+    def test_valid_schedule_passes(self):
+        """Schedule with sufficient allocations should not raise."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+        # No exception expected
+        budget.validate_schedule(min_query_cost=5.0)
+
+    def test_underfunded_round_raises(self):
+        """Schedule with a round below min_query_cost should raise."""
+
+        # Schedule: round 0 gets 1.0, rounds 1-9 get 10.0 each (total 91)
+        def stingy_start(r: int) -> float:
+            if r >= 10:
+                return 0.0
+            return 1.0 if r == 0 else 10.0
+
+        budget = Budget(available_budget=91.0, schedule=stingy_start)
+        with pytest.raises(ValueError, match="less than the minimum oracle query cost"):
+            budget.validate_schedule(min_query_cost=5.0)
+
+    def test_all_rounds_underfunded_raises(self):
+        """Schedule where every round is below min cost should raise."""
+
+        # 100 rounds of 0.5 each, but schedule signals end after that
+        def low_schedule(r: int) -> float:
+            return 0.5 if r < 200 else 0.0
+
+        budget = Budget(available_budget=100.0, schedule=low_schedule)
+        with pytest.raises(ValueError, match="less than the minimum oracle query cost"):
+            budget.validate_schedule(min_query_cost=1.0)
+
+    def test_exact_min_cost_passes(self):
+        """Schedule allocating exactly min_query_cost should pass."""
+        budget = Budget(available_budget=50.0, schedule=lambda r: 5.0)
+        # Should not raise — exactly at the threshold
+        budget.validate_schedule(min_query_cost=5.0)

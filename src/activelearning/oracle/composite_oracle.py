@@ -187,6 +187,16 @@ class CompositeOracle(Oracle):
             candidates, lambda oracle, group: oracle.get_costs(group)
         )
 
+    def get_min_query_cost(self) -> float:
+        """Return the minimum query cost across all sub-oracles.
+
+        Returns
+        -------
+        min_cost : float
+            Cheapest single-query cost among all sub-oracles.
+        """
+        return min(oracle.get_min_query_cost() for oracle in self._sub_oracles)
+
     def query(self, candidates: Sequence[Candidate]) -> Sequence[Observation]:
         """Query sub-oracles for labels, routing by fidelity.
 
