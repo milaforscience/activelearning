@@ -47,7 +47,28 @@ make check && make test && make docs-build
 
 ## **2. Coding Conventions**
 
-Consistent, readable code reduces maintenance burden and simplifies review.
+Consistent, readable code reduces the maintenance burden and simplifies review.
+
+### **Code style and linting**
+
+This project uses [Ruff](https://docs.astral.sh/ruff/) for both formatting and linting (replacing `black`, `flake8`, and `isort`).
+
+**Formatting** follows [Black](https://black.readthedocs.io/)-compatible style:
+
+- Maximum line length: **88 characters**
+- Double quotes for strings
+- Trailing commas in multi-line expressions
+
+**Linting** enforces the default Ruff rule sets:
+
+- [`E` / `W`](https://docs.astral.sh/ruff/rules/#pycodestyle-e-w) — [PEP 8](https://peps.python.org/pep-0008/) style errors and warnings (pycodestyle)
+- [`F`](https://docs.astral.sh/ruff/rules/#pyflakes-f) — undefined names, unused imports, and similar issues (Pyflakes)
+
+The hooks run on every commit, but you can trigger them manually at any time:
+
+```sh
+make check
+```
 
 ### **Type hints**
 
