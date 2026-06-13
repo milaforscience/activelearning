@@ -92,10 +92,6 @@ Any oracle call inside the selector corrupts budget accounting.
 **Do not double-count budget** — the loop deducts costs after oracle query. The
 selector's job is to check feasibility, not to deduct.
 
-**`candidate.x` shape** — `Candidate.x` can be any type (list, numpy array,
-tensor). Normalize to a plain list before arithmetic comparisons if you are not
-sure of the upstream sampler's output format.
-
 ## **Related pages**
 
 - [Sampler guide](sampler.md) — how the candidate pool is generated
