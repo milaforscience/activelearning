@@ -89,9 +89,6 @@ it assigns — keep them consistent).
 input candidate, in the exact same order. Never sort, group, or filter the
 input list before building your return list.
 
-**Budget** — `query()` must not check or modify the budget. Budget tracking
-happens in the loop; your oracle only observes.
-
 **Runtime tensors** — build tensors inside `query()`, not in `__init__()`.
 Use `self.dtype` and `self.device` so the runtime binding takes effect.
 
