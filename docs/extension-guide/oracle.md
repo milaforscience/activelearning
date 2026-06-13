@@ -1,12 +1,17 @@
 # **Adding a New Oracle**
 
-An oracle implements the ground-truth evaluation function $f(x, m)$ at each fidelity level $m \in \mathcal{M}$. Implement a new oracle subclass to:
+An oracle implements the ground-truth evaluation function $f(x, m)$ for one or more supported fidelity levels $m \subseteq \mathcal{M}$. Implement a new oracle subclass to:
 
 - Wrap a new simulator, benchmark function, or lab instrument.
 - Define a different fidelity structure (different levels, costs, or confidences).
 - Implement a custom routing rule for multi-fidelity queries.
 
-If you only need to **combine** existing oracles across fidelity levels, see
+A single oracle does not need to cover every fidelity level. The experiment's
+top-level `oracle` configuration, however, must collectively support all fidelity
+levels used during the run. You can achieve this with a single oracle that covers
+all levels, or by using a `CompositeOracle` to combine several oracles that each
+cover a subset. If you only need to **combine** existing oracles across fidelity
+levels, see
 [Using CompositeOracle](#using-compositeoracle-instead-of-building-from-scratch)
 before writing a new class.
 
