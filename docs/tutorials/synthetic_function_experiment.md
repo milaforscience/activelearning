@@ -51,11 +51,11 @@ Each line represents one active learning round. The fields are:
 
 | Field | Meaning |
 | --- | --- |
-| `round` | Round index |
-| `num_new_samples` | Candidates queried this round |
-| `round_cost` | Budget consumed this round |
-| `total_cost` | Total budget consumed so far |
-| `budget_remaining` | Budget still available |
+| `round` | Active learning round index |
+| `num_new_samples` | Candidates queried in that round |
+| `round_cost` | Budget consumed in that round |
+| `total_cost` | Cumulative budget consumed across all rounds so far |
+| `budget_remaining` | Total budget still available |
 
 Once the run looks right, drop the budget override to run the full experiment:
 
