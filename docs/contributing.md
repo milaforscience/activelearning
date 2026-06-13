@@ -271,7 +271,7 @@ need a local build.
 ### **Terminology**
 
 Keep all user-facing text aligned with the [Methodology](concepts/overview.md)
-section (see also [Research-Facing Contributions](#9-research-facing-contributions) below).
+section (see also [Research-Facing Contributions](#8-research-facing-contributions) below).
 
 ---
 

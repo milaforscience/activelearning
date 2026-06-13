@@ -115,5 +115,5 @@ expressed as independent sub-oracles.
 ## **Related pages**
 
 - [Sampler guide](sampler.md) — aligning fidelity ids with the sampler
-- [Extension guide overview](index.md)
+- [Extension guide overview](overview.md)
 - [Oracle API](../reference/activelearning/oracle/oracle/)

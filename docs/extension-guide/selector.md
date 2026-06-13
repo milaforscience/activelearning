@@ -96,5 +96,5 @@ selector's job is to check feasibility, not to deduct.
 
 - [Sampler guide](sampler.md) — how the candidate pool is generated
 - [Acquisition guide](acquisition.md) — how `score()` works
-- [Extension guide overview](index.md)
+- [Extension guide overview](overview.md)
 - [Selector API](../reference/activelearning/selector/selector/)

@@ -115,5 +115,5 @@ a lazy generator. Never hold a reference to the generator and iterate it later.
 
 - [Oracle guide](oracle.md) — aligning fidelity ids
 - [Selector guide](selector.md) — what happens to the candidate pool after sampling
-- [Extension guide overview](index.md)
+- [Extension guide overview](overview.md)
 - [Sampler API](../reference/activelearning/sampler/sampler/)

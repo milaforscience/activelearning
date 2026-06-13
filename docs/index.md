@@ -26,7 +26,7 @@ Every core component in this loop is designed to be strictly modular. This means
 
 <div class="grid cards" markdown>
 
--   :material-download-circle:{ .lg .middle } **Install & Run**
+-   :material-download-circle:{ .lg .middle } [**Install & Run**](getting-started/installation.md)
 
     ---
 
@@ -35,7 +35,7 @@ Every core component in this loop is designed to be strictly modular. This means
     [:octicons-arrow-right-24: Installation](getting-started/installation.md)
     · [Quickstart](getting-started/quickstart.md)
 
--   :material-book-open-variant:{ .lg .middle } **Understand the Framework**
+-   :material-book-open-variant:{ .lg .middle } [**Understand the Framework**](concepts/overview.md)
 
     ---
 
@@ -45,7 +45,7 @@ Every core component in this loop is designed to be strictly modular. This means
     · [Active Learning Loop](concepts/active_learning_loop.md)
     · [Multi-Fidelity Setting](concepts/multi_fidelity.md)
 
--   :material-puzzle-edit:{ .lg .middle } **Extend to Your Use Case**
+-   :material-puzzle-edit:{ .lg .middle } [**Extend to Your Use Case**](extension-guide/overview.md)
 
     ---
 
@@ -54,7 +54,7 @@ Every core component in this loop is designed to be strictly modular. This means
     [:octicons-arrow-right-24: Extension Guide](extension-guide/overview.md)
     · [API Reference](reference/)
 
--   :material-flask-outline:{ .lg .middle } **Run Experiments**
+-   :material-flask-outline:{ .lg .middle } [**Run Experiments**](tutorials/synthetic_function_experiment.md)
 
     ---
 
