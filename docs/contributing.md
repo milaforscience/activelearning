@@ -312,7 +312,7 @@ A complete description addresses three questions:
 
 ---
 
-## **8. Reporting Issues and Requesting Features**
+## **Reporting Issues and Requesting Features**
 
 ### **Bug reports**
 
@@ -334,15 +334,13 @@ Describe:
 
 ---
 
-## **9. Research-Facing Contributions**
+## **8. Research-Facing Contributions**
 
 For methodology, benchmark, and paper-replication changes, keep terminology aligned with
 the [Methodology](concepts/overview.md) and paper-replication pages:
 
 - Describe explicit multi-fidelity actions as candidate-fidelity queries `(x, m)`.
 - Describe spend as **oracle cost** or **accumulated oracle cost**.
-- Use terms such as **study**, **run**, **runnable baseline**, and **scaffold** when they
-  match the current implementation status.
 - When referencing acquisition functions or surrogate models, use the names defined in
   the API reference rather than informal shorthand.
 
