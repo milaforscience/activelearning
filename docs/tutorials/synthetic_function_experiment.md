@@ -88,8 +88,8 @@ uv run activelearning config/branin_multi_fidelity.yaml \
 The terminal output looks the same, but the numbers will differ:
 
 ```text
-[Step 1] round=1 | num_new_samples=2999 | round_cost=29.9900 | total_cost=29.9900 | budget_remaining=0.0100
-Done. Rounds: 1 | Total cost: 29.9900
+[Step 1] round=1 | num_new_samples=3000 | round_cost=30.0000 | total_cost=30.0000 | budget_remaining=0.0000
+Done. Rounds: 1 | Total cost: 30.0000
 ```
 
 !!! info "What changed with multi-fidelity?"

@@ -6,6 +6,10 @@ from activelearning.runtime import ALRuntimeMixin
 
 logger = logging.getLogger(__name__)
 
+# Absolute tolerance for budget comparisons to guard against floating-point
+# accumulation drift (e.g. sum of many small costs slightly exceeding budget).
+_BUDGET_ATOL = 1e-9
+
 
 class Budget(ALRuntimeMixin):
     """Manages budget allocation and consumption for active learning rounds.
@@ -132,14 +136,14 @@ class Budget(ALRuntimeMixin):
         Raises
         ------
         ValueError
-            If cost exceeds available_budget.
+            If cost exceeds available_budget beyond floating-point tolerance.
         """
-        if cost > self.available_budget:
+        if cost > self.available_budget + _BUDGET_ATOL:
             raise ValueError(
                 f"Cost {cost:.2f} exceeds available budget {self.available_budget:.2f}"
             )
 
-        self.available_budget -= cost
+        self.available_budget = max(0.0, self.available_budget - cost)
 
     def can_afford(self, cost: float) -> bool:
         """Check if the given cost can be afforded within available budget.
@@ -157,4 +161,4 @@ class Budget(ALRuntimeMixin):
         can_afford : bool
             True if cost <= available_budget, False otherwise.
         """
-        return cost <= self.available_budget
+        return cost <= self.available_budget + _BUDGET_ATOL
