@@ -16,9 +16,9 @@ Before implementing a new selector, verify that [`TopKAcquisitionSelector`](../r
 
 Subclass `activelearning.selector.selector.Selector` and implement one method:
 
-| Method | Signature |
-|---|---|
-| `__call__` | `(candidates, acquisition=None, cost_fn=None, round_budget=None) -> list[Candidate]` |
+| Method | Required? | Notes |
+|---|---|---|
+| `__call__(candidates, acquisition=None, cost_fn=None, round_budget=None)` | **Yes** | Returns `list[Candidate]` — a subset of the input candidates |
 
 Return a **subset** of the input candidates — including an empty list if no candidates are feasible. Never query the oracle, compute
 observations, or modify the budget inside the selector.

@@ -15,9 +15,9 @@ are:
 
 | Method | Required? | Notes |
 |---|---|---|
-| `update(surrogate, observations)` | Recommended | Cache the surrogate; validate compatibility |
-| `score(candidates)` | For singleton scoring | Returns `list[float]` |
-| `score_batches(candidate_batches)` | For batch scoring | Returns `list[float]` per batch |
+| `update(surrogate, observations)` | **Recommended** | Cache the surrogate; validate compatibility |
+| `score(candidates)` | **For singleton scoring** | Returns `list[float]` — one utility score per candidate |
+| `score_batches(candidate_batches)` | **For batch scoring** | Returns `list[float]` — one utility score per batch |
 
 Implement `score()` for independent per-candidate scoring, `score_batches()`
 for joint batch utility, or both. The `supports_singleton_scoring` and

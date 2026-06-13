@@ -14,11 +14,11 @@ before writing a new class.
 
 Subclass `activelearning.oracle.oracle.Oracle` and implement three methods:
 
-| Method | Purpose |
-|---|---|
-| `get_fidelity_confidences()` | Returns a dict mapping each fidelity id to a confidence in `[0, 1]` |
-| `get_costs(candidates)` | Returns one cost per input candidate (same order) |
-| `query(candidates)` | Returns one [`Observation`](../reference/activelearning/utils/types/#activelearning.utils.types.Observation) per input candidate (same order) |
+| Method | Required? | Notes |
+|---|---|---|
+| `get_fidelity_confidences()` | **Yes** | Returns `dict[int, float]` — maps each fidelity id to a confidence in `[0, 1]` |
+| `get_costs(candidates)` | **Yes** | Returns `list[float]` — one cost per input candidate, in the same order |
+| `query(candidates)` | **Yes** | Returns `list[Observation]` — one [`Observation`](../reference/activelearning/utils/types/#activelearning.utils.types.Observation) per input candidate, in the same order |
 
 ## **Reference implementations**
 

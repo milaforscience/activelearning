@@ -15,9 +15,9 @@ Before implementing a new sampler, verify that [`HypercubeSampler`](../reference
 
 Subclass `activelearning.sampler.sampler.Sampler` and implement one method:
 
-| Method | Signature |
-|---|---|
-| `sample` | `(acquisition=None, observations=None) -> list[Candidate]` |
+| Method | Required? | Notes |
+|---|---|---|
+| `sample(acquisition=None, observations=None)` | **Yes** | Returns `list[Candidate]` — the proposed candidate pool for the selector |
 
 Both arguments are optional — your sampler may ignore either or both.
 

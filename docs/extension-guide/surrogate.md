@@ -23,7 +23,7 @@ or should implement depend on your update strategy:
 | `updates_from_latest()` | **Yes** | Declares loop behavior: `False` = full refit, `True` = incremental |
 | `fit(observations)` | If `updates_from_latest()` returns `False` | Full refit on all observations |
 | `update(observations)` | If `updates_from_latest()` returns `True` | Incremental update from latest batch |
-| `predict(candidates)` | If acquisition uses `predict()` | Returns `dict` with at least `"mean"` key |
+| `predict(candidates)` | If acquisition uses `predict()` | Returns `dict` — must include at least a `"mean"` key |
 | `is_fitted()` | If unsafe before training | Override to return `False` until first fit |
 | `set_fidelity_confidences(confidences)` | For multi-fidelity surrogates | Called before `fit()` / `update()` |
 
