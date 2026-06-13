@@ -7,7 +7,8 @@ surrogate subclass to:
 - Use a different model family (neural network, random forest, ensemble).
 - Wrap an external library (scikit-learn, GPyTorch custom kernel, JAX model).
 - Implement incremental or online updates.
-- Control fidelity-weighted training data.
+- Customize how observations from different fidelity levels are encoded and
+  weighted during model fitting.
 
 Before implementing a new surrogate, verify that [`DummyMeanSurrogate`](../reference/activelearning/surrogate/dummy_mean_surrogate/#activelearning.surrogate.dummy_mean_surrogate.DummyMeanSurrogate) (for
 baselines) or [`BoTorchGPSurrogate`](../reference/activelearning/surrogate/botorch_surrogate/#activelearning.surrogate.botorch_surrogate.BoTorchGPSurrogate) (for GP-based work) does not already meet your
