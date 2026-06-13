@@ -34,6 +34,7 @@ The key output fields are:
 | `round` | Active learning round index |
 | `num_new_samples` | Candidates queried in that round |
 | `round_cost` | Budget consumed in that round |
+| `total_cost` | Cumulative budget consumed across all rounds so far |
 | `budget_remaining` | Total budget still available |
 
 ## **Scale up**
