@@ -17,6 +17,21 @@ before writing a new class.
 
 ## **What to implement**
 
+### Choosing a base class
+
+| Approach | When to use |
+|---|---|
+| Subclass `Oracle` directly | You need full control over cost logic (e.g., candidate-dependent costs) or scoring behaviour that `MultiFidelityOracle` does not support. |
+| Subclass `MultiFidelityOracle` | Each fidelity level has a **constant cost per sample** and can be described by a simple `score_fn` callable. This avoids re-implementing `get_costs`, `get_min_query_cost`, and `query`. |
+| Use `CompositeOracle` (no new class) | You already have oracle classes that each cover a subset of fidelity levels and want to combine them into a single oracle that covers all levels. `CompositeOracle` merges their supported fidelities and routes candidates to the cheapest sub-oracle per level. |
+
+`MultiFidelityOracle` is a convenience subclass of `Oracle`. Because it assumes a
+fixed `cost_per_sample` per fidelity level and a stateless `score_fn`, it is not
+suitable when costs depend on the candidate itself or when querying requires
+shared state across fidelity levels. In those cases, subclass `Oracle` directly.
+
+### Required methods (when subclassing `Oracle`)
+
 Subclass `activelearning.oracle.oracle.Oracle` and implement three methods:
 
 | Method | Required? | Notes |
