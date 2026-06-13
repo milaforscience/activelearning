@@ -96,8 +96,10 @@ the framework as reference.
 
 **Materializing `observations`** — the `observations` parameter in `update()` may be a one-pass generator. Convert it to a list immediately if you need to iterate it more than once.
 
-**Never call `surrogate.predict()` in `update()`** — `update()` is for caching
-state, not scoring. Predict inside `score()` or `score_batches()` instead.
+**Avoid calling `surrogate.predict()` in `update()`** — `update()` receives the
+surrogate but not the candidates to score, so there is nothing meaningful to
+predict yet. Cache the surrogate in `update()` and call `predict()` inside
+`score()` or `score_batches()` where candidates are available.
 
 **Null surrogate guard** — `self.surrogate` is `None` before `update()` has
 been called. Return neutral scores (e.g. `[0.0] * n`) when the surrogate is
