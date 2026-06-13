@@ -57,7 +57,7 @@ Each line represents one active learning round. The fields are:
 | `total_cost` | Cumulative budget consumed across all rounds so far |
 | `budget_remaining` | Total budget still available |
 
-Once the run looks right, drop the budget override to run the full experiment:
+Once you've confirmed the run completes successfully, drop the budget override to run the full experiment:
 
 ```sh
 uv run activelearning config/branin_single_fidelity.yaml

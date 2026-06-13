@@ -39,7 +39,7 @@ The key output fields are:
 
 ## **Scale up**
 
-Once the first run looks right, remove the budget override to run the full experiment:
+Once you've confirmed the run completes successfully, remove the budget override to run the full experiment:
 
 ```bash
 uv run activelearning config/branin_single_fidelity.yaml
