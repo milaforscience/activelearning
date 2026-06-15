@@ -6,6 +6,7 @@ extreme-but-valid steepness values.
 
 import pytest
 
+from activelearning.budget.budget import Budget
 from activelearning.budget.budget_schedule import sigmoid_iteration_schedule
 
 
@@ -53,6 +54,10 @@ class TestSigmoidIterationSchedule:
         allocations = [schedule(i) for i in range(10)]
         assert any(a == 0.0 for a in allocations)
         assert sum(allocations) == pytest.approx(100.0, rel=1e-6)
+
+        budget = Budget(available_budget=100.0, schedule=schedule)
+        with pytest.raises(ValueError, match="less than the minimum oracle query cost"):
+            budget.validate_schedule(min_query_cost=1.0)
 
     def test_near_zero_steepness_falls_back_to_uniform(self):
         """When steepness is so small that all CDF increments are zero,

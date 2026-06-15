@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 # Absolute tolerance for budget comparisons to guard against floating-point
 # accumulation drift (e.g. sum of many small costs slightly exceeding budget).
 _BUDGET_ATOL = 1e-9
+_SCHEDULE_VALIDATION_MAX_ROUNDS = 1_000_000
 
 
 class Budget(ALRuntimeMixin):
@@ -50,10 +51,12 @@ class Budget(ALRuntimeMixin):
     def validate_schedule(self, min_query_cost: float) -> None:
         """Validate that every round's budget can afford at least one query.
 
-        Infers the number of active rounds by iterating the schedule until it
-        returns 0 (out-of-range signal) or cumulative allocations exceed
-        ``available_budget``. Call this at experiment setup time to fail fast
-        when the schedule would produce rounds too cheap to query anything.
+        Infers the number of active rounds by iterating the schedule until the
+        cumulative allocation covers ``available_budget`` or the schedule is
+        deemed exhausted (first non-positive value after at least one positive
+        round). Call this at experiment setup time to fail fast when the
+        schedule would produce rounds too cheap to query anything or cannot
+        cover the configured budget.
 
         Parameters
         ----------
@@ -66,21 +69,25 @@ class Budget(ALRuntimeMixin):
         ValueError
             If any round's scheduled allocation is less than
             ``min_query_cost``.
+        ValueError
+            If the schedule cannot cover ``available_budget``.
         """
-        underfunded_rounds = []
+        underfunded_rounds: list[tuple[int, float]] = []
         cumulative = 0.0
-        i = 0
 
-        while True:
+        for i in range(_SCHEDULE_VALIDATION_MAX_ROUNDS):
             allocation = self.schedule(i)
-            if allocation <= 0.0:
-                break
-            cumulative += allocation
-            if cumulative > self.available_budget:
-                break
+
             if allocation < min_query_cost:
+                # Oracle cannot query with less than min_query_cost,
+                # so this budget is effectively unusable.
                 underfunded_rounds.append((i, allocation))
-            i += 1
+            else:
+                cumulative += allocation
+
+            # Covered full budget — no need to scan further
+            if cumulative >= self.available_budget - _BUDGET_ATOL:
+                break
 
         if underfunded_rounds:
             rounds_str = ", ".join(
@@ -93,6 +100,12 @@ class Budget(ALRuntimeMixin):
                 f"query can be afforded in these rounds. Adjust the schedule "
                 f"parameters so that every round receives at least "
                 f"{min_query_cost:.4g} budget."
+            )
+
+        if cumulative < self.available_budget - _BUDGET_ATOL:
+            raise ValueError(
+                f"Budget schedule allocates only {cumulative:.4g} total budget, "
+                f"which cannot cover available_budget={self.available_budget:.4g}."
             )
 
     def get_round_budget(self, current_round: int) -> float:

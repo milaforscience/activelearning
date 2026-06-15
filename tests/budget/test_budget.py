@@ -260,3 +260,25 @@ class TestValidateSchedule:
         budget = Budget(available_budget=50.0, schedule=lambda r: 5.0)
         # Should not raise — exactly at the threshold
         budget.validate_schedule(min_query_cost=5.0)
+
+    def test_schedule_with_leading_zeros_are_underfunded(self):
+        """Leading zero-budget rounds should fail when a positive min query cost is required."""
+        allocations = [0.0, 0.0, 10.0, 20.0, 20.0]
+
+        def delayed_start_schedule(round_index: int) -> float:
+            return allocations[round_index] if round_index < len(allocations) else 0.0
+
+        budget = Budget(available_budget=50.0, schedule=delayed_start_schedule)
+        with pytest.raises(ValueError, match="less than the minimum oracle query cost"):
+            budget.validate_schedule(min_query_cost=1.0)
+
+    def test_schedule_with_leading_zeros_and_insufficient_total_raises(self):
+        """Validation should fail when total allocatable budget cannot cover available budget."""
+        allocations = [0.0, 0.0, 1.0, 5.0, 10.0, 50.0, 10.0, 5.0, 1.0, 0.0, 0.0]
+
+        def sparse_schedule(round_index: int) -> float:
+            return allocations[round_index] if round_index < len(allocations) else 0.0
+
+        budget = Budget(available_budget=100.0, schedule=sparse_schedule)
+        with pytest.raises(ValueError, match="cannot cover available_budget"):
+            budget.validate_schedule(min_query_cost=0.0)
