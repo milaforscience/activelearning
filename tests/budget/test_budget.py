@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from activelearning.budget.budget import Budget
+from activelearning.budget.budget import Budget, _BUDGET_ATOL
 
 
 @pytest.fixture
@@ -282,3 +282,109 @@ class TestValidateSchedule:
         budget = Budget(available_budget=100.0, schedule=sparse_schedule)
         with pytest.raises(ValueError, match="cannot cover available_budget"):
             budget.validate_schedule(min_query_cost=0.0)
+
+
+class TestBudgetInitialization:
+    """Tests for Budget.__init__ edge cases."""
+
+    def test_negative_budget_raises(self):
+        """Negative available_budget should raise ValueError."""
+        with pytest.raises(ValueError, match="must be non-negative"):
+            Budget(available_budget=-1.0, schedule=lambda r: 10.0)
+
+    def test_integer_budget_coerced_to_float(self):
+        """Integer available_budget should be coerced to float."""
+        budget = Budget(available_budget=100, schedule=lambda r: 10.0)
+        assert isinstance(budget.available_budget, float)
+        assert budget.available_budget == 100.0
+
+    def test_large_budget_accepted(self):
+        """Very large budget values should be accepted."""
+        budget = Budget(available_budget=1e15, schedule=lambda r: 1e12)
+        assert budget.available_budget == 1e15
+
+
+class TestConsumeFloatingPoint:
+    """Tests for floating-point tolerance in Budget.consume."""
+
+    def test_consume_within_tolerance_succeeds(self):
+        """Consuming slightly more than budget within _BUDGET_ATOL should succeed."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+        # Cost exceeds budget by less than _BUDGET_ATOL
+        budget.consume(100.0 + _BUDGET_ATOL * 0.5)
+        assert budget.available_budget == 0.0
+
+    def test_consume_beyond_tolerance_raises(self):
+        """Consuming more than budget beyond _BUDGET_ATOL should raise."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+        with pytest.raises(ValueError, match="exceeds available budget"):
+            budget.consume(100.0 + _BUDGET_ATOL * 10)
+
+    def test_consume_zero_cost(self):
+        """Consuming zero cost should leave budget unchanged."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+        budget.consume(0.0)
+        assert budget.available_budget == 100.0
+
+    def test_consume_floors_at_zero(self):
+        """Budget should never go negative after consume (floored at 0.0)."""
+        budget = Budget(available_budget=10.0, schedule=lambda r: 10.0)
+        # Tiny floating-point overshoot within tolerance
+        budget.consume(10.0 + _BUDGET_ATOL * 0.1)
+        assert budget.available_budget == 0.0
+
+    def test_consume_accumulation_drift(self):
+        """Many small consumes should not cause floating-point drift issues."""
+        budget = Budget(available_budget=1.0, schedule=lambda r: 0.1)
+        for _ in range(10):
+            budget.consume(0.1)
+        assert budget.available_budget == pytest.approx(0.0, abs=_BUDGET_ATOL)
+
+
+class TestCanAffordFloatingPoint:
+    """Tests for floating-point tolerance in Budget.can_afford."""
+
+    def test_can_afford_within_tolerance(self):
+        """Cost slightly above budget within _BUDGET_ATOL should be affordable."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+        assert budget.can_afford(100.0 + _BUDGET_ATOL * 0.5) is True
+
+    def test_cannot_afford_beyond_tolerance(self):
+        """Cost above budget beyond _BUDGET_ATOL should not be affordable."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+        assert budget.can_afford(100.0 + _BUDGET_ATOL * 10) is False
+
+    def test_can_afford_after_consumption(self):
+        """can_afford should reflect remaining budget after consumption."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+        budget.consume(60.0)
+        assert budget.can_afford(40.0) is True
+        assert budget.can_afford(41.0) is False
+
+    def test_can_afford_zero_budget(self):
+        """Zero remaining budget can only afford zero cost."""
+        budget = Budget(available_budget=0.0, schedule=lambda r: 10.0)
+        assert budget.can_afford(0.0) is True
+        assert budget.can_afford(_BUDGET_ATOL * 0.5) is True
+        assert budget.can_afford(_BUDGET_ATOL * 10) is False
+
+
+class TestGetRoundBudgetEdgeCases:
+    """Edge case tests for Budget.get_round_budget."""
+
+    def test_get_round_budget_does_not_consume(self):
+        """get_round_budget should not modify available_budget."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+        budget.get_round_budget(0)
+        budget.get_round_budget(1)
+        assert budget.available_budget == 100.0
+
+    def test_get_round_budget_with_zero_schedule(self):
+        """Schedule returning zero should return zero without warning."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 0.0)
+        assert budget.get_round_budget(0) == 0.0
+
+    def test_get_round_budget_exact_available(self):
+        """Schedule returning exactly available budget should not warn."""
+        budget = Budget(available_budget=10.0, schedule=lambda r: 10.0)
+        assert budget.get_round_budget(0) == 10.0
