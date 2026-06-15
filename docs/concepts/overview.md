@@ -68,3 +68,4 @@ For a more detailed discussion of how this framework relates to prior work, see 
 1. [Active Learning Loop](active_learning_loop.md)
 2. [Multi-Fidelity Setting](multi_fidelity.md)
 3. [Runtime and Configuration](runtime_and_configuration.md)
+4. [Related Work and Positioning](related-work.md)
