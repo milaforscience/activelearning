@@ -2,7 +2,7 @@
 
 This page details how fidelity is represented and propagated through each component of the framework. It assumes familiarity with the problem setting (see [Home](../index.md)) and the execution loop (see [Active Learning Loop](active_learning_loop.md)).
 
-In the multi-fidelity setting, the queries for the oracles are candidate-fidelity pairs $(x, m)$, where $m \in \mathcal{M}$ determines both the cost $c(x, m)$ and the confidence $\kappa(m)$ of the query. An effective policy exploits lower-fidelity approximations to improve budget efficiency, reserving higher-fidelity evaluation for promising regions.
+In the multi-fidelity setting, the queries for the oracles are candidate-fidelity pairs $(x, m)$, where $m \in \mathcal{M}$ determines both the cost $c(x, m)$ and the confidence $\kappa(m)$ of the query. An effective policy might use, for example, lower-fidelity approximations for wide exploration of the design space, reserving higher-fidelity evaluation for promising regions.
 
 ## **Oracle-Defined Fidelity Structure**
 
