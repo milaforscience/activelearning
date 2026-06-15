@@ -94,7 +94,7 @@ class MultiFidelityOracle(Oracle):
         Returns
         -------
         min_cost : float
-            Cheapest cost_per_sample among all configured fidelities.
+            Cheapest ``cost_per_sample`` among all configured fidelities.
         """
         return min(
             config["cost_per_sample"] for config in self.fidelity_configs.values()
