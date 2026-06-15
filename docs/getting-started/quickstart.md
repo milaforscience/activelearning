@@ -10,7 +10,7 @@ The YAML file defines the full experiment — surrogate, acquisition function, s
 
 ## **First run**
 
-Start with a minimal version of the single-fidelity Branin config, capped to a small budget so the run completes in seconds:
+Start with a minimal, single-fidelity version of the Branin task. Branin is a widely used objective function with three global minima, defined on two dimensions. Here, the designed space is discretized into a 100x100 grid. In this minimal example, the budget is capped so the run completes in seconds:
 
 ```bash
 uv run activelearning config/branin_single_fidelity.yaml \
