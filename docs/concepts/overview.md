@@ -56,7 +56,7 @@ The underlying execution architecture remains invariant across single-fidelity a
 
 ## **Pool-Based, Stream-Based, and *De Novo* Query Synthesis**
 
-The framework is flexible enough to support classical pool-based active learning (selecting from a finite pre-computed candidate set), stream-based active learning (deciding whether to label each incoming candidate), or ***de novo* query synthesis** (generating candidates directly from the object space $\mathcal{X}$). The sampler abstraction is the key: it can draw proposals from a fixed pool, a data stream, or synthesize them from scratch.
+The framework is flexible enough to support classical pool-based active learning (selecting from a finite pre-computed candidate set), stream-based active learning (deciding whether to label each incoming candidate), or ***de novo* query synthesis** (generating candidates directly from the object space $\mathcal{X}$). The sampler abstraction is the key: it can draw proposals from a fixed pool, a data stream, or generate them from scratch.
 
 !!! info "Why de novo synthesis for scientific discovery?"
     In scientific discovery settings — materials design, drug discovery, automated experimentation — frequently no exhaustive candidate pool exists upfront. The goal is also not global prediction accuracy, but to isolate a diverse set of candidates with high objective values. *De novo* synthesis is therefore the paradigm of primary interest for these use cases.
