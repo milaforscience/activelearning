@@ -55,12 +55,11 @@ class HypercubeUniformSampler(Sampler):
         self.num_samples = num_samples
         self.fidelities = list(fidelities) if fidelities is not None else None
 
-        lowers = [b[0] for b in bounds]
-        uppers = [b[1] for b in bounds]
-        self._lower = torch.tensor(lowers, dtype=torch.float64)
-        self._range = torch.tensor(
-            [upper - lower for lower, upper in zip(lowers, uppers)], dtype=torch.float64
-        )
+        # Store raw scalars; tensors are materialized in sample() using self.dtype
+        # so that any RuntimeContext dtype binding is respected (same pattern as
+        # HypercubeSampler).
+        self._lower_values = tuple(b[0] for b in bounds)
+        self._range_values = tuple(b[1] - b[0] for b in bounds)
 
     def sample(
         self,
@@ -86,8 +85,10 @@ class HypercubeUniformSampler(Sampler):
             floats and ``fidelity`` drawn uniformly from ``fidelities``.
         """
         # Shape: (num_samples, n_dims)
-        uniform = torch.rand(self.num_samples, len(self.bounds), dtype=torch.float64)
-        points = self._lower + uniform * self._range  # broadcast scaling
+        lower = torch.tensor(self._lower_values, dtype=self.dtype)
+        range_ = torch.tensor(self._range_values, dtype=self.dtype)
+        uniform = torch.rand(self.num_samples, len(self.bounds), dtype=self.dtype)
+        points = lower + uniform * range_  # broadcast scaling
 
         if self.fidelities is not None:
             fidelity_indices = torch.randint(
