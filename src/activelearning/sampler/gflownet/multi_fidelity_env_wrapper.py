@@ -47,14 +47,14 @@ class MultiFidelityGFlowNetEnvWrapperBase(CompositeBase):
 
         Parameters
         ----------
-        states : Any or ``None``
+        state : Any or ``None``
             A state in environment format. If ``None``, ``self.state`` is used.
 
         Returns
         -------
-        states_base : Any
+        state_base : Any
             The state of the base environment.
-        fidelities : int
+        fidelity : int
             The fidelity index in the input state.
         """
         state = self._get_state(state)
