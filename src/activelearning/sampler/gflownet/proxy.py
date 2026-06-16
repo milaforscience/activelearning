@@ -47,7 +47,15 @@ class AcquisitionProxy(Proxy):
         self.acquisition = acquisition
 
     def __call__(self, states: Union[torch.Tensor, List, npt.NDArray]) -> torch.Tensor:
-        """Evaluate proxy values for a batch of states in proxy format.
+        """Evaluate *raw* proxy values for a batch of states in proxy format.
+
+        Returns raw acquisition scores without any reward transformation.
+        Reward shaping (``reward_function``, ``reward_min``, clipping, etc.)
+        is applied by the base-class :meth:`~gflownet.proxy.base.Proxy.rewards`
+        method, which calls this method internally and then passes the result
+        through ``proxy2reward`` / ``proxy2logreward``. GFlowNet always
+        calls ``proxy.rewards()`` during training, so the full transformation
+        pipeline is exercised automatically.
 
         Handles both single-fidelity (tensor/list of coord vectors) and
         multi-fidelity (list of dicts produced by a composite env's
@@ -61,7 +69,7 @@ class AcquisitionProxy(Proxy):
         Returns
         -------
         values : torch.Tensor
-            1-D tensor of proxy values, one per state.
+            1-D tensor of raw proxy values, one per state.
 
         Raises
         ------
