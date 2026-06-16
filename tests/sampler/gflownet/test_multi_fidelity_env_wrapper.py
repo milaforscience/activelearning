@@ -119,7 +119,9 @@ def env_set_cubes():
 )
 def test__base_envs_initialize_properly(env, request):
     env = request.getfixturevalue(env)
-    assert True
+    assert isinstance(env, GFlowNetEnv)
+    assert env.action_space_dim > 0
+    assert env.is_source(env.source)
 
 
 @pytest.mark.parametrize(
