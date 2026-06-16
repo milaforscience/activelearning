@@ -1,7 +1,6 @@
 import torch
 import numpy.typing as npt
 from typing import Any, List, Optional, Union
-from torchtyping import TensorType
 from gflownet.proxy.base import Proxy
 from activelearning.sampler.gflownet.utils import proxy_states_to_candidates
 
@@ -47,7 +46,7 @@ class AcquisitionProxy(Proxy):
         """Replace the wrapped acquisition function."""
         self.acquisition = acquisition
 
-    def __call__(self, states: Union[TensorType, List, npt.NDArray]) -> TensorType:
+    def __call__(self, states: Union[torch.Tensor, List, npt.NDArray]) -> torch.Tensor:
         """Evaluate proxy values for a batch of states in proxy format.
 
         Handles both single-fidelity (tensor/list of coord vectors) and
@@ -61,7 +60,7 @@ class AcquisitionProxy(Proxy):
 
         Returns
         -------
-        values : TensorType
+        values : torch.Tensor
             1-D tensor of proxy values, one per state.
 
         Raises
