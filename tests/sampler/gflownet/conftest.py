@@ -2,9 +2,10 @@
 
 import shutil
 import tempfile
+from typing import Tuple
 
 import pytest
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 
 
 def _make_minimal_gflownet_conf(
@@ -13,7 +14,7 @@ def _make_minimal_gflownet_conf(
     n_dim: int = 2,
     cell_min: float = 0.0,
     cell_max: float = 1.0,
-) -> OmegaConf:
+) -> Tuple[DictConfig, str]:
     """Build a minimal GFlowNet DictConfig suitable for fast unit tests.
 
     Parameters
