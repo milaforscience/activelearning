@@ -1,4 +1,4 @@
-from typing import Any, List, Literal, Sequence, Tuple, Type
+from typing import Any, Callable, List, Literal, Sequence, Tuple
 
 from gflownet.envs.base import GFlowNetEnv
 from gflownet.envs.choice import Choice
@@ -84,7 +84,7 @@ class MultiFidelityGFlowNetEnvWrapper(SetFix, MultiFidelityGFlowNetEnvWrapperBas
 
     def __init__(
         self,
-        env_base_maker: Type[GFlowNetEnv],
+        env_base_maker: Callable[..., GFlowNetEnv],
         n_fidelities: int,
         **kwargs,
     ) -> None:
@@ -92,7 +92,7 @@ class MultiFidelityGFlowNetEnvWrapper(SetFix, MultiFidelityGFlowNetEnvWrapperBas
 
         Parameters
         ----------
-        env_base_maker : Type[GFlowNetEnv]
+        env_base_maker : Callable[..., GFlowNetEnv]
             An environment maker (partial) to instantiate the base environment.
         n_fidelities : int
             The number of possible fidelity indices.
@@ -136,7 +136,7 @@ class MultiFidelityGFlowNetEnvWrapperFidFirst(
 
     def __init__(
         self,
-        env_base_maker: Type[GFlowNetEnv],
+        env_base_maker: Callable[..., GFlowNetEnv],
         n_fidelities: int,
         **kwargs,
     ) -> None:
@@ -144,7 +144,7 @@ class MultiFidelityGFlowNetEnvWrapperFidFirst(
 
         Parameters
         ----------
-        env_base_maker : Type[GFlowNetEnv]
+        env_base_maker : Callable[..., GFlowNetEnv]
             An environment maker (partial) to instantiate the base environment.
         n_fidelities : int
             The number of possible fidelity indices.
@@ -188,7 +188,7 @@ class MultiFidelityGFlowNetEnvWrapperFidLast(
 
     def __init__(
         self,
-        env_base_maker: Type[GFlowNetEnv],
+        env_base_maker: Callable[..., GFlowNetEnv],
         n_fidelities: int,
         **kwargs,
     ) -> None:
@@ -196,7 +196,7 @@ class MultiFidelityGFlowNetEnvWrapperFidLast(
 
         Parameters
         ----------
-        env_base_maker : Type[GFlowNetEnv]
+        env_base_maker : Callable[..., GFlowNetEnv]
             An environment maker (partial) to instantiate the base environment.
         n_fidelities : int
             The number of possible fidelity indices.
@@ -225,7 +225,7 @@ _FIDELITY_ACTION_TO_WRAPPER: dict[str, type] = {
 
 def build_multi_fidelity_env_wrapper(
     fidelity_action: Literal["any", "first", "last"],
-    env_base_maker: Type[GFlowNetEnv],
+    env_base_maker: Callable[..., GFlowNetEnv],
     n_fidelities: int,
     **kwargs: Any,
 ) -> MultiFidelityGFlowNetEnvWrapperBase:
@@ -241,7 +241,7 @@ def build_multi_fidelity_env_wrapper(
           fidelity is chosen before any base-env action.
         - ``"last"`` — :class:`MultiFidelityGFlowNetEnvWrapperFidLast` (Stack):
           fidelity is chosen after all base-env actions are complete.
-    env_base_maker : Type[GFlowNetEnv]
+    env_base_maker : Callable[..., GFlowNetEnv]
         Callable (partial) that constructs a fresh base environment instance.
     n_fidelities : int
         Number of possible fidelity choices.
