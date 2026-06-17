@@ -60,8 +60,7 @@ The blue curve is the running estimate $\log Z_\theta$; the red dashed line is t
 
 ![Per-fidelity split-violin calibration](../assets/gflownet_fidelity.png)
 
-One violin per fidelity level. The left half (solid fill) is the $R(x, m)$-weighted theoretical score distribution at that fidelity; the right half (hatched, dashed edge) is the empirical distribution of GFlowNet samples at that fidelity. A calibrated policy produces right halves that mirror the left halves at each fidelity. The target shape itself can differ across fidelities because lower-fidelity oracles are noisier approximations of the high-fidelity one — mismatch at a single fidelity therefore points to that wrapper layer as the bottleneck.
-
+To illustrate what the GFlowNet actually learns, this figure compares the learned sampling distribution against the theoretical target across fidelities (only possible here because we have access to the ground-truth oracle). Each violin corresponds to one fidelity level: the left half (solid fill) is the $R(x, m)$-weighted theoretical score distribution at that fidelity; the right half (hatched, dashed edge) is the empirical distribution of GFlowNet samples at that fidelity. When the two halves mirror each other, the policy has learned to sample proportionally to $R$ at that fidelity level. In a real AL run the theoretical distribution is unavailable, so only the empirical right-hand side would be observable.
 ### Quality in a real AL run
 
 When the reward is the acquisition function and the exact target is unknown, the quality proxies reported in the paper are:
