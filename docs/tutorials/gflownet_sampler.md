@@ -122,7 +122,7 @@ sampler:
       max_dim_per_action: 1     # dimensions incremented per action (default)
 ```
 
-The GFlowNet builds candidates step by step from the source state `[0, 0]`, so trajectory length scales with the grid-index distance between the source and each mode. Setting `max_increment > 1` lets the policy take larger jumps per action — for a 2D Branin grid, `max_increment: 5` cuts the longest possible path from ~200 to ~40 steps and roughly halves training time. Tune `max_increment` together with `length`: a finer grid with larger increments keeps resolution high while keeping trajectories short.
+The GFlowNet builds candidates step by step from the source state `[0, 0]`, so the minimum trajectory length scales with the grid-index distance between the source and each mode. Because the Grid environment is a DAG (actions only increment coordinates, never decrement), with `max_dim_per_action: 1` there are only 3 actions when `max_increment: 1`: increment dim 0, increment dim 1, or EOS. Setting `max_increment > 1` lets the policy take larger jumps, reducing the minimum path length at the cost of a larger action space — for a 2D grid with `length: 100`, `max_increment: 5` reduces the minimum path to `[99, 99]` from ~198 to ~40 steps while expanding the action space to 11. There is an inherent trade-off: increasing `max_increment` shortens minimum trajectories but grows the action space, making the policy harder to train; increasing `length` improves resolution but lengthens minimum trajectories. These two parameters should therefore be tuned together.
 
 ### Optimizer and policy
 
