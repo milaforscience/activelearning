@@ -37,7 +37,7 @@ class GFlowNetGridSampler(GFlowNetSampler):
     output_bounds : sequence of (float, float), optional
         Per-dimension ``(lower, upper)`` bounds to which the grid coordinates
         are rescaled.  Must have one entry per grid dimension.  If ``None``,
-        the native ``[cell_min, cell_max]`` coordinates are returned as-is.
+        the native ``[cell_min, cell_max]`` coordinates are used as-is.
     n_fidelities : int
         Number of fidelity levels. ``1`` means single-fidelity.
     fidelity_action : {"any", "first", "last"}
