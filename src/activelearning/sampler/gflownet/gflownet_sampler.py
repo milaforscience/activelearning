@@ -9,6 +9,7 @@ from gflownet.gflownet import GFlowNetAgent
 from gflownet.utils.common import gflownet_from_config
 from activelearning.sampler.gflownet.logger_wrapper import RuntimeGFlowNetLoggerWrapper
 from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
+    MultiFidelityGFlowNetEnvWrapperBase,
     build_multi_fidelity_env_wrapper,
 )
 from activelearning.acquisition.acquisition import Acquisition
@@ -80,12 +81,10 @@ class GFlowNetSampler(Sampler):
         Merges runtime device/precision into the config, then calls
         ``gflownet_from_config``. For single-fidelity, the environment is
         instantiated directly from the config. For multi-fidelity, ``conf.env``
-        only describes the base environment — the wrapper is not represented in
-        any config file and must be built programmatically. A partial callable
-        is created via ``hydra.utils.instantiate(..., _partial_=True)`` and
-        passed to ``build_multi_fidelity_env_wrapper``, which constructs the
-        full wrapper and passes it to ``gflownet_from_config``. The acquisition
-        function and runtime logger are injected after construction.
+        only describes the base environment — the multi-fidelity wrapper is not
+        representable in a single Hydra config and must be built
+        programmatically (see :meth:`_build_multi_fidelity_env`). The
+        acquisition function and runtime logger are injected after construction.
 
         Parameters
         ----------
@@ -98,31 +97,15 @@ class GFlowNetSampler(Sampler):
             A fully configured agent with the proxy and logger injected,
             ready to be trained via ``agent.train()``.
         """
-
         device = self._device_str()
         fp = self._float_precision()
         conf = OmegaConf.merge(self.conf, {"device": device, "float_precision": fp})
 
-        # For single-fidelity, env=None lets gflownet_from_config instantiate
-        # the env directly from conf.env (the base environment config).
-        # For multi-fidelity, conf.env still describes only the base environment
-        # (e.g. Grid) — the wrapper is not represented in any config file and
-        # must be built programmatically. We create a partial callable from
-        # conf.env so the wrapper can construct a fresh base env instance, then
-        # pass the fully assembled wrapper to gflownet_from_config, which will
-        # use wrapper.copy() as its internal env_maker.
-        env = None
-        if self.n_fidelities > 1:
-            env_base_maker = hydra.utils.instantiate(
-                conf.env, device=device, float_precision=fp, _partial_=True
-            )
-            env = build_multi_fidelity_env_wrapper(
-                fidelity_action=self.fidelity_action,
-                env_base_maker=env_base_maker,
-                n_fidelities=self.n_fidelities,
-                float_precision=fp,
-                device=device,
-            )
+        env = (
+            self._build_multi_fidelity_env(conf, device, fp)
+            if self.n_fidelities > 1
+            else None
+        )
 
         agent = gflownet_from_config(conf, env=env)
         agent.proxy.set_acquisition(acquisition)
@@ -135,6 +118,33 @@ class GFlowNetSampler(Sampler):
             )
 
         return agent
+
+    def _build_multi_fidelity_env(
+        self, conf: DictConfig, device: str, fp: int
+    ) -> MultiFidelityGFlowNetEnvWrapperBase:
+        """Construct the multi-fidelity environment wrapper.
+
+        The Hydra config (``conf.env``) only describes the base environment
+        (e.g. Grid). The multi-fidelity wrapper composes the base env with a
+        discrete fidelity-choice env, which cannot be expressed as a single
+        Hydra target. This method creates a partial callable from ``conf.env``
+        and passes it to the wrapper factory.
+
+        Returns
+        -------
+        env : MultiFidelityGFlowNetEnvWrapperBase
+            The assembled wrapper, ready to be passed to ``gflownet_from_config``.
+        """
+        env_base_maker = hydra.utils.instantiate(
+            conf.env, device=device, float_precision=fp, _partial_=True
+        )
+        return build_multi_fidelity_env_wrapper(
+            fidelity_action=self.fidelity_action,
+            env_base_maker=env_base_maker,
+            n_fidelities=self.n_fidelities,
+            float_precision=fp,
+            device=device,
+        )
 
     # ------------------------------------------------------------------
     # State conversion
