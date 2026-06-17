@@ -49,8 +49,12 @@ The heatmap is the theoretical target $p(x) \propto \exp(\beta \cdot \text{score
 
 The blue curve is the running estimate $\log Z_\theta$; the red dashed line is the exact $\log Z^* = \log \sum_{x, m} R(x, m)$ obtained by enumerating the discrete grid. Convergence of $\log Z_\theta$ to $\log Z^*$ indicates that trajectory balance has reached its fixed point and the policy is sampling proportionally to $R$. A persistent gap usually means insufficient training steps or a poorly chosen `lr_z_mult` — see [Configuration reference](#configuration-reference).
 
-!!! note "Only possible because the grid is finite"
-    Computing $\log Z^*$ exactly requires enumerating every terminal state. For this small Branin grid that is feasible, but for realistic scientific discovery tasks — molecules, proteins, or crystal structures with combinatorially large state spaces — exhaustive enumeration is intractable. In those settings, $\log Z_\theta$ can still be monitored during training as a relative convergence signal, and quality is assessed via the Top-$K$ metrics below.
+!!! note "Interpreting $\log Z_\theta$ in practice"
+    Computing $\log Z^*$ exactly requires enumerating every terminal state — feasible here, but intractable for realistic scientific discovery tasks. In those settings $\log Z_\theta$ can still be monitored as a convergence signal: it should rise steadily as the GFlowNet discovers high-reward regions and then plateau as probability flows reach equilibrium.
+
+    A stable plateau is a **necessary** condition for correct proportional sampling. The Trajectory Balance objective requires $\log Z_\theta + \sum \log P_F \approx \log R(x) + \sum \log P_B$ across all trajectories; if $\log Z_\theta$ has not converged, this equality cannot hold globally and the policy cannot be sampling proportionally to $R$.
+
+    It is **not sufficient**, however. $\log Z_\theta$ is a single global scalar and can converge cleanly to the partition function of only a subset of modes (mode collapse), or errors in $P_F$ and $P_B$ can cancel along specific paths while the marginal distribution over objects remains wrong.     Always evaluate $\log Z_\theta$ alongside empirical metrics — Top-$K$ score and Top-$K$ diversity — to build confidence that the policy is sampling meaningfully from the target distribution.
 
 ### Per-fidelity calibration
 
