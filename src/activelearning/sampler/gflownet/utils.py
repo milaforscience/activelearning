@@ -41,7 +41,12 @@ multi_fidelity_env_wrapper.MultiFidelityGFlowNetEnvWrapperBase`),
         One :class:`~activelearning.utils.types.Candidate` per state.
         Multi-fidelity candidates carry a non-``None`` ``fidelity`` field.
     """
-    if not isinstance(states_proxy, (list, torch.Tensor)) or len(states_proxy) == 0:
+    if not isinstance(states_proxy, (list, torch.Tensor)):
+        raise TypeError(
+            f"states_proxy must be a list or torch.Tensor, got {type(states_proxy).__name__}. "
+            "This likely indicates a bug in the calling code."
+        )
+    if len(states_proxy) == 0:
         return []
 
     if isinstance(env, MultiFidelityGFlowNetEnvWrapperBase):

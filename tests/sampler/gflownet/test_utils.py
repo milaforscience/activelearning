@@ -70,10 +70,12 @@ class TestProxyStatesToCandidatesGuards:
         assert proxy_states_to_candidates(torch.empty(0, 2), _plain_env()) == []
 
     def test_none(self):
-        assert proxy_states_to_candidates(None, _plain_env()) == []
+        with pytest.raises(TypeError):
+            proxy_states_to_candidates(None, _plain_env())
 
     def test_non_list_non_tensor(self):
-        assert proxy_states_to_candidates("invalid", _plain_env()) == []
+        with pytest.raises(TypeError):
+            proxy_states_to_candidates("invalid", _plain_env())
 
 
 # ---------------------------------------------------------------------------

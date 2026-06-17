@@ -218,11 +218,13 @@ class TestStatesToCandidatesGuards:
     def test_empty_tensor_returns_empty(self, sampler):
         assert sampler._states_to_candidates(torch.empty(0, 2), Mock()) == []
 
-    def test_non_list_non_tensor_returns_empty(self, sampler):
-        assert sampler._states_to_candidates("not_a_state", Mock()) == []
+    def test_non_list_non_tensor_raises(self, sampler):
+        with pytest.raises(TypeError):
+            sampler._states_to_candidates("not_a_state", Mock())
 
-    def test_none_returns_empty(self, sampler):
-        assert sampler._states_to_candidates(None, Mock()) == []
+    def test_none_raises(self, sampler):
+        with pytest.raises(TypeError):
+            sampler._states_to_candidates(None, Mock())
 
 
 # ---------------------------------------------------------------------------

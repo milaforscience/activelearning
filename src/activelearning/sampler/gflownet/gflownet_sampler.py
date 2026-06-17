@@ -170,7 +170,12 @@ class GFlowNetSampler(Sampler):
             Candidates built from the proxy-format states, or an
             empty list if ``states`` is empty or of an unsupported type.
         """
-        if not isinstance(states, (list, torch.Tensor)) or len(states) == 0:
+        if not isinstance(states, (list, torch.Tensor)):
+            raise TypeError(
+                f"states must be a list or torch.Tensor, got {type(states).__name__}. "
+                "This likely indicates a bug in the calling code."
+            )
+        if len(states) == 0:
             return []
         return proxy_states_to_candidates(env.states2proxy(states), env)
 
