@@ -17,6 +17,8 @@ max_increment: 1
 # Maximum number of dimensions that can be incremented by one action
 max_dim_per_action: 1
 
-# Mapping coordinates
+# Coordinate range. When using GFlowNetGridSampler, prefer setting domain_bounds
+# in the sampler config for per-dimension control; these values apply when
+# domain_bounds is not set.
 cell_min: -1
 cell_max: 1

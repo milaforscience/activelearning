@@ -34,14 +34,14 @@ sampler:
   type: GFlowNetGridSampler
   n_samples: 100
   n_fidelities: 1
-  # Rescale grid coordinates (cell_min=-1, cell_max=1) to the Branin domain.
-  output_bounds:
+  # Branin domain: x1 ∈ [-5, 10], x2 ∈ [0, 15].
+  domain_bounds:
     - [-5.0, 10.0]
     - [0.0, 15.0]
   conf:
     env:
       n_dim: 2
-      length: 100  # 100 cells per dimension → 0.01 resolution
+      length: 100  # 100 cells per dimension → 0.15 resolution
     gflownet:
       # Active-learning optimizer settings (from mf-al-gfn).
       optimizer:

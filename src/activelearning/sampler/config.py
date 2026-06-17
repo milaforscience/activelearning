@@ -69,29 +69,30 @@ class GFlowNetSamplerConfig(BaseModel):
 class GFlowNetGridSamplerConfig(GFlowNetSamplerConfig):
     """Pydantic config for :class:`~activelearning.sampler.gflownet.grid_sampler.GFlowNetGridSampler`.
 
-    Extends :class:`GFlowNetSamplerConfig` with coordinate rescaling from the
-    native grid domain to a target bounded domain.
+    Extends :class:`GFlowNetSamplerConfig` with Grid-specific validation and
+    the optional ``domain_bounds`` field for per-dimension coordinate ranges.
 
     Parameters
     ----------
     type : Literal["GFlowNetGridSampler"]
         Discriminator field for the :data:`SamplerConfig` union.
-    output_bounds : list[tuple[float, float]] or None
-        Per-dimension ``(lower, upper)`` bounds to which grid coordinates are
-        linearly rescaled.  When ``None``, coordinates are returned in the
-        native ``[cell_min, cell_max]`` grid domain.
+    domain_bounds : list of [lo, hi] pairs, optional
+        Per-dimension coordinate ranges, one ``[lo, hi]`` pair per dimension.
+        Length must equal ``conf.env.n_dim`` and each pair must satisfy
+        ``lo < hi``. When ``None`` (default), all dimensions share the
+        ``[cell_min, cell_max]`` range from ``conf.env``.
     """
 
     type: Literal["GFlowNetGridSampler"] = "GFlowNetGridSampler"  # type: ignore[assignment]
-    output_bounds: list[tuple[float, float]] | None = None
+    domain_bounds: list[list[float]] | None = None
 
     def build(self) -> Sampler:
         return GFlowNetGridSampler(
             n_samples=self.n_samples,
             conf=compose_gflownet_conf(conf_overrides=self.conf, log_dir=self.log_dir),
-            output_bounds=self.output_bounds,
             n_fidelities=self.n_fidelities,
             fidelity_action=self.fidelity_action,
+            domain_bounds=self.domain_bounds,
         )
 
 

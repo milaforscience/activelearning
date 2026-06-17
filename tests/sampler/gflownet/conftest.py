@@ -164,3 +164,11 @@ def gflownet_conf_2d():
     conf, tmpdir = _make_minimal_gflownet_conf(n_train_steps=5, grid_length=5, n_dim=2)
     yield conf, tmpdir
     shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+@pytest.fixture()
+def gflownet_conf_6d():
+    """6-D grid GFlowNet config and log tmpdir for unit tests (Hartmann-like)."""
+    conf, tmpdir = _make_minimal_gflownet_conf(n_train_steps=5, grid_length=4, n_dim=6)
+    yield conf, tmpdir
+    shutil.rmtree(tmpdir, ignore_errors=True)

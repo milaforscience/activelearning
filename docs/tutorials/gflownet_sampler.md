@@ -91,7 +91,7 @@ uv run activelearning config/branin/gflownet_multi_fidelity.yaml
 Three fidelity levels with costs `0.01 / 0.1 / 1.0`. The GFlowNet jointly samples $(x, m)$ proportionally to the acquisition function, amortising high-fidelity oracle queries over cheap low-fidelity exploration.
 
 !!! tip "Quick sanity check and swapping oracles"
-    Use `budget.available_budget=30.0` to preview a short run before committing to a full experiment. To apply the same sampler to a different oracle, point `oracle.type` at your own class and adjust `output_bounds` — nothing else needs to change.
+    Use `budget.available_budget=30.0` to preview a short run before committing to a full experiment. To apply the same sampler to a different oracle, point `oracle.type` at your own class and update `cell_min`/`cell_max` in `conf.env` to match the new domain — nothing else needs to change.
 
 ## **Configuration reference**
 
@@ -104,12 +104,7 @@ sampler:
   type: GFlowNetGridSampler   # grid-based GFlowNet for bounded continuous spaces
   n_samples: 100              # candidates returned per sample() call
   n_fidelities: 3             # 1 = single-fidelity; >1 enables multi-fidelity wrapper
-  output_bounds:              # rescales grid coords to oracle domain after sampling
-    - [-5.0, 10.0]
-    - [0.0, 15.0]
 ```
-
-`output_bounds` is required whenever the oracle domain differs from the GFlowNet Grid's native coordinate space, which defaults to $[-1, 1]^n$. The sampler applies a linear map after drawing samples, so every candidate returned by `sample()` is already in oracle coordinates — your acquisition function and oracle never see grid-internal indices.
 
 ### Grid environment
 
@@ -118,9 +113,13 @@ sampler:
     env:
       n_dim: 2       # dimensionality of the search space
       length: 100    # grid cells per dimension — finer = higher resolution
+      cell_min: -5.0 # lower bound of the coordinate range (all dimensions)
+      cell_max: 15.0 # upper bound of the coordinate range (all dimensions)
       max_increment: 1          # max step size per action (default)
       max_dim_per_action: 1     # dimensions incremented per action (default)
 ```
+
+`cell_min` and `cell_max` define the coordinate space the GFlowNet operates in and **must match the domain of your acquisition function and oracle**.  The Grid env uses a single range for all dimensions; for problems with asymmetric per-dimension bounds (like Branin: $x_1 \in [-5, 10]$, $x_2 \in [0, 15]$), choose a common range that covers the full domain — here `[-5, 15]` — accepting slight over-coverage on each side.
 
 The GFlowNet builds candidates step by step from the source state `[0, 0]`, so the trajectory length scales with the grid-index distance between the source and each mode. Because the Grid environment is a DAG (actions only increment coordinates, never decrement), in 2D with `max_dim_per_action: 1` there are only 3 actions when `max_increment: 1`: increment dim 0, increment dim 1, or EOS. Setting `max_increment > 1` lets the policy take larger jumps, reducing the minimum path length at the cost of a larger action space — for a 2D grid with `length: 100`, `max_increment: 5` reduces the minimum path to `[99, 99]` from ~198 to ~40 steps while expanding the action space to 11. There is an inherent trade-off: increasing `max_increment` shortens minimum trajectories but grows the action space, making the policy harder to train; increasing `length` improves resolution but lengthens minimum trajectories. These two parameters should therefore be tuned together.
 
