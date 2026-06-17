@@ -76,9 +76,12 @@ class GFlowNetSampler(Sampler):
         """Build and return a ``GFlowNetAgent`` ready for training.
 
         Merges runtime device/precision into the config, then calls
-        ``gflownet_from_config``. For multi-fidelity, the env is built as a
-        factory so each copy gets a fresh base env. The acquisition function
-        and runtime logger are injected after construction.
+        ``gflownet_from_config``. For multi-fidelity, the base environment is
+        not instantiated directly from the config: instead, a partial callable
+        is created via ``hydra.utils.instantiate(..., _partial_=True)`` and
+        passed to ``build_multi_fidelity_env_wrapper``, which calls it to
+        construct a fresh base env instance. The acquisition function and
+        runtime logger are injected after construction.
 
         Parameters
         ----------
