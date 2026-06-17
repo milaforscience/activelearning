@@ -163,6 +163,12 @@ class GFlowNetSampler(Sampler):
             Terminating states from a trajectory batch.
         env : GFlowNetEnv
             The environment used to map states to proxy coordinates.
+
+        Returns
+        -------
+        list[Candidate]
+            Candidates built from the proxy coordinates of ``states``, or an
+            empty list if ``states`` is empty or of an unsupported type.
         """
         if not isinstance(states, (list, torch.Tensor)) or len(states) == 0:
             return []
