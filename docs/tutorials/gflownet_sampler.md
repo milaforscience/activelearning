@@ -10,7 +10,7 @@ A GFlowNet (Generative Flow Network) is an amortised sampler that learns a stoch
 
 $$\pi_\theta(x) \propto R(x).$$
 
-Candidates are built step by step along a trajectory $\tau = (s_0 \to s_1 \to \ldots \to x)$, with transitions drawn from a forward policy $P_F(s_{t+1} \mid s_t; \theta)$. Because probability mass is spread over every mode of $R$, the sampler naturally discovers multiple high-reward regions instead of collapsing to one — a property that RL-based alternatives typically lack.
+Candidates are built step by step along a trajectory $\tau = (s_0 \to s_1 \to \ldots \to x)$, with transitions drawn from a forward policy $P_F(s_{t+1} \mid s_t; \theta)$. GFlowNets are trained to spread probability mass across all modes of $R$, which can help discover multiple high-reward regions — though exact mode coverage is only guaranteed at zero loss over all trajectories, which is rarely achieved in practice. This diversity-seeking behaviour nonetheless contrasts favourably with RL-based alternatives, which tend to collapse onto a single mode.
 
 !!! note "The partition function $Z$"
     The normalising constant $Z = \sum_{x \in \mathcal{X}} R(x)$ is called the *partition function*. It cannot be computed directly for large search spaces, so the GFlowNet learns a trainable estimate $Z_\theta$ alongside the policy via the **trajectory balance** objective ([Malkin et al., 2022](https://arxiv.org/abs/2201.13259)). Trajectory balance is satisfied exactly when $\pi_\theta(x) \propto R(x)$, so $\log Z_\theta$ converging toward $\log Z$ is a direct signal that training has succeeded — see [Training convergence](#training-convergence-log-z) below.
