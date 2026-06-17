@@ -78,12 +78,14 @@ class GFlowNetSampler(Sampler):
         """Build and return a ``GFlowNetAgent`` ready for training.
 
         Merges runtime device/precision into the config, then calls
-        ``gflownet_from_config``. For multi-fidelity, the base environment is
-        not instantiated directly from the config: instead, a partial callable
+        ``gflownet_from_config``. For single-fidelity, the environment is
+        instantiated directly from the config. For multi-fidelity, ``conf.env``
+        only describes the base environment — the wrapper is not represented in
+        any config file and must be built programmatically. A partial callable
         is created via ``hydra.utils.instantiate(..., _partial_=True)`` and
-        passed to ``build_multi_fidelity_env_wrapper``, which calls it to
-        construct a fresh base env instance. The acquisition function and
-        runtime logger are injected after construction.
+        passed to ``build_multi_fidelity_env_wrapper``, which constructs the
+        full wrapper and passes it to ``gflownet_from_config``. The acquisition
+        function and runtime logger are injected after construction.
 
         Parameters
         ----------
@@ -101,8 +103,14 @@ class GFlowNetSampler(Sampler):
         fp = self._float_precision()
         conf = OmegaConf.merge(self.conf, {"device": device, "float_precision": fp})
 
-        # When env=None, gflownet_from_config instantiates the env from conf.env
-        # using the device/float_precision already merged into conf above.
+        # For single-fidelity, env=None lets gflownet_from_config instantiate
+        # the env directly from conf.env (the base environment config).
+        # For multi-fidelity, conf.env still describes only the base environment
+        # (e.g. Grid) — the wrapper is not represented in any config file and
+        # must be built programmatically. We create a partial callable from
+        # conf.env so the wrapper can construct a fresh base env instance, then
+        # pass the fully assembled wrapper to gflownet_from_config, which will
+        # use wrapper.copy() as its internal env_maker.
         env = None
         if self.n_fidelities > 1:
             env_base_maker = hydra.utils.instantiate(
