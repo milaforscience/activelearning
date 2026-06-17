@@ -160,6 +160,6 @@ class TestProxyStatesToCandidatesMultiFidelity:
         result = proxy_states_to_candidates(proxy, env)
         assert all(isinstance(v, float) for v in result[0].x)
 
-    def test_empty_proxy_coords_returns_empty(self):
+    def test_empty_states_proxy_returns_empty(self):
         env = _StubMFEnv(proxy_return=[])
         assert proxy_states_to_candidates([], env) == []

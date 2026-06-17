@@ -11,8 +11,8 @@ class AcquisitionProxy(Proxy):
     Bridges between GFlowNet's proxy interface (tensor states → tensor values)
     and the AL acquisition interface (Candidate objects → float values).
 
-    States arrive in proxy format (continuous coordinates from
-    ``env.states2proxy()``), are converted to ``Candidate`` objects, scored
+    States arrive in proxy format (output of ``env.states2proxy()``), are
+    converted to ``Candidate`` objects, scored
     via :meth:`~activelearning.acquisition.acquisition.Acquisition.score`,
     and returned as a tensor.
 
@@ -64,7 +64,7 @@ class AcquisitionProxy(Proxy):
         Parameters
         ----------
         states : tensor, list, or ndarray
-            Batch of states in proxy format (continuous coordinates).
+            Batch of states in proxy format.
 
         Returns
         -------

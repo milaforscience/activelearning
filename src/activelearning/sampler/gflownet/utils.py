@@ -10,7 +10,7 @@ from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
 from activelearning.utils.types import Candidate
 
 
-def proxy_states_to_candidates(proxy_coords: Any, env: Any) -> list[Candidate]:
+def proxy_states_to_candidates(states_proxy: Any, env: Any) -> list[Candidate]:
     """Convert proxy-format states to :class:`~activelearning.utils.types.Candidate` objects.
 
     This is the single place that handles all shapes returned by
@@ -30,10 +30,10 @@ multi_fidelity_env_wrapper.MultiFidelityGFlowNetEnvWrapperBase`),
 
     Parameters
     ----------
-    proxy_coords : tensor, list, or list of dicts
+    states_proxy : tensor, list, or list of dicts
         Output of ``env.states2proxy(states)``.
     env : GFlowNetEnv
-        The environment that produced ``proxy_coords``.
+        The environment that produced ``states_proxy``.
 
     Returns
     -------
@@ -41,31 +41,31 @@ multi_fidelity_env_wrapper.MultiFidelityGFlowNetEnvWrapperBase`),
         One :class:`~activelearning.utils.types.Candidate` per state.
         Multi-fidelity candidates carry a non-``None`` ``fidelity`` field.
     """
-    if not isinstance(proxy_coords, (list, torch.Tensor)) or len(proxy_coords) == 0:
+    if not isinstance(states_proxy, (list, torch.Tensor)) or len(states_proxy) == 0:
         return []
 
     if isinstance(env, MultiFidelityGFlowNetEnvWrapperBase):
         idx_base = env.idx_base_env
         idx_fid = env.idx_fidelity
         candidates = []
-        for pc in proxy_coords:
-            base = pc[idx_base]
-            fid_raw = pc[idx_fid]
-            base_coords = (
+        for state_proxy in states_proxy:
+            base = state_proxy[idx_base]
+            fid_raw = state_proxy[idx_fid]
+            base_vals = (
                 base.detach().cpu().tolist() if torch.is_tensor(base) else list(base)
             )
             fidelity = int(
                 fid_raw[0].item() if torch.is_tensor(fid_raw) else fid_raw[0]
             )
-            candidates.append(Candidate(x=tuple(base_coords), fidelity=fidelity))
+            candidates.append(Candidate(x=tuple(base_vals), fidelity=fidelity))
         return candidates
 
     # Single-fidelity: normalize the three possible shapes to a list of tuples.
-    if torch.is_tensor(proxy_coords):
-        rows = proxy_coords.detach().cpu().tolist()
-    elif torch.is_tensor(proxy_coords[0]):
-        rows = torch.stack(proxy_coords).detach().cpu().tolist()
+    if torch.is_tensor(states_proxy):
+        rows = states_proxy.detach().cpu().tolist()
+    elif torch.is_tensor(states_proxy[0]):
+        rows = torch.stack(states_proxy).detach().cpu().tolist()
     else:
-        rows = [list(s) for s in proxy_coords]
+        rows = [list(s) for s in states_proxy]
 
     return [Candidate(x=tuple(row)) for row in rows]

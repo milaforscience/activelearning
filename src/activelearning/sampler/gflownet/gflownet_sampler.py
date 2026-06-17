@@ -162,12 +162,12 @@ class GFlowNetSampler(Sampler):
         states : tensor or list
             Terminating states from a trajectory batch.
         env : GFlowNetEnv
-            The environment used to map states to proxy coordinates.
+            The environment used to map states to proxy format.
 
         Returns
         -------
         list[Candidate]
-            Candidates built from the proxy coordinates of ``states``, or an
+            Candidates built from the proxy-format states, or an
             empty list if ``states`` is empty or of an unsupported type.
         """
         if not isinstance(states, (list, torch.Tensor)) or len(states) == 0:
@@ -195,7 +195,7 @@ class GFlowNetSampler(Sampler):
         Returns
         -------
         list[Candidate]
-            ``n_samples`` candidates in proxy coordinates.
+            ``n_samples`` candidates in proxy format.
 
         Raises
         ------
@@ -209,6 +209,6 @@ class GFlowNetSampler(Sampler):
         agent.train()
 
         batch, _ = agent.sample_batch(n_forward=self.n_samples, train=False)
-        raw_states = batch.get_terminating_states()
+        states_term = batch.get_terminating_states()
 
-        return self._states_to_candidates(raw_states, agent.env)
+        return self._states_to_candidates(states_term, agent.env)
