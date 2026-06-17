@@ -18,10 +18,11 @@ class GFlowNetGridSampler(GFlowNetSampler):
     """GFlowNet sampler that rescales grid coordinates to a target bounded domain.
 
     The GFlowNet :class:`gflownet.envs.grid.Grid` environment operates in a
-    discrete grid whose cells span ``[cell_min, cell_max]^d``.  This sampler
-    linearly maps the generated proxy coordinates to an arbitrary
-    ``output_bounds`` domain before returning candidates.  If ``output_bounds``
-    is ``None``, coordinates are returned in the native grid coordinate system.
+    discrete grid with a fixed per-dimension coordinate range set by the grid
+    configuration (``cell_min`` and ``cell_max``).  This sampler linearly maps
+    the generated proxy coordinates to an arbitrary ``output_bounds`` domain
+    before returning candidates.  If ``output_bounds`` is ``None``, coordinates
+    are returned in the native grid coordinate system.
 
     The configured env (``conf.env._target_``) must be a
     :class:`gflownet.envs.grid.Grid` or a subclass — a :exc:`ValueError` is
@@ -37,7 +38,9 @@ class GFlowNetGridSampler(GFlowNetSampler):
     output_bounds : sequence of (float, float), optional
         Per-dimension ``(lower, upper)`` bounds to which the grid coordinates
         are rescaled.  Must have one entry per grid dimension.  If ``None``,
-        the native ``[cell_min, cell_max]`` coordinates are used as-is.
+        the native grid coordinates are used as-is.
+        The rescaled coordinates are stored as the ``x`` field of each
+        :class:`~activelearning.utils.types.Candidate` produced by :meth:`sample`.
     n_fidelities : int
         Number of fidelity levels. ``1`` means single-fidelity.
     fidelity_action : {"any", "first", "last"}
