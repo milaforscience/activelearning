@@ -5,11 +5,13 @@ import hydra
 import torch
 from typing import Any, Iterable, Literal, Optional
 from omegaconf import DictConfig, OmegaConf
+from gflownet.gflownet import GFlowNetAgent
 from gflownet.utils.common import gflownet_from_config
 from activelearning.sampler.gflownet.logger_wrapper import RuntimeGFlowNetLoggerWrapper
 from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
     build_multi_fidelity_env_wrapper,
 )
+from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.gflownet.utils import proxy_states_to_candidates
 from activelearning.sampler.sampler import Sampler
 from activelearning.utils.types import Candidate, Observation
@@ -72,7 +74,7 @@ class GFlowNetSampler(Sampler):
         """Return floating-point precision as an integer (32 or 64)."""
         return 32 if self.dtype == torch.float32 else 64
 
-    def _build_agent(self, acquisition: Any) -> Any:
+    def _build_agent(self, acquisition: Acquisition) -> GFlowNetAgent:
         """Build and return a ``GFlowNetAgent`` ready for training.
 
         Merges runtime device/precision into the config, then calls
@@ -85,8 +87,14 @@ class GFlowNetSampler(Sampler):
 
         Parameters
         ----------
-        acquisition : Any
+        acquisition : Acquisition
             Acquisition function used as the GFlowNet reward proxy.
+
+        Returns
+        -------
+        agent : GFlowNetAgent
+            A fully configured agent with the proxy and logger injected,
+            ready to be trained via ``agent.train()``.
         """
 
         device = self._device_str()
