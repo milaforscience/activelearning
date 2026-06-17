@@ -244,8 +244,8 @@ instance/
 # Sphinx documentation
 docs/_build/
 docs_api/_build/
-docs_api/source/activelearning/
-
+# Sphinx AutoAPI-generated API pages (keeps docs_api/source/index.rst tracked)
+docs_api/source/*/
 # PyBuilder
 .pybuilder/
 target/
