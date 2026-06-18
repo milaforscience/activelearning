@@ -37,7 +37,6 @@ acquisition:
 sampler:
   type: GFlowNetGridSampler
   n_samples: 100
-  n_fidelities: 1
   # Hartmann domain: [0, 1]^6.
   domain_bounds:
     - [0.0, 1.0]

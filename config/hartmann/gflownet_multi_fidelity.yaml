@@ -37,7 +37,7 @@ acquisition:
 sampler:
   type: GFlowNetGridSampler
   n_samples: 100
-  n_fidelities: 3
+  fidelities: [1, 2, 3]
   fidelity_action: any  # "any" (SetFix), "first" (Stack fid-first), "last" (Stack fid-last)
   # Hartmann domain: [0, 1]^6.
   domain_bounds:

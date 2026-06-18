@@ -16,6 +16,17 @@ class MultiFidelityGFlowNetEnvWrapperBase(CompositeBase, ABC):
 
     Subclasses **must** define the following class-level attributes:
     ``idx_base_env`` (int) and ``idx_fidelity`` (int).
+
+    .. note:: **Fidelity indexing convention**
+
+        The fidelity sub-environment is a :class:`gflownet.envs.choice.Choice`
+        env with ``n_options=n_fidelities``. The ``Choice`` env is **1-based**:
+        its source (uncommitted) state is ``0``, and choosing option ``i``
+        produces state ``i``, so committed fidelity states span ``1..n_fidelities``.
+        Callers that need to map these raw indices to domain-specific fidelity
+        values (e.g. oracle keys ``{1, 2, 3}``) should use
+        :func:`~activelearning.sampler.gflownet.utils.proxy_states_to_candidates`
+        with a ``fidelity_map``.
     """
 
     @property
@@ -46,7 +57,10 @@ class MultiFidelityGFlowNetEnvWrapperBase(CompositeBase, ABC):
         states_base : List[Any]
             The states of the base environment in the batch.
         fidelities : List[int]
-            The fidelity index in each state of the batch.
+            The raw fidelity index from the ``Choice`` sub-environment for each
+            state. Values are **1-based** (``1..n_fidelities``); ``0`` indicates
+            the uncommitted source state, which should not appear in terminating
+            states.
         """
         states_base = []
         fidelities = []
@@ -72,7 +86,8 @@ class MultiFidelityGFlowNetEnvWrapperBase(CompositeBase, ABC):
         state_base : Any
             The state of the base environment.
         fidelity : int
-            The fidelity index in the input state.
+            The raw fidelity index from the ``Choice`` sub-environment.
+            **1-based**: values are in ``1..n_fidelities`` for committed states.
         """
         state = self._get_state(state)
         states_base, fidelities = self.get_states_base_and_fidelities([state])
@@ -108,7 +123,9 @@ class MultiFidelityGFlowNetEnvWrapper(SetFix, MultiFidelityGFlowNetEnvWrapperBas
         env_base_maker : Callable[..., GFlowNetEnv]
             An environment maker (partial) to instantiate the base environment.
         n_fidelities : int
-            The number of possible fidelity indices.
+            The number of possible fidelity choices. The underlying
+            ``Choice(n_options=n_fidelities)`` env produces **1-based** states
+            (``1..n_fidelities``); state ``0`` is the uncommitted source.
         """
         self.env_base = env_base_maker()
         self.env_fidelity = Choice(
@@ -152,7 +169,9 @@ class MultiFidelityGFlowNetEnvWrapperFidFirst(
         env_base_maker : Callable[..., GFlowNetEnv]
             An environment maker (partial) to instantiate the base environment.
         n_fidelities : int
-            The number of possible fidelity indices.
+            The number of possible fidelity choices. The underlying
+            ``Choice(n_options=n_fidelities)`` env produces **1-based** states
+            (``1..n_fidelities``); state ``0`` is the uncommitted source.
         """
         self.env_base = env_base_maker()
         self.env_fidelity = Choice(
@@ -196,7 +215,9 @@ class MultiFidelityGFlowNetEnvWrapperFidLast(
         env_base_maker : Callable[..., GFlowNetEnv]
             An environment maker (partial) to instantiate the base environment.
         n_fidelities : int
-            The number of possible fidelity indices.
+            The number of possible fidelity choices. The underlying
+            ``Choice(n_options=n_fidelities)`` env produces **1-based** states
+            (``1..n_fidelities``); state ``0`` is the uncommitted source.
         """
         self.env_base = env_base_maker()
         self.env_fidelity = Choice(

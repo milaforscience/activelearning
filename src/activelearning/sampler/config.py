@@ -40,8 +40,12 @@ class GFlowNetSamplerConfig(BaseModel):
         Discriminator field for the :data:`SamplerConfig` union.
     n_samples : int
         Number of candidates to generate per :meth:`~activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler.sample` call.
-    n_fidelities : int
-        Number of fidelity levels. ``1`` means single-fidelity.
+    fidelities : list[int] or None
+        Fidelity levels to generate. ``None`` means single-fidelity (no
+        fidelity is stamped on candidates). A list enables multi-fidelity
+        mode: each sampled candidate is assigned one of these values as its
+        ``fidelity``. Values must match the oracle's ``fidelity_costs`` keys
+        (e.g. ``[1, 2, 3]`` for a three-level oracle).
     log_dir : str or None
         Root directory for GFlowNet logs.  A temporary directory is created
         automatically when ``None``.
@@ -54,7 +58,7 @@ class GFlowNetSamplerConfig(BaseModel):
 
     type: Literal["GFlowNetSampler"] = "GFlowNetSampler"
     n_samples: int = Field(gt=0)
-    n_fidelities: int = Field(default=1, ge=1)
+    fidelities: list[int] | None = None
     fidelity_action: _FidelityAction = "any"
     log_dir: str | None = None
     conf: dict[str, Any] | None = None
@@ -63,7 +67,7 @@ class GFlowNetSamplerConfig(BaseModel):
         return GFlowNetSampler(
             n_samples=self.n_samples,
             conf=compose_gflownet_conf(conf_overrides=self.conf, log_dir=self.log_dir),
-            n_fidelities=self.n_fidelities,
+            fidelities=self.fidelities,
             fidelity_action=self.fidelity_action,
         )
 
@@ -92,7 +96,7 @@ class GFlowNetGridSamplerConfig(GFlowNetSamplerConfig):
         return GFlowNetGridSampler(
             n_samples=self.n_samples,
             conf=compose_gflownet_conf(conf_overrides=self.conf, log_dir=self.log_dir),
-            n_fidelities=self.n_fidelities,
+            fidelities=self.fidelities,
             fidelity_action=self.fidelity_action,
             domain_bounds=self.domain_bounds,
         )

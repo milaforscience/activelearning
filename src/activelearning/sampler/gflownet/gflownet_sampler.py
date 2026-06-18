@@ -34,12 +34,15 @@ class GFlowNetSampler(Sampler):
     conf : DictConfig
         GFlowNet config (``env``, ``policy``, ``gflownet``, ``loss``,
         ``buffer``, ``evaluator``, ``logger``, ``proxy``).
-    n_fidelities : int
-        Number of fidelity levels. When > 1 the env is wrapped with a
-        multi-fidelity wrapper chosen by *fidelity_action*.
+    fidelities : list[int] or None
+        Fidelity levels to generate. ``None`` means single-fidelity (no
+        fidelity is stamped on candidates). A list enables multi-fidelity
+        mode: each sampled candidate is assigned one of these values as its
+        ``fidelity``. Values must match the oracle's ``fidelity_costs`` keys
+        (e.g. ``[1, 2, 3]`` for a three-level oracle).
     fidelity_action : {"any", "first", "last"}
         Controls when fidelity is chosen during a trajectory. Only used when
-        ``n_fidelities > 1``.
+        ``fidelities`` is not ``None``.
 
         - ``"any"`` *(default)* — fidelity may be chosen at any point,
           interleaved with base-env actions (SetFix wrapper).
@@ -51,16 +54,17 @@ class GFlowNetSampler(Sampler):
         self,
         n_samples: int,
         conf: DictConfig,
-        n_fidelities: int = 1,
+        fidelities: Optional[list[int]] = None,
         fidelity_action: Literal["any", "first", "last"] = "any",
     ) -> None:
         self.n_samples = n_samples
         self.conf = conf
-        self.n_fidelities = n_fidelities
+        self.fidelities = fidelities
+        self._n_fidelities = len(fidelities) if fidelities is not None else 1
         self.fidelity_action = fidelity_action
-        if n_fidelities == 1 and fidelity_action != "any":
+        if fidelities is None and fidelity_action != "any":
             logger.warning(
-                "fidelity_action=%r has no effect when n_fidelities=1.",
+                "fidelity_action=%r has no effect when fidelities=None (single-fidelity).",
                 fidelity_action,
             )
 
@@ -104,7 +108,7 @@ class GFlowNetSampler(Sampler):
 
         env = (
             self._build_multi_fidelity_env(conf, device, fp)
-            if self.n_fidelities > 1
+            if self.fidelities is not None
             else None
         )
 
@@ -142,7 +146,7 @@ class GFlowNetSampler(Sampler):
         return build_multi_fidelity_env_wrapper(
             fidelity_action=self.fidelity_action,
             env_base_maker=env_base_maker,
-            n_fidelities=self.n_fidelities,
+            n_fidelities=self._n_fidelities,
             float_precision=fp,
             device=device,
         )
@@ -178,7 +182,9 @@ class GFlowNetSampler(Sampler):
             )
         if len(states) == 0:
             return []
-        return proxy_states_to_candidates(env.states2proxy(states), env)
+        return proxy_states_to_candidates(
+            env.states2proxy(states), env, fidelity_map=self.fidelities
+        )
 
     # ------------------------------------------------------------------
     # Public interface
