@@ -84,6 +84,12 @@ class TestGFlowNetSamplerInstantiation:
     def test_warns_when_fidelity_action_set_with_single_fidelity(
         self, gflownet_conf_2d, action, caplog
     ):
+        """Warn when fidelity_action is explicitly set but fidelities is None.
+
+        In single-fidelity mode no multi-fidelity wrapper is used, so
+        fidelity_action has no effect.  An explicit "first" or "last" suggests
+        the user intended multi-fidelity, hence the warning.
+        """
         import logging
 
         conf, _ = gflownet_conf_2d
@@ -99,6 +105,11 @@ class TestGFlowNetSamplerInstantiation:
     def test_no_warning_when_fidelity_action_any_with_single_fidelity(
         self, gflownet_conf_2d, caplog
     ):
+        """No warning when fidelity_action is the default "any" in single-fidelity.
+
+        "any" is the default value, so the user didn't explicitly request
+        multi-fidelity behaviour — there is nothing to warn about.
+        """
         import logging
 
         conf, _ = gflownet_conf_2d
