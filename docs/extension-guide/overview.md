@@ -84,13 +84,16 @@ The sampler is the only component whose `build()` receives `runtime` directly
 ## **Quick reference: what to extend**
 <div class="schema-table" markdown>
 
-| If you need to change… | Extend… | Key method(s) |
-|---|---|---|
-| Evaluation rule, simulator, benchmark, fidelity levels | [`Oracle`](oracle.md) | `get_fidelity_confidences()`, `get_costs()`, `query()` |
-| Candidate proposal strategy, search space | [`Sampler`](sampler.md) | `sample()` |
-| Predictive model (GP, NN, ensemble…) | [`Surrogate`](surrogate.md) | `updates_from_latest()`, `fit()` / `update()`, `predict()` |
-| Information criterion, scoring function | [`Acquisition`](acquisition.md) | `update()`, `score()` |
-| Round budget allocation, candidate selection | [`Selector`](selector.md) | `__call__()` |
+| If you need to change…                                                   | Extend… | Key method(s)                                                                                                     |
+|--------------------------------------------------------------------------|---|-------------------------------------------------------------------------------------------------------------------|
+| Evaluation rule, simulator, benchmark, fidelity levels                   | [`Oracle`](oracle.md) | `get_fidelity_confidences()`, `get_costs()`, `query()`                                                            |
+| Candidate proposal strategy, search space                                | [`Sampler`](sampler.md) | `sample()`                                                                                                        |
+| Predictive model (GP, NN, ensemble…)                                     | [`Surrogate`](surrogate.md) | `updates_from_latest()`, `is_fitted()`, `fit()` / `update()`, `predict()`                                         |
+| Information criterion, scoring function                                  | [`Acquisition`](acquisition.md) | `update()`, `score()`                                                                                             |
+| Per-round budget allocation and budget cost schedule                     | `Budget` | `get_round_budget()`, `consume()`, `can_afford()`                                                                  |
+| Candidate selection policy (ranking/constraints within the round budget) | [`Selector`](selector.md) | `__call__()`                                                                                                      |
+| Observation storage/retrieval semantics                                  | `Dataset` | `add_observations()`, `get_observations_iterable()`, `get_latest_observations_iterable()`, `get_best_candidates()` |
+| Experiment tracking backend(s)                                           | `Logger` | `log_config()`, `log_metric()`, `log_figure()`, `log_step()`, `end()`                                             |
 
 </div>
 
@@ -100,4 +103,4 @@ The sampler is the only component whose `build()` receives `runtime` directly
 - [Sampler](sampler.md) — add a new candidate proposal strategy
 - [Surrogate](surrogate.md) — add a new predictive model
 - [Acquisition](acquisition.md) — add a new information criterion
-- [Selector](selector.md) — add a new budget allocation policy
+- [Selector](selector.md) — add a new candidate selection policy

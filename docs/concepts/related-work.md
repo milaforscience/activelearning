@@ -1,6 +1,6 @@
 # **Related Work and Positioning**
 
-The Multi-Fidelity Active Learning framework, described in Hernandez-Garcia et al. (2024), addresses a combination of research objectives not covered by existing active learning or Bayesian optimization libraries. The sections below identify the nearest related systems and characterize the specific gaps this framework fills.
+This Multi-Fidelity Active Learning framework addresses a combination of research objectives not covered by existing active learning or Bayesian optimization libraries. The sections below identify the nearest related systems and characterize the specific gaps this framework fills.
 
 ## **Existing Active Learning Frameworks**
 
@@ -8,14 +8,14 @@ Most general-purpose active learning libraries share a common design: they opera
 
 | Library | Primary Capabilities | Limitations |
 | --- | --- | --- |
-| **modAL** (Danka & Horvath, 2018) | Pool-based AL, scikit-learn estimators, uncertainty sampling, query-by-committee | Single fidelity; pool-based only; no budget constraints |
-| **scikit-activeml** | Pool-based AL; broad query strategy set; classification and regression | Single fidelity; pool-based only; no scientific discovery focus |
-| **BMDAL_reg** | Batch mode deep AL for regression | Single fidelity; pool-based only; neural networks only |
-| **ALiPy** | Comprehensive pool-based AL toolbox; broad query strategy set | Single fidelity; pool-based only; no multi-fidelity or continuous input support |
-| **libact** | Pool-based AL with active learning by learning | Single fidelity; pool-based only; classification focus |
-| **Baal** ([baal-org/baal](https://github.com/baal-org/baal)) | Bayesian deep AL via Monte Carlo Dropout and ensemble uncertainty; image and text classification loops | Single fidelity; pool-based only; deep learning classifiers/regressors only; no multi-fidelity or de novo synthesis |
+| **modAL** ([modAL-python/modAL](https://github.com/modAL-python/modAL)) | Pool-based AL, scikit-learn estimators, uncertainty sampling, query-by-committee | No multi-fidelity; pool-based only |
+| **scikit-activeml** ([scikit-activeml/scikit-activeml](https://github.com/scikit-activeml/scikit-activeml)) | Pool-based AL; broad query strategy set; classification and regression | No multi-fidelity; pool-based only |
+| **BMDAL_reg** ([dholzmueller/bmdal_reg](https://github.com/dholzmueller/bmdal_reg)) | Batch mode deep AL for regression | No multi-fidelity; pool-based only; neural networks only |
+| **ALiPy** ([NUAA-AL/ALiPy](https://github.com/NUAA-AL/ALiPy)) | Comprehensive pool-based AL toolbox; broad query strategy set | No multi-fidelity; pool-based only |
+| **libact** ([ntucllab/libact](https://github.com/ntucllab/libact)) | Pool-based AL with active learning by learning | No multi-fidelity; pool-based only; classification focus |
+| **Baal** ([baal-org/baal](https://github.com/baal-org/baal)) | Bayesian deep AL via Monte Carlo Dropout and ensemble uncertainty; image and text classification loops | No multi-fidelity; pool-based only; PyTorch models only |
 
-No existing framework addresses multi-fidelity experimentation, de novo synthesis over continuous or structured spaces, or budget-constrained discovery of diverse high-scoring candidates.
+All libraries listed above share two key limitations: they do not support multi-fidelity queries (querying the same candidate at different cost-accuracy trade-offs), and they are pool or stream-based only (selecting from a pre-enumerated set of candidates rather than generating novel candidates over continuous or structured spaces). To our knowledge, no existing open-source AL framework supports multi-fidelity surrogate modelling over candidate-fidelity pairs $(x, m)$, cost-aware budget accounting that tracks heterogeneous oracle costs $c(x, m)$ rather than simple query counts, or de novo candidate synthesis over continuous and structured input spaces.
 
 ## **Bayesian Optimization Libraries**
 
@@ -37,19 +37,17 @@ The following research directions are directly relevant to the multi-fidelity se
 
 **GFlowNets** (Bengio et al., 2021, 2023) are generative models trained to sample objects proportional to a reward signal. They are suited to generating diverse high-scoring candidates in combinatorial or structured spaces. The GFlowNet sampler integration in this framework introduces diverse candidate generation into the multi-fidelity active learning loop—a combination absent from existing BO and AL libraries.
 
-## **Framework Contributions**
+## **Framework Positioning**
 
-This framework makes the following contributions relative to the libraries and research directions above:
+The libraries and research directions above address subsets of the capabilities required for multi-fidelity active learning. BO libraries such as BoTorch and Dragonfly support multi-fidelity acquisition and continuous input spaces, but lack an active learning loop targeting diverse candidates under cost-aware budget constraints. AL libraries provide the iterative query loop but are limited to pool-based, single-fidelity selection. This framework combines these capabilities with the following design choices:
 
-1. **Multi-fidelity active search**: combines multiple fidelity levels $m \in \mathcal{M}$ with budget-constrained active search. The objective is to discover as many diverse high-scoring candidates as possible under a finite oracle budget, not to converge on a single global optimum.
+1. **Multi-fidelity active learning for diverse discovery**: combines multi-fidelity surrogate modeling over candidate-fidelity pairs $(x, m)$ with cost-aware budget accounting that tracks heterogeneous oracle costs $c(x, m)$. Unlike standard AL (which targets model accuracy) or BO (which targets a single global optimum), the objective is to discover diverse high-scoring candidates under a finite oracle budget.
 
-2. **De novo query synthesis**: operates over the full input space $\mathcal{X}$ rather than a fixed pool of candidates. This is the appropriate setting for scientific discovery problems such as drug discovery and materials design, where the candidate pool is too large to enumerate or does not exist a priori.
+2. **De novo query synthesis**: operates over the full input space $\mathcal{X}$ rather than a fixed pool of candidates. This is the appropriate setting for scientific discovery problems such as drug discovery and materials design, where the candidate space is too large to enumerate or does not exist a priori.
 
 3. **GFlowNet integration** *(planned)*: the framework is designed to support GFlowNets as samplers for diverse candidate generation, where candidates are generated proportional to an acquisition signal $\alpha(x, m)$. This integration is a planned extension and is not yet implemented in the current codebase.
 
 4. **Modular, config-driven design**: every component—surrogate, acquisition, sampler, selector, oracle, budget—is replaceable via YAML configuration. The orchestration logic is fixed; any component can be substituted or extended without modifying the loop.
-
-5. **Scientific discovery focus**: the framework targets settings where the goal is to identify a diverse set of high-scoring candidates for downstream experimental validation. This reflects the standard experimental workflow in computational biology, chemistry, and materials science.
 
 ## **References**
 

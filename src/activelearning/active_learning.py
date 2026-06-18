@@ -74,6 +74,11 @@ def active_learning(
     initial_budget = budget.available_budget
     num_rounds = 0
 
+    # Validate that every reachable round can afford at least one oracle query.
+    # Catches misconfigured schedules (e.g. sigmoid with too-slow start) that
+    # would silently terminate the experiment.
+    budget.validate_schedule(min_query_cost=oracle.get_min_query_cost())
+
     # Propagate oracle fidelity confidences to the surrogate before the loop.
     # Surrogates that don't use fidelity metadata safely ignore this (no-op default).
     surrogate.set_fidelity_confidences(oracle.get_fidelity_confidences())

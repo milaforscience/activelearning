@@ -10,7 +10,7 @@ The YAML file defines the full experiment — surrogate, acquisition function, s
 
 ## **First run**
 
-Start with a minimal version of the single-fidelity Branin config, capped to a small budget so the run completes in seconds:
+Start with a minimal, single-fidelity version of the Branin task. Branin is a widely used objective function with three global minima, defined on two dimensions. The oracle uses negated Branin to align with the framework's maximization setup. Here, the design space is discretized into a 100x100 grid. In this minimal example, the budget is capped so the run completes in seconds:
 
 ```bash
 uv run activelearning config/branin_single_fidelity.yaml \
@@ -34,11 +34,12 @@ The key output fields are:
 | `round` | Active learning round index |
 | `num_new_samples` | Candidates queried in that round |
 | `round_cost` | Budget consumed in that round |
+| `total_cost` | Cumulative budget consumed across all rounds so far |
 | `budget_remaining` | Total budget still available |
 
 ## **Scale up**
 
-Once the first run looks right, remove the budget override to run the full experiment:
+Once you've confirmed the run completes successfully, remove the budget override to run the full experiment:
 
 ```bash
 uv run activelearning config/branin_single_fidelity.yaml

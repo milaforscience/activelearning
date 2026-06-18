@@ -163,6 +163,41 @@ class TestHypercubeCandidateSetSpec:
         result = spec.build(fitted_sf_surrogate)
         assert result.dtype == torch.float64
 
+    def test_output_dtype_respects_runtime_context(
+        self, fitted_sf_surrogate: BoTorchGPSurrogate
+    ) -> None:
+        """build() uses self.dtype from the runtime context."""
+        from activelearning.runtime import RuntimeContext
+
+        spec = HypercubeCandidateSetSpec(bounds=self.BOUNDS_2D, n_points=self.N)
+        spec.bind_runtime_context(RuntimeContext(dtype=torch.float32))
+        result = spec.build(fitted_sf_surrogate)
+        assert result.dtype == torch.float32
+
+    def test_lhs_dtype_respects_runtime_context(
+        self, fitted_sf_surrogate: BoTorchGPSurrogate
+    ) -> None:
+        """LHS strategy also uses self.dtype from the runtime context."""
+        from activelearning.runtime import RuntimeContext
+
+        spec = HypercubeCandidateSetSpec(
+            bounds=self.BOUNDS_2D, n_points=self.N, strategy="lhs"
+        )
+        spec.bind_runtime_context(RuntimeContext(dtype=torch.float32))
+        result = spec.build(fitted_sf_surrogate)
+        assert result.dtype == torch.float32
+
+    def test_mf_dtype_respects_runtime_context(
+        self, fitted_mf_surrogate: BoTorchGPSurrogate
+    ) -> None:
+        """Fidelity column also uses self.dtype from the runtime context."""
+        from activelearning.runtime import RuntimeContext
+
+        spec = HypercubeCandidateSetSpec(bounds=self.BOUNDS_2D, n_points=self.N)
+        spec.bind_runtime_context(RuntimeContext(dtype=torch.float32))
+        result = spec.build(fitted_mf_surrogate, target_fidelity_value=1.0)
+        assert result.dtype == torch.float32
+
     def test_two_builds_differ(self, fitted_sf_surrogate: BoTorchGPSurrogate) -> None:
         """Each call to build() samples fresh points (stochastic)."""
         spec = HypercubeCandidateSetSpec(bounds=self.BOUNDS_2D, n_points=self.N)

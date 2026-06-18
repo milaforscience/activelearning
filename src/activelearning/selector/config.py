@@ -1,3 +1,10 @@
+"""Pydantic models of selectors.
+
+Changes in the interface of existing selectors should be reflected in this
+configuration. New selectors should define their corresponding pydantic model here and
+be added to ``SelectorConfig``.
+"""
+
 from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, Field

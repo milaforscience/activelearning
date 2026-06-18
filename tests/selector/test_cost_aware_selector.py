@@ -238,6 +238,29 @@ def test_exact_budget_fit(selector):
     assert len(selected) == 3
 
 
+def test_many_small_cost_candidates_no_fp_drift(selector):
+    """Regression: floating-point accumulation must not reject the last affordable candidate.
+
+    With 3000 candidates at cost 0.01 and budget 30.0, all should be selected
+    (3000 × 0.01 = 30.0 exactly). Without tolerance, iterative summation drifts
+    to ~29.990...189 after 2999 additions and rejects the 3000th.
+    """
+    n = 3000
+    candidates = [Candidate(x=i) for i in range(n)]
+    acquisition = Mock()
+    acquisition.supports_singleton_scoring = True
+    acquisition.score.return_value = [1.0] * n
+
+    def cost_fn(c):
+        return [0.01] * len(c)
+
+    selected = selector(
+        candidates, acquisition=acquisition, cost_fn=cost_fn, round_budget=30.0
+    )
+
+    assert len(selected) == n
+
+
 def test_greedy_not_optimal(selector):
     """Test that greedy utility/cost ranking can miss the max-utility feasible set."""
     # Classic knapsack counter-example

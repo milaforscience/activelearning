@@ -1,12 +1,12 @@
 # **Adding a New Selector**
 
 Selectors choose the final subset of candidates from the pool the sampler
-produces. A selector implements the **round budget allocation policy**. Implement a new
-selector to:
+produces. A selector implements the **within-round candidate selection policy**
+under the round budget provided by `Budget`. Implement a new selector to:
 
 - Apply custom constraints (diversity, domain rules, batch coverage).
-- Implement a new budget allocation policy (fractional fidelity budget, risk
-  thresholds).
+- Implement a new feasibility/ranking policy under a round budget (fractional
+  fidelity spending, risk thresholds).
 - Mix cost awareness with acquisition scoring in a custom way.
 
 Before implementing a new selector, verify that [`TopKAcquisitionSelector`](../reference/activelearning/selector/score_selector/#activelearning.selector.score_selector.TopKAcquisitionSelector) or
@@ -16,9 +16,9 @@ Before implementing a new selector, verify that [`TopKAcquisitionSelector`](../r
 
 Subclass `activelearning.selector.selector.Selector` and implement one method:
 
-| Method | Signature |
-|---|---|
-| `__call__` | `(candidates, acquisition=None, cost_fn=None, round_budget=None) -> list[Candidate]` |
+| Method | Required? | Notes |
+|---|---|---|
+| `__call__(candidates, acquisition=None, cost_fn=None, round_budget=None)` | **Yes** | Returns `list[Candidate]` — a subset of the input candidates |
 
 Return a **subset** of the input candidates — including an empty list if no candidates are feasible. Never query the oracle, compute
 observations, or modify the budget inside the selector.
@@ -92,13 +92,9 @@ Any oracle call inside the selector corrupts budget accounting.
 **Do not double-count budget** — the loop deducts costs after oracle query. The
 selector's job is to check feasibility, not to deduct.
 
-**`candidate.x` shape** — `Candidate.x` can be any type (list, numpy array,
-tensor). Normalize to a plain list before arithmetic comparisons if you are not
-sure of the upstream sampler's output format.
-
 ## **Related pages**
 
 - [Sampler guide](sampler.md) — how the candidate pool is generated
 - [Acquisition guide](acquisition.md) — how `score()` works
-- [Extension guide overview](index.md)
+- [Extension guide overview](overview.md)
 - [Selector API](../reference/activelearning/selector/selector/)

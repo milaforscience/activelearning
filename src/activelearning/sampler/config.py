@@ -1,3 +1,10 @@
+"""Pydantic models of samplers.
+
+Changes in the interface of existing samplers should be reflected in this
+configuration. New samplers should define their corresponding pydantic model here and
+be added to ``SamplerConfig``.
+"""
+
 from typing import Annotated, Any, Literal, Union
 from pydantic import BaseModel, Field
 from activelearning.sampler.hypercube_sampler import HypercubeSampler

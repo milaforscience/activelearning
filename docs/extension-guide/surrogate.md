@@ -7,7 +7,8 @@ surrogate subclass to:
 - Use a different model family (neural network, random forest, ensemble).
 - Wrap an external library (scikit-learn, GPyTorch custom kernel, JAX model).
 - Implement incremental or online updates.
-- Control fidelity-weighted training data.
+- Customize how observations from different fidelity levels are encoded and
+  weighted during model fitting.
 
 Before implementing a new surrogate, verify that [`DummyMeanSurrogate`](../reference/activelearning/surrogate/dummy_mean_surrogate/#activelearning.surrogate.dummy_mean_surrogate.DummyMeanSurrogate) (for
 baselines) or [`BoTorchGPSurrogate`](../reference/activelearning/surrogate/botorch_surrogate/#activelearning.surrogate.botorch_surrogate.BoTorchGPSurrogate) (for GP-based work) does not already meet your
@@ -23,7 +24,7 @@ or should implement depend on your update strategy:
 | `updates_from_latest()` | **Yes** | Declares loop behavior: `False` = full refit, `True` = incremental |
 | `fit(observations)` | If `updates_from_latest()` returns `False` | Full refit on all observations |
 | `update(observations)` | If `updates_from_latest()` returns `True` | Incremental update from latest batch |
-| `predict(candidates)` | If acquisition uses `predict()` | Returns `dict` with at least `"mean"` key |
+| `predict(candidates)` | If acquisition uses `predict()` | Returns `dict` — must include at least a `"mean"` key |
 | `is_fitted()` | If unsafe before training | Override to return `False` until first fit |
 | `set_fidelity_confidences(confidences)` | For multi-fidelity surrogates | Called before `fit()` / `update()` |
 
@@ -110,5 +111,5 @@ non-BoTorch models should pair with acquisitions that only use `predict()`.
 ## **Related pages**
 
 - [Acquisition guide](acquisition.md) — how the acquisition consumes `predict()`
-- [Extension guide overview](index.md)
+- [Extension guide overview](overview.md)
 - [Surrogate API](../reference/activelearning/surrogate/surrogate/)

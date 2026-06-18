@@ -15,9 +15,9 @@ are:
 
 | Method | Required? | Notes |
 |---|---|---|
-| `update(surrogate, observations)` | Recommended | Cache the surrogate; validate compatibility |
-| `score(candidates)` | For singleton scoring | Returns `list[float]` |
-| `score_batches(candidate_batches)` | For batch scoring | Returns `list[float]` per batch |
+| `update(surrogate, observations)` | **Recommended** | Cache the surrogate; validate compatibility |
+| `score(candidates)` | **For singleton scoring** | Returns `list[float]` — one utility score per candidate |
+| `score_batches(candidate_batches)` | **For batch scoring** | Returns `list[float]` — one utility score per batch |
 
 Implement `score()` for independent per-candidate scoring, `score_batches()`
 for joint batch utility, or both. The `supports_singleton_scoring` and
@@ -96,8 +96,10 @@ the framework as reference.
 
 **Materializing `observations`** — the `observations` parameter in `update()` may be a one-pass generator. Convert it to a list immediately if you need to iterate it more than once.
 
-**Never call `surrogate.predict()` in `update()`** — `update()` is for caching
-state, not scoring. Predict inside `score()` or `score_batches()` instead.
+**Avoid calling `surrogate.predict()` in `update()`** — `update()` receives the
+surrogate but not the candidates to score, so there is nothing meaningful to
+predict yet. Cache the surrogate in `update()` and call `predict()` inside
+`score()` or `score_batches()` where candidates are available.
 
 **Null surrogate guard** — `self.surrogate` is `None` before `update()` has
 been called. Return neutral scores (e.g. `[0.0] * n`) when the surrogate is
@@ -111,5 +113,5 @@ not apply cost weighting twice.
 
 - [Surrogate guide](surrogate.md) — what `predict()` returns
 - [Selector guide](selector.md) — how `score()` is called during selection
-- [Extension guide overview](index.md)
+- [Extension guide overview](overview.md)
 - [Acquisition API](../reference/activelearning/acquisition/acquisition/)

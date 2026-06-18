@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import random
 
-from activelearning.runtime import RuntimeConfig, RuntimeContext
+from activelearning.runtime import RuntimeContextConfig, RuntimeContext
 from activelearning.utils.seeding import set_global_seed
 
 
@@ -27,9 +27,9 @@ def test_runtime_context_stores_runtime_values():
 
 def test_runtime_config_build_context_includes_seed() -> None:
     """RuntimeConfig should propagate seed into the materialized context."""
-    config = RuntimeConfig(device="cpu", precision=32, seed=7)
+    config = RuntimeContextConfig(device="cpu", precision=32, seed=7)
 
-    context = config.build_context(logger=None)
+    context = config.build(logger=None)
 
     assert context.device == torch.device("cpu")
     assert context.dtype == torch.float32

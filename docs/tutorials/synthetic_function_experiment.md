@@ -51,13 +51,13 @@ Each line represents one active learning round. The fields are:
 
 | Field | Meaning |
 | --- | --- |
-| `round` | Round index |
-| `num_new_samples` | Candidates queried this round |
-| `round_cost` | Budget consumed this round |
-| `total_cost` | Total budget consumed so far |
-| `budget_remaining` | Budget still available |
+| `round` | Active learning round index |
+| `num_new_samples` | Candidates queried in that round |
+| `round_cost` | Budget consumed in that round |
+| `total_cost` | Cumulative budget consumed across all rounds so far |
+| `budget_remaining` | Total budget still available |
 
-Once the run looks right, drop the budget override to run the full experiment:
+Once you've confirmed the run completes successfully, drop the budget override to run the full experiment:
 
 ```sh
 uv run activelearning config/branin_single_fidelity.yaml
@@ -88,8 +88,8 @@ uv run activelearning config/branin_multi_fidelity.yaml \
 The terminal output looks the same, but the numbers will differ:
 
 ```text
-[Step 1] round=1 | num_new_samples=2999 | round_cost=29.9900 | total_cost=29.9900 | budget_remaining=0.0100
-Done. Rounds: 1 | Total cost: 29.9900
+[Step 1] round=1 | num_new_samples=3000 | round_cost=30.0000 | total_cost=30.0000 | budget_remaining=0.0000
+Done. Rounds: 1 | Total cost: 30.0000
 ```
 
 !!! info "What changed with multi-fidelity?"
@@ -158,7 +158,6 @@ The most useful views to start with:
 
 This tutorial covers running and monitoring experiments from the checked-in configs. Natural follow-ups include:
 
-- computing derived metrics on logged results (e.g. mean top-10 score, simple regret, inference regret),
 - adapting the configs to your own oracle — see the [Extension Guide](../extension-guide/overview.md),
 - reading [Multi-Fidelity Setting](../concepts/multi_fidelity.md) for a deeper treatment of how fidelity costs and confidences propagate through the loop,
 - or replacing the random sampler with a generative model — see the [GFlowNet Sampler](gflownet_sampler.md) tutorial to learn how to configure and evaluate a GFlowNet that learns to sample proportionally to the reward.

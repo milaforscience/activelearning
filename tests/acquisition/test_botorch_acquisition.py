@@ -1,6 +1,7 @@
 """Tests for BoTorchAcquisitionBase, AnalyticBoTorchAcquisition, and QBatchBoTorchAcquisition."""
 
 import math
+import warnings
 from typing import Any, Iterable, Optional
 from unittest.mock import MagicMock
 
@@ -275,6 +276,36 @@ class TestUpdateValidation:
         acq.update(fitted_surrogate)
         assert acq.surrogate is fitted_surrogate
         assert acq._botorch_surrogate is fitted_surrogate
+
+    def test_warns_when_non_mf_acquisition_used_with_mf_surrogate(
+        self,
+        fitted_mf_surrogate: BoTorchGPSurrogate,
+        multi_fidelity_observations: list[Observation],
+    ) -> None:
+        acq = StubAnalytic()
+        with pytest.warns(UserWarning, match="not a multi-fidelity acquisition"):
+            acq.update(fitted_mf_surrogate, multi_fidelity_observations)
+
+    def test_no_warning_for_mf_acquisition_with_mf_surrogate(
+        self,
+        fitted_mf_surrogate: BoTorchGPSurrogate,
+        multi_fidelity_observations: list[Observation],
+    ) -> None:
+        acq = StubQBatch()
+        acq._supports_multi_fidelity = True
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            acq.update(fitted_mf_surrogate, multi_fidelity_observations)
+
+    def test_no_warning_for_non_mf_acquisition_with_single_fidelity_surrogate(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+    ) -> None:
+        acq = StubAnalytic()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            acq.update(fitted_surrogate, single_fidelity_observations)
 
 
 # ===================================================================
