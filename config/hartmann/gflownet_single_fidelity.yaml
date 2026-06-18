@@ -48,8 +48,11 @@ sampler:
     - [0.0, 1.0]
   conf:
     env:
+      _target_: gflownet.envs.grid.Grid
       n_dim: 6
       length: 20  # 20 cells per dimension → 0.05 resolution
+      cell_min: 0
+      cell_max: 1
     gflownet:
       # Active-learning optimizer settings (from mf-al-gfn hartmann config).
       random_action_prob: 0.001  # default: 0.0

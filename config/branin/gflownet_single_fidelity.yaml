@@ -40,6 +40,7 @@ sampler:
     - [0.0, 15.0]
   conf:
     env:
+      _target_: gflownet.envs.grid.Grid
       n_dim: 2
       length: 100  # 100 cells per dimension → 0.15 resolution
     gflownet:

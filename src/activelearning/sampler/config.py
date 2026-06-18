@@ -28,10 +28,11 @@ class HypercubeSamplerConfig(BaseModel):
 class GFlowNetSamplerConfig(BaseModel):
     """Pydantic config for :class:`~activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler`.
 
-    GFlowNet component defaults (env, policy, loss, buffer, evaluator, logger,
+    GFlowNet component defaults (policy, loss, buffer, evaluator, logger,
     proxy) are loaded automatically from ``config/gflownet/`` via
     :func:`~activelearning.sampler.gflownet.config_utils.compose_gflownet_conf`.
-    Only experiment-specific overrides need to be provided in ``conf``.
+    The env config starts from ``env/base.yaml`` only — the ``_target_`` class
+    and all env-specific fields must be provided in ``conf``.
 
     Parameters
     ----------
@@ -48,6 +49,7 @@ class GFlowNetSamplerConfig(BaseModel):
         Experiment-specific overrides for the GFlowNet config, following the
         top-level key structure (``env``, ``gflownet``, ``policy``, ``logger``,
         ``proxy``, etc.).  Deep-merged over the YAML defaults when provided.
+        Must include ``env._target_`` and all required env fields.
     """
 
     type: Literal["GFlowNetSampler"] = "GFlowNetSampler"

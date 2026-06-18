@@ -85,25 +85,48 @@ def test_compose_gflownet_conf_has_all_required_keys():
 
 
 def test_compose_gflownet_conf_env_target():
-    """Default env must be the Grid environment."""
+    """Default env must be the base GFlowNetEnv — no env class is hardcoded."""
     conf = compose_gflownet_conf()
+    assert conf.env._target_ == "gflownet.envs.base.GFlowNetEnv"
+
+
+def test_compose_gflownet_conf_env_no_grid_specific_keys():
+    """Default env must not contain Grid-specific keys (n_dim, length, etc.)."""
+    conf = compose_gflownet_conf()
+    assert not hasattr(conf.env, "n_dim")
+    assert not hasattr(conf.env, "length")
+    assert not hasattr(conf.env, "cell_min")
+
+
+def test_compose_gflownet_conf_env_grid_via_overrides():
+    """Users must be able to configure the Grid env via conf_overrides."""
+    conf = compose_gflownet_conf(
+        conf_overrides={
+            "env": {
+                "_target_": "gflownet.envs.grid.Grid",
+                "n_dim": 2,
+                "length": 10,
+            }
+        }
+    )
     assert conf.env._target_ == "gflownet.envs.grid.Grid"
+    assert conf.env.n_dim == 2
+    assert conf.env.length == 10
 
 
 def test_compose_gflownet_conf_env_has_base_fields():
-    """Env must include fields from env/base.yaml (merged via defaults: [base])."""
+    """Env must include fields from env/base.yaml."""
     conf = compose_gflownet_conf()
-    # These fields come from env/base.yaml, not grid.yaml
     assert hasattr(conf.env, "conditional")
     assert hasattr(conf.env, "continuous")
     assert hasattr(conf.env, "skip_mask_check")
 
 
 def test_compose_gflownet_conf_env_cell_min_default():
-    """Default grid must use cell_min=-1 matching the original gflownet repo."""
+    """Env base config must NOT include cell_min — that is a Grid-specific field."""
     conf = compose_gflownet_conf()
-    assert conf.env.cell_min == -1
-    assert conf.env.cell_max == 1
+    assert not hasattr(conf.env, "cell_min")
+    assert not hasattr(conf.env, "cell_max")
 
 
 def test_compose_gflownet_conf_proxy_target():
@@ -161,18 +184,35 @@ def test_compose_gflownet_conf_no_device_or_float_precision():
 
 
 def test_compose_gflownet_conf_overrides_env_n_dim():
-    """Overriding env.n_dim must take precedence over the default."""
-    conf = compose_gflownet_conf(conf_overrides={"env": {"n_dim": 6}})
+    """Overriding env fields via conf_overrides must take precedence over base defaults."""
+    conf = compose_gflownet_conf(
+        conf_overrides={
+            "env": {
+                "_target_": "gflownet.envs.grid.Grid",
+                "n_dim": 6,
+                "length": 3,
+            }
+        }
+    )
     assert conf.env.n_dim == 6
 
 
 def test_compose_gflownet_conf_overrides_preserve_other_env_keys():
     """An env override must deep-merge, not replace the entire env block."""
-    conf = compose_gflownet_conf(conf_overrides={"env": {"n_dim": 6, "length": 20}})
-    # _target_ must survive the merge
+    conf = compose_gflownet_conf(
+        conf_overrides={
+            "env": {
+                "_target_": "gflownet.envs.grid.Grid",
+                "n_dim": 6,
+                "length": 20,
+            }
+        }
+    )
+    # Base fields must survive the merge
     assert conf.env._target_ == "gflownet.envs.grid.Grid"
     assert conf.env.n_dim == 6
     assert conf.env.length == 20
+    assert hasattr(conf.env, "conditional")
 
 
 def test_compose_gflownet_conf_overrides_n_train_steps():
@@ -241,7 +281,13 @@ def test_pydantic_gflownet_grid_sampler_config_builds_with_compose(tmp_path):
         n_samples=5,
         n_fidelities=1,
         log_dir=str(tmp_path),
-        conf={"env": {"n_dim": 2, "length": 10}},
+        conf={
+            "env": {
+                "_target_": "gflownet.envs.grid.Grid",
+                "n_dim": 2,
+                "length": 10,
+            }
+        },
     )
     sampler = cfg.build()
     assert sampler.conf.env.n_dim == 2
@@ -254,9 +300,11 @@ def test_pydantic_gflownet_grid_sampler_config_builds_with_compose(tmp_path):
 
 
 def test_pydantic_gflownet_grid_sampler_config_no_conf_uses_defaults(tmp_path):
-    """GFlowNetGridSamplerConfig with no conf must still produce a valid sampler conf."""
+    """GFlowNetGridSamplerConfig requires env._target_ in conf — omitting it must raise."""
     from activelearning.sampler.config import GFlowNetGridSamplerConfig
 
     cfg = GFlowNetGridSamplerConfig(n_samples=5, log_dir=str(tmp_path))
-    sampler = cfg.build()
-    assert set(sampler.conf.keys()) >= REQUIRED_TOP_LEVEL_KEYS
+    with pytest.raises(
+        ValueError, match="GFlowNetGridSampler requires a Grid environment"
+    ):
+        cfg.build()
