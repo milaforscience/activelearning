@@ -283,8 +283,8 @@ class TestGFlowNetSamplerSmokeTest:
 
 
 class TestGFlowNetSamplerRuntimeLogger:
-    def test_runtime_logger_receives_metrics(self, gflownet_conf_2d):
-        """Binding a runtime logger causes metrics to be forwarded during training."""
+    def test_runtime_logger_metrics_and_lifecycle_contract(self, gflownet_conf_2d):
+        """Sampler logs metrics but never advances or ends the runtime logger."""
         conf, _ = gflownet_conf_2d
         sampler = GFlowNetSampler(n_samples=3, conf=conf)
         runtime_logger = Mock()
@@ -293,17 +293,8 @@ class TestGFlowNetSamplerRuntimeLogger:
         sampler.sample(acquisition=_ConstantAcquisition())
 
         runtime_logger.log_metric.assert_called()
-        # log_step must NOT be called by the wrapper — it belongs to the AL loop.
+        # log_step/end belong to the AL loop, not the sampler.
         runtime_logger.log_step.assert_not_called()
-
-    def test_runtime_logger_end_not_called_by_sampler(self, gflownet_conf_2d):
-        """The sampler must not call logger.end(); that belongs to the AL loop."""
-        conf, _ = gflownet_conf_2d
-        sampler = GFlowNetSampler(n_samples=3, conf=conf)
-        runtime_logger = Mock()
-        sampler.bind_runtime_context(RuntimeContext(logger=runtime_logger))
-
-        sampler.sample(acquisition=_ConstantAcquisition())
 
         runtime_logger.end.assert_not_called()
 
