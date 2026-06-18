@@ -17,24 +17,6 @@ class HypercubeUniformSampler(Sampler):
 
     Fidelity levels are sampled uniformly at random from ``fidelities`` for
     each candidate, enabling multi-fidelity exploration without a fixed pool.
-
-    Parameters
-    ----------
-    bounds : Sequence[tuple[float, float]]
-        Per-dimension ``(lower, upper)`` bounds that define the hypercube.
-        Each pair must satisfy ``lower < upper``.
-        The length determines the input dimensionality.
-    num_samples : int
-        Number of candidates to generate per ``sample()`` call. Must be > 0.
-    fidelities : Optional[Sequence[int]]
-        Fidelity levels to sample from uniformly at random. Each generated
-        candidate is assigned one level drawn with equal probability. When
-        ``None``, candidates are created with ``fidelity=None``.
-
-    Raises
-    ------
-    ValueError
-        If any lower bound >= upper bound or num_samples <= 0.
     """
 
     def __init__(
@@ -43,6 +25,26 @@ class HypercubeUniformSampler(Sampler):
         num_samples: int,
         fidelities: Optional[Sequence[int]] = None,
     ) -> None:
+        """Initialize the hypercube uniform sampler.
+
+        Parameters
+        ----------
+        bounds : Sequence[tuple[float, float]]
+            Per-dimension ``(lower, upper)`` bounds that define the hypercube.
+            Each pair must satisfy ``lower < upper``.
+            The length determines the input dimensionality.
+        num_samples : int
+            Number of candidates to generate per ``sample()`` call. Must be > 0.
+        fidelities : Optional[Sequence[int]]
+            Fidelity levels to sample from uniformly at random. Each generated
+            candidate is assigned one level drawn with equal probability. When
+            ``None``, candidates are created with ``fidelity=None``.
+
+        Raises
+        ------
+        ValueError
+            If any lower bound >= upper bound or num_samples <= 0.
+        """
         if num_samples <= 0:
             raise ValueError(f"num_samples must be > 0, got {num_samples}")
         for i, (lower, upper) in enumerate(bounds):
