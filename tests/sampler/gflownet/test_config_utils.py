@@ -55,7 +55,7 @@ def test_find_config_dir_raises_when_not_found(tmp_path):
         "activelearning.sampler.gflownet.config_utils.__file__",
         str(fake_file),
     ):
-        # Re-import to pick up the patched __file__ is not needed — call directly
+        # Import the module so we can access and modify its __file__ attribute directly
         from activelearning.sampler.gflownet import config_utils
 
         original_file = config_utils.__file__
