@@ -68,7 +68,7 @@ class RuntimeGFlowNetLoggerWrapper(GFlowNetLogger):
         self._last_step = step
 
     @staticmethod
-    def _coerce_log_value(value: Any) -> Any:
+    def _convert_log_value(value: Any) -> Any:
         """Convert tensor-like scalar values into plain Python scalars when possible."""
         if value is None:
             return None
@@ -92,12 +92,12 @@ class RuntimeGFlowNetLoggerWrapper(GFlowNetLogger):
 
         emitted_metrics = False
         for key, value in metrics.items():
-            coerced_value = self._coerce_log_value(value)
-            if coerced_value is None:
+            converted_value = self._convert_log_value(value)
+            if converted_value is None:
                 continue
             self._runtime_logger.log_metric(
                 self._format_key(key, use_context=use_context),
-                coerced_value,
+                converted_value,
             )
             emitted_metrics = True
 
@@ -170,10 +170,10 @@ class RuntimeGFlowNetLoggerWrapper(GFlowNetLogger):
 
         emitted_metrics = False
         for key, value in summary.items():
-            coerced_value = self._coerce_log_value(value)
-            if coerced_value is None:
+            converted_value = self._convert_log_value(value)
+            if converted_value is None:
                 continue
-            self._runtime_logger.log_metric(f"summary/{key}", coerced_value)
+            self._runtime_logger.log_metric(f"summary/{key}", converted_value)
             emitted_metrics = True
 
         if emitted_metrics:
