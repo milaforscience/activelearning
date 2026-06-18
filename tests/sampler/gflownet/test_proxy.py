@@ -52,6 +52,9 @@ class _FidelityCapturingAcquisition:
 class _StubMFEnv(MultiFidelityGFlowNetEnvWrapperBase):
     """Minimal MF env stub; bypasses parent __init__."""
 
+    idx_base_env = 0
+    idx_fidelity = 1
+
     def __init__(self, idx_base_env: int = 0, idx_fidelity: int = 1) -> None:
         self.idx_base_env = idx_base_env
         self.idx_fidelity = idx_fidelity

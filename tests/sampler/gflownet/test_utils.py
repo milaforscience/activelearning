@@ -18,6 +18,9 @@ from activelearning.utils.types import Candidate
 class _StubMFEnv(MultiFidelityGFlowNetEnvWrapperBase):
     """Bypasses the parent __init__; exposes only what proxy_states_to_candidates needs."""
 
+    idx_base_env = 0
+    idx_fidelity = 1
+
     def __init__(
         self,
         proxy_return: list,

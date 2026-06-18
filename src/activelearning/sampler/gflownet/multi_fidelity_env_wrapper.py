@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from typing import Any, Callable, List, Literal, Sequence, Tuple
 
 from gflownet.envs.base import GFlowNetEnv
@@ -10,8 +11,30 @@ from gflownet.envs.composite.stack import Stack
 #: Populated at the bottom of this module after all classes are defined.
 
 
-class MultiFidelityGFlowNetEnvWrapperBase(CompositeBase):
-    """Common base environment for all the multi-fidelity environment wrappers"""
+class MultiFidelityGFlowNetEnvWrapperBase(CompositeBase, ABC):
+    """Common base environment for all the multi-fidelity environment wrappers.
+
+    Subclasses **must** define the following class-level attributes:
+
+    Attributes
+    ----------
+    idx_base_env : int
+        The sub-environment index corresponding to the base environment.
+    idx_fidelity : int
+        The sub-environment index corresponding to the fidelity environment.
+    """
+
+    @property
+    @abstractmethod
+    def idx_base_env(self) -> int:
+        """Index of the base environment among the composite sub-environments."""
+        ...
+
+    @property
+    @abstractmethod
+    def idx_fidelity(self) -> int:
+        """Index of the fidelity environment among the composite sub-environments."""
+        ...
 
     def get_states_base_and_fidelities(
         self, states: Sequence
@@ -82,6 +105,9 @@ class MultiFidelityGFlowNetEnvWrapper(SetFix, MultiFidelityGFlowNetEnvWrapperBas
         to 1, arbitrarily.
     """
 
+    idx_base_env = 0
+    idx_fidelity = 1
+
     def __init__(
         self,
         env_base_maker: Callable[..., GFlowNetEnv],
@@ -103,8 +129,6 @@ class MultiFidelityGFlowNetEnvWrapper(SetFix, MultiFidelityGFlowNetEnvWrapperBas
             float_precision=kwargs.get("float_precision", 32),
             device=kwargs.get("device", "cpu"),
         )
-        self.idx_base_env = 0
-        self.idx_fidelity = 1
         super().__init__(subenvs=tuple([self.env_base, self.env_fidelity]), **kwargs)
 
 
@@ -134,6 +158,9 @@ class MultiFidelityGFlowNetEnvWrapperFidFirst(
         1 because the base environment is sampled only after the fidelity.
     """
 
+    idx_fidelity = 0
+    idx_base_env = 1
+
     def __init__(
         self,
         env_base_maker: Callable[..., GFlowNetEnv],
@@ -155,8 +182,6 @@ class MultiFidelityGFlowNetEnvWrapperFidFirst(
             float_precision=kwargs.get("float_precision", 32),
             device=kwargs.get("device", "cpu"),
         )
-        self.idx_fidelity = 0
-        self.idx_base_env = 1
         super().__init__(subenvs=tuple([self.env_fidelity, self.env_base]), **kwargs)
 
 
@@ -186,6 +211,9 @@ class MultiFidelityGFlowNetEnvWrapperFidLast(
         to 1 because the fidelity is sampled only after the base environment.
     """
 
+    idx_base_env = 0
+    idx_fidelity = 1
+
     def __init__(
         self,
         env_base_maker: Callable[..., GFlowNetEnv],
@@ -207,8 +235,6 @@ class MultiFidelityGFlowNetEnvWrapperFidLast(
             float_precision=kwargs.get("float_precision", 32),
             device=kwargs.get("device", "cpu"),
         )
-        self.idx_base_env = 0
-        self.idx_fidelity = 1
         super().__init__(subenvs=tuple([self.env_base, self.env_fidelity]), **kwargs)
 
 
