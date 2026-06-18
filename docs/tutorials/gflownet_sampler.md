@@ -39,9 +39,9 @@ The negated Branin function has three equivalent global minima (red ✕) separat
 
 ### Sampling the reward landscape
 
-![GFlowNet samples on the target density](../assets/gflownet_samples.png)
+![Target versus learned GFlowNet density](../assets/gflownet_samples.png)
 
-The heatmap is the theoretical target $p(x) \propto \exp(\beta \cdot \text{score}(x))$ — the distribution the GFlowNet is trained to match. This example uses a Grid environment, so the GFlowNet builds candidates by stepping along a discrete 2D grid; that is why the white dots appear on a regular lattice rather than at arbitrary positions. Each dot sits on a unique grid cell and its opacity is proportional to how often that cell was visited by the trained policy. A well-trained GFlowNet concentrates bright dots on all three peaks simultaneously; uniform dot brightness across the space indicates under-training or a $\beta$ that is too small; collapse onto a single peak indicates a $\beta$ that is too large.
+The left panel is the theoretical target $p(x) \propto \exp(\beta \cdot \text{score}(x))$ — the distribution the GFlowNet is trained to match. The right panel is the exact terminal-state marginal induced by the learned forward policy on the same discrete grid, computed by summing probability mass over all forward trajectories that terminate at each grid cell. A well-trained GFlowNet lights up all three target regions in roughly the same pattern as the left panel; diffuse mass indicates under-training or a $\beta$ that is too small, while concentration on only one peak indicates mode collapse or a $\beta$ that is too large.
 
 ### Training convergence ($\log Z$)
 
