@@ -267,19 +267,13 @@ class TestGFlowNetSamplerSampleErrors:
 
 
 class TestGFlowNetSamplerSmokeTest:
-    def test_sample_returns_candidates(self, gflownet_conf_2d):
-        """sample() returns the requested number of Candidate objects."""
+    def test_sample_returns_candidates_with_2d_coordinates(self, gflownet_conf_2d):
+        """One smoke run validates count/type and 2-D candidate coordinates."""
         conf, _ = gflownet_conf_2d
         sampler = GFlowNetSampler(n_samples=4, conf=conf)
         candidates = sampler.sample(acquisition=_ConstantAcquisition())
         assert len(candidates) == 4
         assert all(isinstance(c, Candidate) for c in candidates)
-
-    def test_sample_returns_2d_coordinates(self, gflownet_conf_2d):
-        """Each candidate has 2 coordinates (matching the 2-D grid env)."""
-        conf, _ = gflownet_conf_2d
-        sampler = GFlowNetSampler(n_samples=3, conf=conf)
-        candidates = sampler.sample(acquisition=_ConstantAcquisition())
         assert all(len(c.x) == 2 for c in candidates)
 
 
