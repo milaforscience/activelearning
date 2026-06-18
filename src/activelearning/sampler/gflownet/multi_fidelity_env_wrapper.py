@@ -15,13 +15,7 @@ class MultiFidelityGFlowNetEnvWrapperBase(CompositeBase, ABC):
     """Common base environment for all the multi-fidelity environment wrappers.
 
     Subclasses **must** define the following class-level attributes:
-
-    Attributes
-    ----------
-    idx_base_env : int
-        The sub-environment index corresponding to the base environment.
-    idx_fidelity : int
-        The sub-environment index corresponding to the fidelity environment.
+    ``idx_base_env`` (int) and ``idx_fidelity`` (int).
     """
 
     @property
@@ -94,22 +88,11 @@ class MultiFidelityGFlowNetEnvWrapper(SetFix, MultiFidelityGFlowNetEnvWrapperBas
     Therefore, unlike the ``FidFirst`` and ``FidLast`` variants, the GFlowNet can
     choose fidelity at any point during the base-environment trajectory, rather than
     only before or after the base-environment object is generated.
-
-    Attributes
-    ----------
-    env_base : GFlowNetEnv
-        An instance of the base environment.
-    env_fidelity : Choice
-        An instance of a Choice environment to model the choice of fidelity index.
-    idx_base_env : int
-        The sub-environment index corresponding to the base environment. It is set to
-        0, arbitrarily.
-    idx_fidelity : int
-        The sub-environment index corresponding to the fidelity environment. It is set
-        to 1, arbitrarily.
     """
 
+    #: The sub-environment index corresponding to the base environment (set to 0).
     idx_base_env = 0
+    #: The sub-environment index corresponding to the fidelity environment (set to 1).
     idx_fidelity = 1
 
     def __init__(
@@ -142,27 +125,18 @@ class MultiFidelityGFlowNetEnvWrapperFidFirst(
     """Turns any GFlowNet environment into a multi-fidelity environment.
 
     The wrapper is a Stack GFlowNet environment whose sub-environments are:
-        1. A Choice environment to model the discrete fidelity index.
-        2. The base environment.
+    1. A Choice environment to model the discrete fidelity index.
+    2. The base environment.
 
     Therefore, the fidelity is sampled first, followed by the actions of the base
     environment.
-
-    Attributes
-    ----------
-    env_base : GFlowNetEnv
-        An instance of the base environment.
-    env_fidelity : Choice
-        An instance of a Choice environment to model the choice of fidelity index.
-    idx_fidelity : int
-        The sub-environment index corresponding to the fidelity environment. It is set
-        to 0 because the fidelity is the first sub-environment.
-    idx_base_env : int
-        The sub-environment index corresponding to the base environment. It is set to
-        1 because the base environment is sampled only after the fidelity.
     """
 
+    #: The sub-environment index corresponding to the fidelity environment (set to 0,
+    #: because fidelity is the first sub-environment).
     idx_fidelity = 0
+    #: The sub-environment index corresponding to the base environment (set to 1,
+    #: because the base environment is sampled only after the fidelity).
     idx_base_env = 1
 
     def __init__(
@@ -195,27 +169,18 @@ class MultiFidelityGFlowNetEnvWrapperFidLast(
     """Turns any GFlowNet environment into a multi-fidelity environment.
 
     The wrapper is a Stack GFlowNet environment whose sub-environments are:
-        1. The base environment.
-        2. A Choice environment to model the discrete fidelity index.
+    1. The base environment.
+    2. A Choice environment to model the discrete fidelity index.
 
     Therefore, the actions of the base environment are sampled first, and the fidelity
     is sampled at the end of the trajectory.
-
-    Attributes
-    ----------
-    env_base : GFlowNetEnv
-        An instance of the base environment.
-    env_fidelity : Choice
-        An instance of a Choice environment to model the choice of fidelity index.
-    idx_base_env : int
-        The sub-environment index corresponding to the base environment. It is set to
-        0 because the base environment is sampled first, before the fidelity.
-    idx_fidelity : int
-        The sub-environment index corresponding to the fidelity environment. It is set
-        to 1 because the fidelity is sampled only after the base environment.
     """
 
+    #: The sub-environment index corresponding to the base environment (set to 0,
+    #: because the base environment is sampled first, before the fidelity).
     idx_base_env = 0
+    #: The sub-environment index corresponding to the fidelity environment (set to 1,
+    #: because the fidelity is sampled only after the base environment).
     idx_fidelity = 1
 
     def __init__(
@@ -265,6 +230,7 @@ def build_multi_fidelity_env_wrapper(
     ----------
     fidelity_action : {"any", "first", "last"}
         Controls *when* the fidelity choice is made during a trajectory:
+
         - ``"any"`` — :class:`MultiFidelityGFlowNetEnvWrapper` (SetFix): fidelity
           may be chosen at any point interleaved with base-env actions.
         - ``"first"`` — :class:`MultiFidelityGFlowNetEnvWrapperFidFirst` (Stack):

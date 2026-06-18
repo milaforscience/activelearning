@@ -12,6 +12,7 @@ class HypercubeSampler(Sampler):
     """Generates candidates by sampling from a bounded hypercube.
 
     Supports sampling strategies for both point generation and fidelity assignment:
+
     - Point generation: "uniform" (i.i.d. random) or "lhs" (Latin Hypercube Sampling,
       one point per stratum per dimension, improving space-filling).
     - Fidelity assignment:  controlled by the ``fidelities`` parameter type.
@@ -25,6 +26,7 @@ class HypercubeSampler(Sampler):
         Number of candidates to generate per ``sample()`` call. Must be > 0.
     fidelities : Sequence[int] or dict[int, float] or None
         Controls fidelity assignment for each candidate:
+
         - ``None`` — no fidelity (``candidate.fidelity = None``).
         - ``[1, 2, 3]`` — uniform sampling across fidelity levels.
         - ``{1: 1.0, 2: 5.0}`` — cost-inverse sampling: each key is a fidelity

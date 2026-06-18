@@ -9,18 +9,13 @@ class Candidate:
     """Represents a candidate item to be evaluated or sampled.
 
     Uses maximum type flexibility to support various data representations.
-
-    Attributes
-    ----------
-    x : Any
-        Input feature or identifier. Commonly: primitives (int, float, str),
-        arrays (numpy.ndarray), tensors (torch.Tensor), or structured data (dict, tuple).
-    fidelity : Optional[int]
-        Optional fidelity level for multi-fidelity optimization.
-        Higher fidelity typically means more accurate but more expensive.
     """
 
+    #: Input feature or identifier. Commonly: primitives (int, float, str),
+    #: arrays (numpy.ndarray), tensors (torch.Tensor), or structured data (dict, tuple).
     x: Any
+    #: Optional fidelity level for multi-fidelity optimization.
+    #: Higher fidelity typically means more accurate but more expensive.
     fidelity: Optional[int] = None
 
 
@@ -29,20 +24,14 @@ class Observation:
     """Represents an observed (x, y) pair, optionally at a fidelity.
 
     Uses maximum type flexibility to support various data representations.
-
-    Attributes
-    ----------
-    x : Any
-        Input feature or identifier. Same semantics as Candidate.x.
-    y : Any
-        Observed output or label. Commonly: scalar (float), vector (list, array),
-        or categorical label (str, int).
-    fidelity : Optional[int]
-        Optional fidelity level at which the observation was made.
     """
 
+    #: Input feature or identifier. Same semantics as Candidate.x.
     x: Any
+    #: Observed output or label. Commonly: scalar (float), vector (list, array),
+    #: or categorical label (str, int).
     y: Any
+    #: Optional fidelity level at which the observation was made.
     fidelity: Optional[int] = None
 
 

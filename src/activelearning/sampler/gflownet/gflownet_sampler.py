@@ -40,6 +40,7 @@ class GFlowNetSampler(Sampler):
     fidelity_action : {"any", "first", "last"}
         Controls when fidelity is chosen during a trajectory. Only used when
         ``n_fidelities > 1``.
+
         - ``"any"`` *(default)* — fidelity may be chosen at any point,
           interleaved with base-env actions (SetFix wrapper).
         - ``"first"`` — fidelity is chosen before any base-env action (Stack).
