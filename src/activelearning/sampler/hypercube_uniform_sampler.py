@@ -43,8 +43,11 @@ class HypercubeUniformSampler(Sampler):
         Raises
         ------
         ValueError
-            If any lower bound >= upper bound or num_samples <= 0.
+            If ``bounds`` is empty, any lower bound >= upper bound, or
+            ``num_samples`` <= 0.
         """
+        if len(bounds) == 0:
+            raise ValueError("bounds must not be empty")
         if num_samples <= 0:
             raise ValueError(f"num_samples must be > 0, got {num_samples}")
         for i, (lower, upper) in enumerate(bounds):
