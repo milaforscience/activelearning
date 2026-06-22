@@ -63,10 +63,6 @@ The built-in [`XTBIPEAOracle`](../reference/activelearning/applications/molecule
 | `ea` | [Electron affinity](https://en.wikipedia.org/wiki/Electron_affinity) | Energy change when the molecule accepts an electron. |
 | `ip` | [Ionisation potential](https://en.wikipedia.org/wiki/Ionization_energy) | Energy required to remove an electron. |
 
-The active-learning loop is formulated as a maximization problem. EA is already
-in that form, while IP runs should negate the physical IP so MES maximizes
-`-IP` rather than raw IP.
-
 The three xTB fidelities trade cost for accuracy:
 
 | Fidelity | What happens | Cost in the provided configs |
@@ -74,12 +70,6 @@ The three xTB fidelities trade cost for accuracy:
 | `1` | RDKit/MMFF geometry, then vertical IP/EA with xTB. | `1.0` |
 | `2` | xTB-optimise the neutral geometry, then compute vertical IP/EA. | `3.5` |
 | `3` | Optimise neutral and ionic geometries, then compute adiabatic IP/EA. | `7.0` |
-
-The oracle also controls how many RDKit conformers are generated before xTB
-starts. `oracle.num_conformers` is the global/default count, and
-`oracle.per_fidelity_num_conformers` can override that default for specific
-fidelities. This only changes the RDKit starting-geometry search; it does not
-change the definition of the xTB fidelity itself.
 
 !!! warning "External dependency"
     The Python `molecules` extra installs SELFIES and RDKit, but the `xtb` executable must be installed separately and available on your `PATH`. Check this before running a molecule experiment:
@@ -289,8 +279,10 @@ The main molecule-specific fields are:
 | `sampler.fidelity_action` | Where the fidelity choice appears in the trajectory; `"any"` lets the policy interleave fidelity selection with token actions. |
 | `acquisition.type` | `UpperConfidenceBound` in stages 1 and 3, or `QMultiFidelityLowerBoundMaxValueEntropy` in stages 2, 4, and 5. |
 | `acquisition.cost_aware_utility` | Cost model baked into the BoTorch multi-fidelity acquisition during `acquisition.update(...)`. In the GFlowNet multi-fidelity configs this makes the sampler reward proxy cost-aware before top-k selection. |
-| `oracle.task` | `ea` for electron affinity or `ip` for ionisation potential. |
+| `oracle.task` | `ea` for electron affinity or `ip` for ionisation potential. The active-learning loop maximises the objective, so IP runs should negate the physical value — set `oracle.task: ip` and the oracle returns `-IP`, which MES then maximises. |
 | `oracle.fidelity_costs` | Query costs used by the budget and the cost-aware utility. |
+| `oracle.num_conformers` | Global default for the number of RDKit conformers generated before the xTB geometry step. More conformers improve starting-geometry quality at the cost of additional RDKit time. |
+| `oracle.per_fidelity_num_conformers` | Per-fidelity override for `oracle.num_conformers`. Useful when higher fidelities warrant a more thorough conformer search. Does not change the definition of the xTB fidelity itself. |
 | `oracle.log_molecule_visualizations` | Whether to log RDKit grids of queried molecules. |
 | `oracle.molecule_visualization_limit` | Maximum number of molecules shown per logged grid. |
 
