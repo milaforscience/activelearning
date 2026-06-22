@@ -42,7 +42,7 @@ The repository includes five example molecule configs arranged as an incremental
 
 ## **What are SELFIES?**
 
-[SELFIES](https://arxiv.org/abs/1905.13741) (**Self-Referencing Embedded Strings**) are a string representation for molecules. Like SMILES, they encode molecular graphs as text. Unlike SMILES, SELFIES provide a hard validity guarantee: *every* sequence of tokens that is valid under the SELFIES grammar decodes to a chemically valid molecular graph. This makes SELFIES particularly useful for generative active learning: the GFlowNet can learn over a constrained token language without constantly producing chemically invalid candidates. The oracle still needs to reject molecules that fail downstream geometry construction or xTB evaluation, but SELFIES removes the most common source of invalidity at the representation level.
+[SELFIES](https://arxiv.org/abs/1905.13741) (**Self-Referencing Embedded Strings**) are a string representation for molecules. Like SMILES, they encode molecular graphs as text. Unlike SMILES, SELFIES provide a hard validity guarantee: *every* sequence of tokens that is valid under the SELFIES grammar decodes to a chemically valid molecular graph. This makes SELFIES particularly useful for generative active learning: the GFlowNet can learn over a constrained token language without constantly producing chemically invalid candidates. The oracle still needs to reject molecules that fail downstream geometry construction or xTB evaluation (see [Handling failures](#handling-failures)), but SELFIES removes the most common source of invalidity at the representation level.
 
 In this framework:
 
@@ -115,6 +115,14 @@ Done. Rounds: 1 | Total cost: 5.0000
 ```
 
 The exact numbers depend on which candidate was selected and whether xTB succeeds for that molecule. Invalid molecules or failed xTB calculations are recorded as `NaN` and filtered before surrogate fitting.
+
+!!! note "Handling failures"
+    Even though SELFIES guarantees that every token sequence decodes to a *syntactically* valid molecular graph, two downstream failure modes remain:
+
+    - **Invalid molecules.** RDKit can fail to embed certain graphs into a 3-D geometry — for example, molecules with unusual valences or highly strained ring systems that the MMFF force field cannot handle. When conformer generation fails, the oracle records `NaN` for that candidate.
+    - **Failed xTB calculations.** xTB can fail if the starting geometry is too distorted for the SCF (self-consistent field) calculation to converge, or if a geometry optimisation diverges. Again, the result is recorded as `NaN`.
+
+    Both failure types are handled automatically: `NaN` labels are filtered out before the surrogate is fitted, so a few failed queries do not break the active-learning loop.
 
 Once the plumbing is working, run the full single-fidelity exact-DKL config:
 
