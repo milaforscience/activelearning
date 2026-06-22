@@ -242,7 +242,7 @@ sampler:
 
 In this setup, the GFlowNet is not limited to a fixed oracle level. It learns a policy over molecule-fidelity pairs, and the MF-MES acquisition rewards candidates that are informative about the target high-fidelity objective while the cost-aware utility discounts unnecessarily expensive queries. That is one of the main reasons GFlowNets are attractive in the multi-fidelity setting: the same policy can discover promising molecule structures and learn when a cheap xTB evaluation is enough versus when it is worth paying for a higher-fidelity query.
 
-There are two multi-fidelity GFlowNet configs. The first uses an exact GP surrogate, which is simpler and faster for smaller datasets:
+There are two multi-fidelity GFlowNet configs. The first uses an exact GP surrogate, which is simpler and faster for smaller datasets. It searches over SELFIES strings up to length 16, generates 64 candidates per GFlowNet round with 100 training steps, selects 8 per round, and has a total budget of 168 (worst-case cost: 8 candidates × fidelity-3 cost of 7.0):
 
 ```sh
 uv run activelearning config/molecules/gflownet_exact_multi_fidelity.yaml
@@ -258,13 +258,13 @@ uv run activelearning config/molecules/gflownet_exact_multi_fidelity.yaml \
   budget.schedule.value=28.0
 ```
 
-The second config keeps the same multi-fidelity GFlowNet structure but replaces the exact GP with a variational surrogate:
+The second config keeps the same multi-fidelity GFlowNet structure but replaces the exact GP with a variational surrogate. It is a substantially larger run: the molecular search space expands to length 64 (`max_length: 64`), the GFlowNet generates 640 candidates per round with 5000 training steps, selects 128 per round, and the total budget is 1260. The variational surrogate introduces an additional `num_inducing` knob controlling the number of inducing points for the sparse GP approximation. Because the reward landscape over a length-64 SELFIES space is much broader, the config also explicitly tunes reward-shaping parameters (`reward_beta`, `reward_rho`, `reward_min`) and uses a larger policy network:
 
 ```sh
 uv run activelearning config/molecules/gflownet_variational_multi_fidelity.yaml
 ```
 
-Because the variational surrogate scales better, it is the version to use once the exact multi-fidelity GFlowNet setup is working and you want a larger run.
+Start with the exact config to confirm the full MF-GFN loop works, then graduate to the variational config for a more thorough search.
 
 ## **Configuration reference**
 
@@ -279,6 +279,7 @@ The main molecule-specific fields are:
 | `sampler.candidate_pool_file` | SELFIES pool used by `PoolFileSampler`. |
 | `sampler.conf.env._target_` | GFlowNet environment class for generated SELFIES. |
 | `sampler.fidelities` | Fidelity levels available to the GFlowNet policy. `[1]` restricts the policy to fidelity 1 only (single-fidelity); `[1, 2, 3]` enables joint molecule-fidelity sampling (multi-fidelity). |
+| `surrogate.num_inducing` | Number of inducing points for the sparse variational GP in `VariationalSelfiesDKLSurrogate`. More inducing points improve approximation quality at higher compute cost. Only used by the variational surrogate. |
 | `sampler.fidelity_action` | Where the fidelity choice appears in the trajectory; `"any"` lets the policy interleave fidelity selection with token actions. |
 | `acquisition.type` | `UpperConfidenceBound` in stages 1 and 3, or `QMultiFidelityLowerBoundMaxValueEntropy` in stages 2, 4, and 5. |
 | `acquisition.cost_aware_utility` | Cost model baked into the BoTorch multi-fidelity acquisition during `acquisition.update(...)`. In the GFlowNet multi-fidelity configs this makes the sampler reward proxy cost-aware before top-k selection. |
