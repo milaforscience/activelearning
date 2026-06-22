@@ -45,18 +45,15 @@ The repository includes five example molecule configs arranged as an incremental
 
 ## **What are SELFIES?**
 
-[SELFIES](https://arxiv.org/abs/1905.13741) (**Self-Referencing Embedded Strings**) are a string representation for molecules. Like SMILES, they encode molecular graphs as text. Unlike SMILES, SELFIES provide a hard validity guarantee: *every* sequence of tokens that is valid under the SELFIES grammar decodes to a chemically valid molecular graph.
+[SELFIES](https://arxiv.org/abs/1905.13741) (**Self-Referencing Embedded Strings**) are a string representation for molecules. Like SMILES, they encode molecular graphs as text. Unlike SMILES, SELFIES provide a hard validity guarantee: *every* sequence of tokens that is valid under the SELFIES grammar decodes to a chemically valid molecular graph. This makes SELFIES particularly useful for generative active learning: the GFlowNet can learn over a constrained token language without constantly producing chemically invalid candidates. The oracle still needs to reject molecules that fail downstream geometry construction or xTB evaluation, but SELFIES removes the most common source of invalidity at the representation level.
 
-That property is useful for active learning: a sampler can operate over discrete tokens without constantly producing invalid molecules. In this framework:
+In this framework:
 
 1. A candidate molecule is stored as a SELFIES string such as `[C][=C][O]`.
 2. The tokenizer maps each SELFIES token to an integer ID, adds special tokens such as `[CLS]` and `[EOS]`, and pads to a fixed length.
 3. The Transformer encoder embeds the token sequence and pools it into one latent molecule vector.
 4. The DKL surrogate fits a GP on those latent vectors and provides posterior predictions to the acquisition function.
 5. The oracle decodes SELFIES to a molecular graph before constructing a 3-D geometry for xTB.
-
-!!! info "Why not optimise SMILES directly?"
-    SMILES strings are compact and widely used, but arbitrary token sequences can be invalid. SELFIES make the generative part of the problem easier: the GFlowNet can learn over a constrained token language, and the oracle only has to reject molecules that fail downstream geometry construction or xTB evaluation.
 
 ## **xTB, IP, EA, and fidelities**
 
