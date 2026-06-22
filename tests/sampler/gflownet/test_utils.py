@@ -18,6 +18,9 @@ from activelearning.utils.types import Candidate
 class _StubMFEnv(MultiFidelityGFlowNetEnvWrapperBase):
     """Bypasses the parent __init__; exposes only what proxy_states_to_candidates needs."""
 
+    idx_base_env = 0
+    idx_fidelity = 1
+
     def __init__(
         self,
         proxy_return: list,
@@ -70,12 +73,12 @@ class TestProxyStatesToCandidatesGuards:
         assert proxy_states_to_candidates(torch.empty(0, 2), _plain_env()) == []
 
     def test_none(self):
-        assert proxy_states_to_candidates(None, _plain_env()) == []
+        with pytest.raises(TypeError):
+            proxy_states_to_candidates(None, _plain_env())
 
-    def test_scalar_proxy_value_is_treated_as_single_candidate(self):
-        result = proxy_states_to_candidates("invalid", _plain_env())
-        assert len(result) == 1
-        assert result[0].x == "invalid"
+    def test_non_list_non_tensor(self):
+        with pytest.raises(TypeError):
+            proxy_states_to_candidates("invalid", _plain_env())
 
 
 # ---------------------------------------------------------------------------
@@ -155,14 +158,15 @@ class TestProxyStatesToCandidatesSingleFidelity:
 
 class TestProxyStatesToCandidatesMultiFidelity:
     def test_extracts_coords_and_fidelity(self):
-        proxy = _make_mf_proxy([[0.1, 0.2], [0.3, 0.4]], fidelities=[0, 1])
+        # Raw fidelities from real Choice env are 1-based (1..N).
+        proxy = _make_mf_proxy([[0.1, 0.2], [0.3, 0.4]], fidelities=[1, 2])
         env = _StubMFEnv(proxy_return=proxy, idx_base_env=0, idx_fidelity=1)
         result = proxy_states_to_candidates(proxy, env)
         assert len(result) == 2
         assert result[0].x == pytest.approx((0.1, 0.2), abs=1e-6)
-        assert result[0].fidelity == 0
+        assert result[0].fidelity == 1
         assert result[1].x == pytest.approx((0.3, 0.4), abs=1e-6)
-        assert result[1].fidelity == 1
+        assert result[1].fidelity == 2
 
     def test_fidelity_first_layout(self):
         """Works when idx_fidelity=0 and idx_base_env=1 (FidFirst wrapper)."""
@@ -188,7 +192,7 @@ class TestProxyStatesToCandidatesMultiFidelity:
         assert result[0].fidelity == 2
 
     def test_returns_candidate_objects(self):
-        proxy = _make_mf_proxy([[0.0, 1.0]], fidelities=[0])
+        proxy = _make_mf_proxy([[0.0, 1.0]], fidelities=[1])
         env = _StubMFEnv(proxy_return=proxy)
         result = proxy_states_to_candidates(proxy, env)
         assert all(isinstance(c, Candidate) for c in result)
@@ -199,6 +203,66 @@ class TestProxyStatesToCandidatesMultiFidelity:
         result = proxy_states_to_candidates(proxy, env)
         assert all(isinstance(v, float) for v in result[0].x)
 
-    def test_empty_proxy_coords_returns_empty(self):
+    def test_empty_states_proxy_returns_empty(self):
         env = _StubMFEnv(proxy_return=[])
         assert proxy_states_to_candidates([], env) == []
+
+    # -----------------------------------------------------------------------
+    # fidelity_map: mapping 1-based raw Choice indices to domain values
+    # -----------------------------------------------------------------------
+
+    def test_fidelity_map_translates_raw_index(self):
+        """fidelity_map=[1,2,3] maps raw 1-based index: 1→1, 2→2, 3→3.
+
+        The GFlowNet Choice env produces 1-based states (1..N), so
+        fidelity_map[raw_index - 1] is used internally.
+        """
+        # Raw fidelities [1, 2, 3] simulate real Choice env output.
+        proxy = _make_mf_proxy(
+            [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]], fidelities=[1, 2, 3]
+        )
+        env = _StubMFEnv(proxy_return=proxy, idx_base_env=0, idx_fidelity=1)
+        result = proxy_states_to_candidates(proxy, env, fidelity_map=[1, 2, 3])
+        assert result[0].fidelity == 1
+        assert result[1].fidelity == 2
+        assert result[2].fidelity == 3
+
+    def test_fidelity_map_non_contiguous_values(self):
+        """fidelity_map can contain arbitrary non-contiguous integers.
+
+        Raw indices 1, 2 (Choice env) are mapped to fidelity_map[0], fidelity_map[1].
+        """
+        proxy = _make_mf_proxy([[0.1, 0.2], [0.3, 0.4]], fidelities=[1, 2])
+        env = _StubMFEnv(proxy_return=proxy, idx_base_env=0, idx_fidelity=1)
+        result = proxy_states_to_candidates(proxy, env, fidelity_map=[5, 10])
+        assert result[0].fidelity == 5
+        assert result[1].fidelity == 10
+
+    def test_fidelity_map_values_not_starting_from_zero(self):
+        """fidelity_map values not starting from 0 or 1 are stamped correctly.
+
+        Raw 1-based indices from Choice env are remapped via fidelity_map.
+        """
+        proxy = _make_mf_proxy(
+            [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]], fidelities=[1, 2, 3]
+        )
+        env = _StubMFEnv(proxy_return=proxy, idx_base_env=0, idx_fidelity=1)
+        fidelity_map = [7, 42, 100]
+        result = proxy_states_to_candidates(proxy, env, fidelity_map=fidelity_map)
+        assert result[0].fidelity == 7
+        assert result[1].fidelity == 42
+        assert result[2].fidelity == 100
+
+    def test_fidelity_map_none_returns_raw_index(self):
+        """When fidelity_map=None, the raw 1-based index is returned unchanged."""
+        proxy = _make_mf_proxy([[0.1, 0.2], [0.3, 0.4]], fidelities=[1, 2])
+        env = _StubMFEnv(proxy_return=proxy, idx_base_env=0, idx_fidelity=1)
+        result = proxy_states_to_candidates(proxy, env, fidelity_map=None)
+        assert result[0].fidelity == 1
+        assert result[1].fidelity == 2
+
+    def test_fidelity_map_ignored_for_single_fidelity(self):
+        """fidelity_map has no effect on single-fidelity envs (fidelity stays None)."""
+        coords = torch.tensor([[0.1, 0.2]])
+        result = proxy_states_to_candidates(coords, _plain_env(), fidelity_map=[99])
+        assert result[0].fidelity is None

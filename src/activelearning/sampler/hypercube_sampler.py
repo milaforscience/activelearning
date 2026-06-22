@@ -9,7 +9,7 @@ from activelearning.utils.types import Candidate, Observation
 
 
 class HypercubeSampler(Sampler):
-    """Generate fresh candidates from a bounded hypercube.
+    """Generates candidates by sampling from a bounded hypercube.
 
     This sampler is purely generative: every :meth:`sample` call draws a new
     batch of points inside ``bounds``. It supports both point-generation
@@ -28,6 +28,7 @@ class HypercubeSampler(Sampler):
         Number of candidates to generate per ``sample()`` call. Must be > 0.
     fidelities : Sequence[int] or dict[int, float] or None
         Controls fidelity assignment for each candidate:
+
         - ``None`` — no fidelity (``candidate.fidelity = None``).
         - ``[1, 2, 3]`` — uniform sampling across fidelity levels.
         - ``{1: 1.0, 2: 5.0}`` — cost-inverse sampling: each key is a fidelity
@@ -171,7 +172,7 @@ class HypercubeSampler(Sampler):
             ``num_samples`` candidates with ``x`` as a plain Python list of
             floats and ``fidelity`` drawn from the configured fidelity strategy.
         """
-        # Generate points in [0, 1]^d and scale them into the configured bounds.
+        # Generate points in [0,1]^d then scale to bounds
         lower, ranges = self._get_bounds_tensors()
         unit_points = self._generate_points()
         points = lower + unit_points * ranges

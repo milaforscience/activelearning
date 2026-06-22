@@ -57,7 +57,7 @@ acquisition:
 sampler:
   type: GFlowNetSampler
   n_samples: 640
-  n_fidelities: 3
+  fidelities: [1, 2, 3]
   fidelity_action: any
   conf:
     env:

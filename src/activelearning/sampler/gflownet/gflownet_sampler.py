@@ -1,16 +1,18 @@
 """GFlowNet-based sampler for active learning candidate generation."""
 
-from dataclasses import replace
 import logging
 import hydra
 import torch
 from typing import Any, Callable, Iterable, Literal, Optional, Sequence
 from omegaconf import DictConfig, OmegaConf
+from gflownet.gflownet import GFlowNetAgent
 from gflownet.utils.common import gflownet_from_config
 from activelearning.sampler.gflownet.logger_wrapper import RuntimeGFlowNetLoggerWrapper
 from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
+    MultiFidelityGFlowNetEnvWrapperBase,
     build_multi_fidelity_env_wrapper,
 )
+from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.gflownet.utils import proxy_states_to_candidates
 from activelearning.sampler.sampler import Sampler
 from activelearning.utils.types import Candidate, Observation
@@ -32,39 +34,37 @@ class GFlowNetSampler(Sampler):
     conf : DictConfig
         GFlowNet config (``env``, ``policy``, ``gflownet``, ``loss``,
         ``buffer``, ``evaluator``, ``logger``, ``proxy``).
-    n_fidelities : int
-        Number of fidelity levels. When > 1 the env is wrapped with a
-        multi-fidelity wrapper chosen by *fidelity_action*.
+    fidelities : list[int] or None
+        Fidelity levels to generate. ``None`` means single-fidelity (no
+        fidelity is stamped on candidates). A list enables multi-fidelity
+        mode: each sampled candidate is assigned one of these values as its
+        ``fidelity``. Values must match the oracle's ``fidelity_costs`` keys
+        (e.g. ``[1, 2, 3]`` for a three-level oracle).
     fidelity_action : {"any", "first", "last"}
         Controls when fidelity is chosen during a trajectory. Only used when
-        ``n_fidelities > 1``.
+        ``fidelities`` is not ``None``.
+
         - ``"any"`` *(default)* — fidelity may be chosen at any point,
           interleaved with base-env actions (SetFix wrapper).
         - ``"first"`` — fidelity is chosen before any base-env action (Stack).
         - ``"last"`` — fidelity is chosen after all base-env actions (Stack).
-    fixed_fidelity : int, optional
-        Stamps the same fidelity onto every sampled candidate after sampling.
-        This is only supported when ``n_fidelities == 1``.
     """
 
     def __init__(
         self,
         n_samples: int,
         conf: DictConfig,
-        n_fidelities: int = 1,
+        fidelities: Optional[list[int]] = None,
         fidelity_action: Literal["any", "first", "last"] = "any",
-        fixed_fidelity: int | None = None,
     ) -> None:
-        if fixed_fidelity is not None and n_fidelities != 1:
-            raise ValueError("fixed_fidelity is only supported when n_fidelities=1.")
         self.n_samples = n_samples
         self.conf = conf
-        self.n_fidelities = n_fidelities
+        self.fidelities = fidelities
+        self._n_fidelities = len(fidelities) if fidelities is not None else 1
         self.fidelity_action = fidelity_action
-        self.fixed_fidelity = fixed_fidelity
-        if n_fidelities == 1 and fidelity_action != "any":
+        if fidelities is None and fidelity_action != "any":
             logger.warning(
-                "fidelity_action=%r has no effect when n_fidelities=1.",
+                "fidelity_action=%r has no effect when fidelities=None (single-fidelity).",
                 fidelity_action,
             )
 
@@ -82,47 +82,47 @@ class GFlowNetSampler(Sampler):
 
     def _build_agent(
         self,
-        acquisition: Any,
+        acquisition: Acquisition,
         cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
-    ) -> Any:
+    ) -> GFlowNetAgent:
         """Build and return a ``GFlowNetAgent`` ready for training.
 
         Merges runtime device/precision into the config, then calls
-        ``gflownet_from_config``. For multi-fidelity, the env is built as a
-        factory so each copy gets a fresh base env. The acquisition function
-        and runtime logger are injected after construction.
+        ``gflownet_from_config``. For single-fidelity, the environment is
+        instantiated directly from the config. For multi-fidelity, ``conf.env``
+        only describes the base environment — the multi-fidelity wrapper is not
+        representable in a single Hydra config and must be built
+        programmatically (see :meth:`_build_multi_fidelity_env`). The
+        acquisition function and runtime logger are injected after construction.
 
         Parameters
         ----------
-        acquisition : Any
+        acquisition : Acquisition
             Acquisition function used as the GFlowNet reward proxy.
         cost_fn : callable, optional
             Candidate cost function forwarded to the proxy so acquisition
             scores can be reweighted before GFlowNet uses them as rewards.
-        """
 
+        Returns
+        -------
+        agent : GFlowNetAgent
+            A fully configured agent with the proxy and logger injected,
+            ready to be trained via ``agent.train()``.
+        """
         device = self._device_str()
         fp = self._float_precision()
         conf = OmegaConf.merge(self.conf, {"device": device, "float_precision": fp})
 
-        # When env=None, gflownet_from_config instantiates the env from conf.env
-        # using the device/float_precision already merged into conf above.
-        env = None
-        if self.n_fidelities > 1:
-            env_base_maker = hydra.utils.instantiate(
-                conf.env, device=device, float_precision=fp, _partial_=True
-            )
-            env = build_multi_fidelity_env_wrapper(
-                fidelity_action=self.fidelity_action,
-                env_base_maker=env_base_maker,
-                n_fidelities=self.n_fidelities,
-                float_precision=fp,
-                device=device,
-            )
+        env = (
+            self._build_multi_fidelity_env(conf, device, fp)
+            if self.fidelities is not None
+            else None
+        )
 
         agent = gflownet_from_config(conf, env=env)
         agent.proxy.set_acquisition(acquisition)
         agent.proxy.set_cost_fn(cost_fn)
+        agent.proxy.set_fidelity_map(self.fidelities)
 
         if self.logger is not None:
             agent.logger = RuntimeGFlowNetLoggerWrapper(
@@ -132,6 +132,33 @@ class GFlowNetSampler(Sampler):
             )
 
         return agent
+
+    def _build_multi_fidelity_env(
+        self, conf: DictConfig, device: str, fp: int
+    ) -> MultiFidelityGFlowNetEnvWrapperBase:
+        """Construct the multi-fidelity environment wrapper.
+
+        The Hydra config (``conf.env``) only describes the base environment
+        (e.g. Grid). The multi-fidelity wrapper composes the base env with a
+        discrete fidelity-choice env, which cannot be expressed as a single
+        Hydra target. This method creates a partial callable from ``conf.env``
+        and passes it to the wrapper factory.
+
+        Returns
+        -------
+        env : MultiFidelityGFlowNetEnvWrapperBase
+            The assembled wrapper, ready to be passed to ``gflownet_from_config``.
+        """
+        env_base_maker = hydra.utils.instantiate(
+            conf.env, device=device, float_precision=fp, _partial_=True
+        )
+        return build_multi_fidelity_env_wrapper(
+            fidelity_action=self.fidelity_action,
+            env_base_maker=env_base_maker,
+            n_fidelities=self._n_fidelities,
+            float_precision=fp,
+            device=device,
+        )
 
     # ------------------------------------------------------------------
     # State conversion
@@ -149,19 +176,24 @@ class GFlowNetSampler(Sampler):
         states : tensor or list
             Terminating states from a trajectory batch.
         env : GFlowNetEnv
-            The environment used to map states to proxy coordinates.
-        """
-        if not isinstance(states, (list, torch.Tensor)) or len(states) == 0:
-            return []
-        return proxy_states_to_candidates(env.states2proxy(states), env)
+            The environment used to map states to proxy format.
 
-    def _apply_fixed_fidelity(self, candidates: list[Candidate]) -> list[Candidate]:
-        """Stamp a fixed fidelity onto sampled candidates when configured."""
-        if self.fixed_fidelity is None:
-            return candidates
-        return [
-            replace(candidate, fidelity=self.fixed_fidelity) for candidate in candidates
-        ]
+        Returns
+        -------
+        list[Candidate]
+            Candidates built from the proxy-format states, or an
+            empty list if ``states`` is empty or of an unsupported type.
+        """
+        if not isinstance(states, (list, torch.Tensor)):
+            raise TypeError(
+                f"states must be a list or torch.Tensor, got {type(states).__name__}. "
+                "This likely indicates a bug in the calling code."
+            )
+        if len(states) == 0:
+            return []
+        return proxy_states_to_candidates(
+            env.states2proxy(states), env, fidelity_map=self.fidelities
+        )
 
     # ------------------------------------------------------------------
     # Public interface
@@ -188,7 +220,7 @@ class GFlowNetSampler(Sampler):
         Returns
         -------
         list[Candidate]
-            ``n_samples`` candidates in proxy coordinates.
+            ``n_samples`` candidates in proxy format.
 
         Raises
         ------
@@ -202,7 +234,6 @@ class GFlowNetSampler(Sampler):
         agent.train()
 
         batch, _ = agent.sample_batch(n_forward=self.n_samples, train=False)
-        raw_states = batch.get_terminating_states()
+        states_term = batch.get_terminating_states()
 
-        candidates = self._states_to_candidates(raw_states, agent.env)
-        return self._apply_fixed_fidelity(candidates)
+        return self._states_to_candidates(states_term, agent.env)

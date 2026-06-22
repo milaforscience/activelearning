@@ -119,7 +119,9 @@ def env_set_cubes():
 )
 def test__base_envs_initialize_properly(env, request):
     env = request.getfixturevalue(env)
-    assert True
+    assert isinstance(env, GFlowNetEnv)
+    assert env.action_space_dim > 0
+    assert env.is_source(env.source)
 
 
 @pytest.mark.parametrize(
@@ -247,7 +249,12 @@ def test__get_state_base_and_fidelity_returns_expected(
         assert fidelity == fidelity_expected
 
 
-def test__env_maker_creates_independent_env_base_instances():
+@pytest.mark.parametrize(
+    "wrapper_class",
+    ALL_WRAPPER_CLASSES,
+    ids=lambda c: c.__name__,
+)
+def test__env_maker_creates_independent_env_base_instances(wrapper_class):
     """Each call to env_maker() must produce a wrapper with an independent env_base.
 
     If env_base is instantiated once and shared across wrappers (e.g. captured in a
@@ -256,10 +263,7 @@ def test__env_maker_creates_independent_env_base_instances():
     every call.
     """
     env_base = partial(Grid, n_dim=2, length=3)
-
-    env_maker = partial(
-        MultiFidelityGFlowNetEnvWrapper, env_base_maker=env_base, n_fidelities=2
-    )
+    env_maker = partial(wrapper_class, env_base_maker=env_base, n_fidelities=2)
 
     env1 = env_maker()
     env2 = env_maker()
@@ -268,28 +272,6 @@ def test__env_maker_creates_independent_env_base_instances():
     assert env1.env_base is not env2.env_base
 
     # Advancing env1 must leave env2's base state untouched.
-    initial_state = list(env2.env_base.state)
-    env1.get_random_states(n_states=1)
-    assert env2.env_base.equal(env2.env_base.state, initial_state)
-
-
-@pytest.mark.parametrize(
-    "wrapper_class",
-    [MultiFidelityGFlowNetEnvWrapperFidFirst, MultiFidelityGFlowNetEnvWrapperFidLast],
-    ids=lambda c: c.__name__,
-)
-def test__env_maker_creates_independent_env_base_instances_stack_variants(
-    wrapper_class,
-):
-    """Same independence guarantee for the two Stack-based variants."""
-    env_base = partial(Grid, n_dim=2, length=3)
-    env_maker = partial(wrapper_class, env_base_maker=env_base, n_fidelities=2)
-
-    env1 = env_maker()
-    env2 = env_maker()
-
-    assert env1.env_base is not env2.env_base
-
     initial_state = list(env2.env_base.state)
     env1.get_random_states(n_states=1)
     assert env2.env_base.equal(env2.env_base.state, initial_state)

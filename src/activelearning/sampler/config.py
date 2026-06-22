@@ -1,3 +1,10 @@
+"""Pydantic models of samplers.
+
+Changes in the interface of existing samplers should be reflected in this
+configuration. New samplers should define their corresponding pydantic model here and
+be added to ``SamplerConfig``.
+"""
+
 from pathlib import Path
 from typing import Annotated, Any, Literal, Union
 from pydantic import BaseModel, Field
@@ -57,10 +64,11 @@ class PoolFileSamplerConfig(BaseModel):
 class GFlowNetSamplerConfig(BaseModel):
     """Pydantic config for :class:`~activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler`.
 
-    GFlowNet component defaults (env, policy, loss, buffer, evaluator, logger,
+    GFlowNet component defaults (policy, loss, buffer, evaluator, logger,
     proxy) are loaded automatically from ``config/gflownet/`` via
     :func:`~activelearning.sampler.gflownet.config_utils.compose_gflownet_conf`.
-    Only experiment-specific overrides need to be provided in ``conf``.
+    The env config starts from ``env/base.yaml`` only — the ``_target_`` class
+    and all env-specific fields must be provided in ``conf``.
 
     Parameters
     ----------
@@ -68,12 +76,12 @@ class GFlowNetSamplerConfig(BaseModel):
         Discriminator field for the :data:`SamplerConfig` union.
     n_samples : int
         Number of candidates to generate per :meth:`~activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler.sample` call.
-    n_fidelities : int
-        Number of fidelity levels. ``1`` means single-fidelity.
-    fixed_fidelity : int or None
-        If set, stamp this fidelity onto every sampled candidate. This keeps
-        the sampler single-fidelity while still letting downstream multi-fidelity
-        components consume the candidates.
+    fidelities : list[int] or None
+        Fidelity levels to generate. ``None`` means single-fidelity (no
+        fidelity is stamped on candidates). A list enables multi-fidelity
+        mode: each sampled candidate is assigned one of these values as its
+        ``fidelity``. Values must match the oracle's ``fidelity_costs`` keys
+        (e.g. ``[1, 2, 3]`` for a three-level oracle).
     log_dir : str or None
         Root directory for GFlowNet logs.  A temporary directory is created
         automatically when ``None``.
@@ -81,13 +89,13 @@ class GFlowNetSamplerConfig(BaseModel):
         Experiment-specific overrides for the GFlowNet config, following the
         top-level key structure (``env``, ``gflownet``, ``policy``, ``logger``,
         ``proxy``, etc.).  Deep-merged over the YAML defaults when provided.
+        Must include ``env._target_`` and all required env fields.
     """
 
     type: Literal["GFlowNetSampler"] = "GFlowNetSampler"
     n_samples: int = Field(gt=0)
-    n_fidelities: int = 1
+    fidelities: list[int] | None = None
     fidelity_action: _FidelityAction = "any"
-    fixed_fidelity: int | None = Field(default=None, gt=0)
     log_dir: str | None = None
     conf: dict[str, Any] | None = None
 
@@ -95,38 +103,38 @@ class GFlowNetSamplerConfig(BaseModel):
         return GFlowNetSampler(
             n_samples=self.n_samples,
             conf=compose_gflownet_conf(conf_overrides=self.conf, log_dir=self.log_dir),
-            n_fidelities=self.n_fidelities,
+            fidelities=self.fidelities,
             fidelity_action=self.fidelity_action,
-            fixed_fidelity=self.fixed_fidelity,
         )
 
 
 class GFlowNetGridSamplerConfig(GFlowNetSamplerConfig):
     """Pydantic config for :class:`~activelearning.sampler.gflownet.grid_sampler.GFlowNetGridSampler`.
 
-    Extends :class:`GFlowNetSamplerConfig` with coordinate rescaling from the
-    native grid domain to a target bounded domain.
+    Extends :class:`GFlowNetSamplerConfig` with Grid-specific validation and
+    the optional ``domain_bounds`` field for per-dimension coordinate ranges.
 
     Parameters
     ----------
     type : Literal["GFlowNetGridSampler"]
         Discriminator field for the :data:`SamplerConfig` union.
-    output_bounds : list[tuple[float, float]] or None
-        Per-dimension ``(lower, upper)`` bounds to which grid coordinates are
-        linearly rescaled.  When ``None``, coordinates are returned in the
-        native ``[cell_min, cell_max]`` grid domain.
+    domain_bounds : list of [lo, hi] pairs, optional
+        Per-dimension coordinate ranges, one ``[lo, hi]`` pair per dimension.
+        Length must equal ``conf.env.n_dim`` and each pair must satisfy
+        ``lo < hi``. When ``None`` (default), all dimensions share the
+        ``[cell_min, cell_max]`` range from ``conf.env``.
     """
 
     type: Literal["GFlowNetGridSampler"] = "GFlowNetGridSampler"  # type: ignore[assignment]
-    output_bounds: list[tuple[float, float]] | None = None
+    domain_bounds: list[list[float]] | None = None
 
     def build(self) -> Sampler:
         return GFlowNetGridSampler(
             n_samples=self.n_samples,
             conf=compose_gflownet_conf(conf_overrides=self.conf, log_dir=self.log_dir),
-            output_bounds=self.output_bounds,
-            n_fidelities=self.n_fidelities,
+            fidelities=self.fidelities,
             fidelity_action=self.fidelity_action,
+            domain_bounds=self.domain_bounds,
         )
 
 

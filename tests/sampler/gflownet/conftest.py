@@ -2,9 +2,10 @@
 
 import shutil
 import tempfile
+from typing import Tuple
 
 import pytest
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 
 
 def _make_minimal_gflownet_conf(
@@ -13,7 +14,7 @@ def _make_minimal_gflownet_conf(
     n_dim: int = 2,
     cell_min: float = 0.0,
     cell_max: float = 1.0,
-) -> OmegaConf:
+) -> Tuple[DictConfig, str]:
     """Build a minimal GFlowNet DictConfig suitable for fast unit tests.
 
     Parameters
@@ -161,5 +162,13 @@ def _make_minimal_gflownet_conf(
 def gflownet_conf_2d():
     """2-D grid GFlowNet config and log tmpdir for unit tests."""
     conf, tmpdir = _make_minimal_gflownet_conf(n_train_steps=5, grid_length=5, n_dim=2)
+    yield conf, tmpdir
+    shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+@pytest.fixture()
+def gflownet_conf_6d():
+    """6-D grid GFlowNet config and log tmpdir for unit tests (Hartmann-like)."""
+    conf, tmpdir = _make_minimal_gflownet_conf(n_train_steps=5, grid_length=4, n_dim=6)
     yield conf, tmpdir
     shutil.rmtree(tmpdir, ignore_errors=True)

@@ -244,7 +244,7 @@ instance/
 # Sphinx documentation
 docs/_build/
 docs_api/_build/
-docs_api/source/*
+docs_api/source/*/
 !docs_api/source/index.rst
 
 # PyBuilder

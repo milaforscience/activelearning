@@ -28,14 +28,14 @@ def resolve_torch_dtype(precision: int) -> torch.dtype:
     raise ValueError(f"Unsupported precision {precision}. Expected 32 or 64.")
 
 
-class RuntimeConfig(BaseModel):
+class RuntimeContextConfig(BaseModel):
     """Configuration for global torch runtime defaults."""
 
     device: str = "cpu"
     precision: Literal[32, 64] = 64
     seed: int = Field(default=42, ge=0)
 
-    def build_context(self, logger: Logger | None = None) -> RuntimeContext:
+    def build(self, logger: Logger | None = None) -> RuntimeContext:
         """Materialize the configured runtime context."""
         return RuntimeContext(
             logger=logger,

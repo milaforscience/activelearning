@@ -1,7 +1,7 @@
 """Shared utilities for the GFlowNet sampler package."""
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, Union
 
 import torch
 
@@ -9,6 +9,10 @@ from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
     MultiFidelityGFlowNetEnvWrapperBase,
 )
 from activelearning.utils.types import Candidate
+
+# Accepted input shapes for states_proxy: 2-D tensor, list of tensors,
+# list of plain sequences (single-fidelity), or list of dicts (multi-fidelity).
+_StatesProxy = Union[torch.Tensor, list]
 
 
 def _is_non_string_sequence(value: Any) -> bool:
@@ -32,22 +36,22 @@ def _normalize_proxy_value(value: Any) -> Any:
     return value
 
 
-def _single_fidelity_proxy_values(proxy_coords: Any) -> list[Any]:
+def _single_fidelity_proxy_values(proxy_states: Any) -> list[Any]:
     """Normalize single-fidelity proxy outputs to one proxy value per candidate."""
-    if proxy_coords is None:
+    if proxy_states is None:
         return []
 
-    if torch.is_tensor(proxy_coords):
-        proxy_values = proxy_coords.detach().cpu().tolist()
-        return proxy_values if proxy_coords.ndim > 1 else [proxy_values]
+    if torch.is_tensor(proxy_states):
+        proxy_values = proxy_states.detach().cpu().tolist()
+        return proxy_values if proxy_states.ndim > 1 else [proxy_values]
 
-    proxy_coords = _normalize_proxy_value(proxy_coords)
-    if isinstance(proxy_coords, Mapping):
-        return [proxy_coords]
-    if not _is_non_string_sequence(proxy_coords):
-        return [proxy_coords]
+    proxy_states = _normalize_proxy_value(proxy_states)
+    if isinstance(proxy_states, Mapping):
+        return [proxy_states]
+    if not _is_non_string_sequence(proxy_states):
+        return [proxy_states]
 
-    proxy_values = list(proxy_coords)
+    proxy_values = list(proxy_states)
     if not proxy_values:
         return []
 
@@ -63,31 +67,99 @@ def _single_fidelity_proxy_values(proxy_coords: Any) -> list[Any]:
     return [proxy_values]
 
 
-def proxy_states_to_candidates(proxy_coords: Any, env: Any) -> list[Candidate]:
-    """Convert ``env.states2proxy(...)`` output to candidates."""
+def proxy_states_to_candidates(
+    states_proxy: _StatesProxy,
+    env: Any,
+    fidelity_map: list[int] | None = None,
+) -> list[Candidate]:
+    """Convert proxy-format states to :class:`~activelearning.utils.types.Candidate` objects.
+
+    This is the single place that handles all shapes returned by
+    ``env.states2proxy``. Callers (the GFlowNet sampler and the acquisition
+    proxy) should use this instead of duplicating the conversion logic.
+
+    For multi-fidelity envs (:class:`~activelearning.sampler.gflownet.\
+multi_fidelity_env_wrapper.MultiFidelityGFlowNetEnvWrapperBase`),
+    ``states2proxy`` returns a list of dict-like objects keyed by sub-env
+    index. ``env.idx_base_env`` and ``env.idx_fidelity`` locate the coordinate
+    tensor and the fidelity scalar respectively.
+
+    The GFlowNet ``Choice`` env uses **1-based** fidelity indices: the source
+    state is ``0`` (uncommitted), and choosing option ``i`` produces state ``i``
+    (so options ``1..N`` for ``n_options=N``). Use ``fidelity_map`` to translate
+    these raw indices to the domain-specific fidelity values expected by the
+    oracle. For example, ``fidelity_map=[5, 10, 15]`` maps raw index
+    ``1 → 5``, ``2 → 10``, ``3 → 15``; ``fidelity_map=[1, 2, 3]`` is the
+    identity mapping used when oracle keys start at 1.
+
+    For single-fidelity envs, ``states2proxy`` may return:
+
+    - a 2-D tensor ``[N, D]``
+    - a list of 1-D tensors (stacked internally)
+    - a list of plain sequences or strings (e.g. SELFIES)
+    - a list of dicts (Mapping)
+    - a single sequence or Mapping (treated as one candidate)
+
+    Parameters
+    ----------
+    states_proxy : torch.Tensor, list, tuple, or Mapping
+        Output of ``env.states2proxy(states)``. Strings, bytes, and ``None``
+        are invalid and raise ``TypeError``.
+    env : GFlowNetEnv
+        The environment that produced ``states_proxy``. Detected as
+        multi-fidelity when it is a
+        :class:`~activelearning.sampler.gflownet.multi_fidelity_env_wrapper.MultiFidelityGFlowNetEnvWrapperBase`
+        instance; otherwise treated as single-fidelity.
+    fidelity_map : list[int] or None
+        Maps 1-based ``Choice`` env states to domain fidelity values. Raw
+        index ``i`` (``1..N``) is translated to ``fidelity_map[i - 1]``.
+        When ``None``, the raw index is stamped directly. Ignored for
+        single-fidelity envs.
+
+    Returns
+    -------
+    list[Candidate]
+        One :class:`~activelearning.utils.types.Candidate` per state.
+        Multi-fidelity candidates carry a non-``None`` ``fidelity`` field.
+
+    Raises
+    ------
+    TypeError
+        If ``states_proxy`` is a string, bytes, or any other non-collection type.
+    """
+    if isinstance(states_proxy, (str, bytes, bytearray)) or not isinstance(
+        states_proxy, (torch.Tensor, Sequence, Mapping)
+    ):
+        raise TypeError(
+            f"states_proxy must be a list, tuple, torch.Tensor, or Mapping, "
+            f"got {type(states_proxy).__name__}. "
+            "This likely indicates a bug in the calling code."
+        )
+    if len(states_proxy) == 0:
+        return []
+
     if isinstance(env, MultiFidelityGFlowNetEnvWrapperBase):
-        if not _is_non_string_sequence(proxy_coords):
-            return []
         idx_base = env.idx_base_env
         idx_fid = env.idx_fidelity
-
         candidates: list[Candidate] = []
-        for proxy_state in proxy_coords:
-            fidelity = _normalize_proxy_value(proxy_state[idx_fid])
-            if _is_non_string_sequence(fidelity):
-                if len(fidelity) == 0:
-                    raise ValueError("Fidelity proxy value must not be empty.")
-                fidelity = fidelity[0]
-
+        for state_proxy in states_proxy:
+            fid_raw = state_proxy[idx_fid]
+            raw_index = int(
+                fid_raw[0].item() if torch.is_tensor(fid_raw) else fid_raw[0]
+            )
+            # Choice env: raw_index is 1-based (1..N); convert to 0-based for fidelity_map.
+            fidelity = (
+                fidelity_map[raw_index - 1] if fidelity_map is not None else raw_index
+            )
             candidates.append(
                 Candidate(
-                    x=_normalize_proxy_value(proxy_state[idx_base]),
-                    fidelity=int(fidelity),
+                    x=_normalize_proxy_value(state_proxy[idx_base]),
+                    fidelity=fidelity,
                 )
             )
         return candidates
 
     return [
         Candidate(x=_normalize_proxy_value(proxy_value))
-        for proxy_value in _single_fidelity_proxy_values(proxy_coords)
+        for proxy_value in _single_fidelity_proxy_values(states_proxy)
     ]

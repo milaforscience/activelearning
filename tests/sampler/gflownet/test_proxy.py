@@ -77,6 +77,9 @@ class _StringCapturingAcquisition:
 class _StubMFEnv(MultiFidelityGFlowNetEnvWrapperBase):
     """Minimal MF env stub; bypasses parent __init__."""
 
+    idx_base_env = 0
+    idx_fidelity = 1
+
     def __init__(self, idx_base_env: int = 0, idx_fidelity: int = 1) -> None:
         self.idx_base_env = idx_base_env
         self.idx_fidelity = idx_fidelity
@@ -237,7 +240,7 @@ class TestAcquisitionProxyCallMultiFidelity:
         self.proxy(states)
         assert acq.seen == [0, 2]
 
-    def test_acquisition_receives_base_coords(self):
+    def test_acquisition_receives_correct_coords(self):
         acq = _CoordSumAcquisition()
         self.proxy.set_acquisition(acq)
         states = _make_mf_states([[1.0, 2.0]], fidelities=[0])

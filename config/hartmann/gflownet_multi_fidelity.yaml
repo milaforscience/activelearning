@@ -37,10 +37,10 @@ acquisition:
 sampler:
   type: GFlowNetGridSampler
   n_samples: 100
-  n_fidelities: 3
+  fidelities: [1, 2, 3]
   fidelity_action: any  # "any" (SetFix), "first" (Stack fid-first), "last" (Stack fid-last)
-  # Rescale grid coordinates (cell_min=-1, cell_max=1) to the Hartmann [0,1]^6 domain.
-  output_bounds:
+  # Hartmann domain: [0, 1]^6.
+  domain_bounds:
     - [0.0, 1.0]
     - [0.0, 1.0]
     - [0.0, 1.0]
@@ -49,8 +49,11 @@ sampler:
     - [0.0, 1.0]
   conf:
     env:
+      _target_: gflownet.envs.grid.Grid
       n_dim: 6
       length: 20  # 20 cells per dimension → 0.05 resolution
+      cell_min: 0
+      cell_max: 1
     gflownet:
       # Active-learning optimizer settings (from mf-al-gfn hartmann config).
       random_action_prob: 0.001  # default: 0.0

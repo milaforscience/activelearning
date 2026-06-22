@@ -8,7 +8,7 @@ produce a ready-to-use :class:`~omegaconf.DictConfig` for
 File layout mirrors the `original gflownet repository
 <https://github.com/alexhernandezgarcia/gflownet/tree/main/config>`_:
 
-- ``env/base.yaml`` + ``env/grid.yaml``
+- ``env/base.yaml``
 - ``gflownet/gflownet.yaml`` + ``gflownet/trajectorybalance.yaml``
 - ``policy/mlp.yaml``
 - ``loss/base.yaml`` + ``loss/trajectorybalance.yaml``
@@ -16,6 +16,12 @@ File layout mirrors the `original gflownet repository
 - ``evaluator/base.yaml``
 - ``logger/base.yaml``
 - ``proxy/base.yaml`` + ``proxy/acquisition.yaml``  (our custom AL proxy)
+
+The env config intentionally starts from ``env/base.yaml`` only.  The
+``_target_`` class and all env-specific fields (e.g. ``n_dim``, ``length``)
+must be supplied via the ``conf_overrides`` argument (or the ``conf`` field in
+the Pydantic sampler config), keeping env selection explicit and co-located
+with the rest of the experiment config.
 
 Hydra ``defaults:`` lists in the YAML files are resolved manually via
 :func:`_strip_defaults` + :func:`OmegaConf.merge` so that no Hydra runtime
@@ -94,6 +100,18 @@ def compose_gflownet_conf(
     at runtime by
     :meth:`~activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler._build_agent`.
 
+    The ``env`` block starts from ``env/base.yaml`` only.  All env-specific
+    fields — including ``_target_`` — must be provided via *conf_overrides*.
+    For example, to use the Grid environment::
+
+        compose_gflownet_conf(conf_overrides={
+            "env": {
+                "_target_": "gflownet.envs.grid.Grid",
+                "n_dim": 2,
+                "length": 100,
+            }
+        })
+
     Parameters
     ----------
     conf_overrides : dict[str, Any] or None
@@ -113,11 +131,8 @@ def compose_gflownet_conf(
     """
     cfg_dir = _find_config_dir()
 
-    # --- env: base + grid (resolves defaults: [base] in grid.yaml) ---
-    env_cfg = OmegaConf.merge(
-        _load_yaml(cfg_dir / "env" / "base.yaml"),
-        _strip_defaults(_load_yaml(cfg_dir / "env" / "grid.yaml")),
-    )
+    # --- env: base only — env class and fields come from conf_overrides ---
+    env_cfg = _load_yaml(cfg_dir / "env" / "base.yaml")
 
     # --- policy: mlp (no defaults chain) ---
     policy_cfg = _load_yaml(cfg_dir / "policy" / "mlp.yaml")

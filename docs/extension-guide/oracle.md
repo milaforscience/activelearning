@@ -1,24 +1,44 @@
 # **Adding a New Oracle**
 
-An oracle implements the ground-truth evaluation function $f(x, m)$ at each fidelity level $m \in \mathcal{M}$. Implement a new oracle subclass to:
+An oracle implements the ground-truth evaluation function $f(x, m)$ for one or more supported fidelity levels $m \subseteq \mathcal{M}$. Implement a new oracle subclass to:
 
 - Wrap a new simulator, benchmark function, or lab instrument.
 - Define a different fidelity structure (different levels, costs, or confidences).
 - Implement a custom routing rule for multi-fidelity queries.
 
-If you only need to **combine** existing oracles across fidelity levels, see
+A single oracle does not need to cover every fidelity level. The experiment's
+top-level `oracle` configuration, however, must collectively support all fidelity
+levels used during the run. You can achieve this with a single oracle that covers
+all levels, or by using a `CompositeOracle` to combine several oracles that each
+cover a subset. If you only need to **combine** existing oracles across fidelity
+levels, see
 [Using CompositeOracle](#using-compositeoracle-instead-of-building-from-scratch)
 before writing a new class.
 
 ## **What to implement**
 
+### Choosing a base class
+
+| Approach | When to use |
+|---|---|
+| Subclass `Oracle` directly | You need full control over cost logic (e.g., candidate-dependent costs) or scoring behaviour that `MultiFidelityOracle` does not support. |
+| Subclass `MultiFidelityOracle` | Each fidelity level has a **constant cost per sample** and can be described by a simple `score_fn` callable. This avoids re-implementing `get_costs`, `get_min_query_cost`, and `query`. |
+| Use `CompositeOracle` (no new class) | You already have oracle classes that each cover a subset of fidelity levels and want to combine them into a single oracle that covers all levels. `CompositeOracle` merges their supported fidelities and routes candidates to the cheapest sub-oracle per level. |
+
+`MultiFidelityOracle` is a convenience subclass of `Oracle`. Because it assumes a
+fixed `cost_per_sample` per fidelity level and a stateless `score_fn`, it is not
+suitable when costs depend on the candidate itself or when querying requires
+shared state across fidelity levels. In those cases, subclass `Oracle` directly.
+
+### Required methods (when subclassing `Oracle`)
+
 Subclass `activelearning.oracle.oracle.Oracle` and implement three methods:
 
-| Method | Purpose |
-|---|---|
-| `get_fidelity_confidences()` | Returns a dict mapping each fidelity id to a confidence in `[0, 1]` |
-| `get_costs(candidates)` | Returns one cost per input candidate (same order) |
-| `query(candidates)` | Returns one [`Observation`](../reference/activelearning/utils/types/#activelearning.utils.types.Observation) per input candidate (same order) |
+| Method | Required? | Notes |
+|---|---|---|
+| `get_fidelity_confidences()` | **Yes** | Returns `dict[int, float]` — maps each fidelity id to a confidence in `[0, 1]` |
+| `get_costs(candidates)` | **Yes** | Returns `list[float]` — one cost per input candidate, in the same order |
+| `query(candidates)` | **Yes** | Returns `list[Observation]` — one [`Observation`](../reference/activelearning/utils/types/#activelearning.utils.types.Observation) per input candidate, in the same order |
 
 ## **Reference implementations**
 
@@ -69,9 +89,6 @@ it assigns — keep them consistent).
 input candidate, in the exact same order. Never sort, group, or filter the
 input list before building your return list.
 
-**Budget** — `query()` must not check or modify the budget. Budget tracking
-happens in the loop; your oracle only observes.
-
 **Runtime tensors** — build tensors inside `query()`, not in `__init__()`.
 Use `self.dtype` and `self.device` so the runtime binding takes effect.
 
@@ -98,5 +115,5 @@ expressed as independent sub-oracles.
 ## **Related pages**
 
 - [Sampler guide](sampler.md) — aligning fidelity ids with the sampler
-- [Extension guide overview](index.md)
+- [Extension guide overview](overview.md)
 - [Oracle API](../reference/activelearning/oracle/oracle/)

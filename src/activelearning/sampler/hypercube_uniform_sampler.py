@@ -17,24 +17,6 @@ class HypercubeUniformSampler(Sampler):
 
     Fidelity levels are sampled uniformly at random from ``fidelities`` for
     each candidate, enabling multi-fidelity exploration without a fixed pool.
-
-    Parameters
-    ----------
-    bounds : Sequence[tuple[float, float]]
-        Per-dimension ``(lower, upper)`` bounds that define the hypercube.
-        Each pair must satisfy ``lower < upper``.
-        The length determines the input dimensionality.
-    num_samples : int
-        Number of candidates to generate per ``sample()`` call. Must be > 0.
-    fidelities : Optional[Sequence[int]]
-        Fidelity levels to sample from uniformly at random. Each generated
-        candidate is assigned one level drawn with equal probability. When
-        ``None``, candidates are created with ``fidelity=None``.
-
-    Raises
-    ------
-    ValueError
-        If any lower bound >= upper bound or num_samples <= 0.
     """
 
     def __init__(
@@ -43,6 +25,29 @@ class HypercubeUniformSampler(Sampler):
         num_samples: int,
         fidelities: Optional[Sequence[int]] = None,
     ) -> None:
+        """Initialize the hypercube uniform sampler.
+
+        Parameters
+        ----------
+        bounds : Sequence[tuple[float, float]]
+            Per-dimension ``(lower, upper)`` bounds that define the hypercube.
+            Each pair must satisfy ``lower < upper``.
+            The length determines the input dimensionality.
+        num_samples : int
+            Number of candidates to generate per ``sample()`` call. Must be > 0.
+        fidelities : Optional[Sequence[int]]
+            Fidelity levels to sample from uniformly at random. Each generated
+            candidate is assigned one level drawn with equal probability. When
+            ``None``, candidates are created with ``fidelity=None``.
+
+        Raises
+        ------
+        ValueError
+            If ``bounds`` is empty, any lower bound >= upper bound, or
+            ``num_samples`` <= 0.
+        """
+        if len(bounds) == 0:
+            raise ValueError("bounds must not be empty")
         if num_samples <= 0:
             raise ValueError(f"num_samples must be > 0, got {num_samples}")
         for i, (lower, upper) in enumerate(bounds):
@@ -55,12 +60,11 @@ class HypercubeUniformSampler(Sampler):
         self.num_samples = num_samples
         self.fidelities = list(fidelities) if fidelities is not None else None
 
-        lowers = [b[0] for b in bounds]
-        uppers = [b[1] for b in bounds]
-        self._lower = torch.tensor(lowers, dtype=torch.float64)
-        self._range = torch.tensor(
-            [upper - lower for lower, upper in zip(lowers, uppers)], dtype=torch.float64
-        )
+        # Store raw scalars; tensors are materialized in sample() using self.dtype
+        # so that any RuntimeContext dtype binding is respected (same pattern as
+        # HypercubeSampler).
+        self._lower_values = tuple(b[0] for b in bounds)
+        self._range_values = tuple(b[1] - b[0] for b in bounds)
 
     def sample(
         self,
@@ -88,9 +92,11 @@ class HypercubeUniformSampler(Sampler):
             ``num_samples`` candidates with ``x`` as a plain Python list of
             floats and ``fidelity`` drawn uniformly from ``fidelities``.
         """
-        # Draw points in [0, 1]^d and rescale them into the configured bounds.
-        uniform = torch.rand(self.num_samples, len(self.bounds), dtype=torch.float64)
-        points = self._lower + uniform * self._range
+        # Shape: (num_samples, n_dims)
+        lower = torch.tensor(self._lower_values, dtype=self.dtype)
+        range_ = torch.tensor(self._range_values, dtype=self.dtype)
+        uniform = torch.rand(self.num_samples, len(self.bounds), dtype=self.dtype)
+        points = lower + uniform * range_  # broadcast scaling
 
         if self.fidelities is not None:
             fidelity_indices = torch.randint(

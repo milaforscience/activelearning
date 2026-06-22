@@ -80,7 +80,7 @@ def test_molecule_dkl_exact_gflownet_config_parses() -> None:
     config = load_and_parse(config_path, ActiveLearningConfig)
 
     assert config.sampler.type == "GFlowNetSampler"
-    assert config.sampler.fixed_fidelity == 1
+    assert config.sampler.fidelities == [1]
     assert config.selector.type == "TopKAcquisitionSelector"
     assert config.oracle.type == "XTBIPEAOracle"
     assert config.acquisition.type == "UpperConfidenceBound"
@@ -95,8 +95,7 @@ def test_molecule_dkl_exact_multi_fidelity_gflownet_config_parses() -> None:
     config = load_and_parse(config_path, ActiveLearningConfig)
 
     assert config.sampler.type == "GFlowNetSampler"
-    assert config.sampler.n_fidelities == 3
-    assert config.sampler.fixed_fidelity is None
+    assert config.sampler.fidelities == [1, 2, 3]
     assert config.selector.type == "TopKAcquisitionSelector"
     assert config.oracle.type == "XTBIPEAOracle"
     assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
@@ -116,8 +115,7 @@ def test_molecule_dkl_variational_multi_fidelity_gflownet_config_parses() -> Non
     config = load_and_parse(config_path, ActiveLearningConfig)
 
     assert config.sampler.type == "GFlowNetSampler"
-    assert config.sampler.n_fidelities == 3
-    assert config.sampler.fixed_fidelity is None
+    assert config.sampler.fidelities == [1, 2, 3]
     assert config.selector.type == "TopKAcquisitionSelector"
     assert config.oracle.type == "XTBIPEAOracle"
     assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"

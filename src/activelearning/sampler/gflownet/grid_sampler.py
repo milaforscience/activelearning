@@ -1,31 +1,45 @@
-"""GFlowNet sampler for continuous bounded grid domains."""
+"""GFlowNet sampler for grid domains."""
 
-from typing import Any, Literal, Optional, Sequence
+from types import MethodType
+from typing import List, Literal, Optional
 
+import numpy as np
 import torch
-from hydra.utils import get_class
 from gflownet.envs.grid import Grid
+from gflownet.utils.common import tfloat
+from hydra.utils import get_class
 from omegaconf import DictConfig
 
 from activelearning.sampler.gflownet.gflownet_sampler import GFlowNetSampler
 from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
     MultiFidelityGFlowNetEnvWrapperBase,
 )
-from activelearning.utils.types import Candidate
 
 
 class GFlowNetGridSampler(GFlowNetSampler):
-    """GFlowNet sampler that rescales grid coordinates to a target bounded domain.
+    """Convenience GFlowNet sampler for :class:`gflownet.envs.grid.Grid` environments.
 
-    The GFlowNet :class:`gflownet.envs.grid.Grid` environment operates in a
-    discrete grid whose cells span ``[cell_min, cell_max]^d``.  This sampler
-    linearly maps the generated proxy coordinates to an arbitrary
-    ``output_bounds`` domain before returning candidates.  If ``output_bounds``
-    is ``None``, coordinates are returned in the native grid coordinate system.
+    Validates at construction time that the configured env is a
+    :class:`~gflownet.envs.grid.Grid` subclass, giving an early and clear error
+    if not.
 
-    The configured env (``conf.env._target_``) must be a
-    :class:`gflownet.envs.grid.Grid` or a subclass — a :exc:`ValueError` is
-    raised at construction time if it is not.
+    Coordinate system
+    -----------------
+    The Grid env maps integer cell indices to continuous coordinates.  Use
+    ``domain_bounds`` to set per-dimension coordinate ranges::
+
+        sampler:
+          type: GFlowNetGridSampler
+          domain_bounds:
+            - [-5.0, 10.0]   # x1
+            - [0.0, 15.0]    # x2
+          conf:
+            env:
+              n_dim: 2
+              length: 100
+
+    Without ``domain_bounds``, all dimensions share the range ``[cell_min, cell_max]``
+    from ``conf.env`` (Grid defaults: ``-1`` to ``1``).
 
     Parameters
     ----------
@@ -34,50 +48,50 @@ class GFlowNetGridSampler(GFlowNetSampler):
     conf : DictConfig
         Complete GFlowNet configuration tree (env, policy, gflownet, loss,
         buffer, evaluator, logger, proxy).
-    output_bounds : sequence of (float, float), optional
-        Per-dimension ``(lower, upper)`` bounds to which the grid coordinates
-        are rescaled.  Must have one entry per grid dimension.  If ``None``,
-        the native ``[cell_min, cell_max]`` coordinates are returned as-is.
-    n_fidelities : int
-        Number of fidelity levels. ``1`` means single-fidelity.
+    fidelities : list[int] or None
+        See :class:`~activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler`.
     fidelity_action : {"any", "first", "last"}
         Controls when fidelity is chosen during a trajectory. Only used when
-        ``n_fidelities > 1``. See
+        ``fidelities`` is not ``None``. See
         :class:`~activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler`
         for full semantics.
+    domain_bounds : list of [lo, hi] pairs, optional
+        Per-dimension coordinate bounds, one ``[lo, hi]`` pair per dimension.
+        Length must equal ``conf.env.n_dim`` and each pair must satisfy
+        ``lo < hi``.
 
     Raises
     ------
     ValueError
-        If ``conf.env._target_`` does not resolve to a :class:`~gflownet.envs.grid.Grid`
-        subclass.
+        If ``conf.env._target_`` does not resolve to a
+        :class:`~gflownet.envs.grid.Grid` subclass.
+    ValueError
+        If ``domain_bounds`` length does not match ``conf.env.n_dim``, or any
+        ``[lo, hi]`` pair has ``lo >= hi``.
     """
 
     def __init__(
         self,
         n_samples: int,
         conf: DictConfig,
-        output_bounds: Optional[Sequence[tuple[float, float]]] = None,
-        n_fidelities: int = 1,
+        fidelities: Optional[List[int]] = None,
         fidelity_action: Literal["any", "first", "last"] = "any",
+        domain_bounds: Optional[List[List[float]]] = None,
     ) -> None:
         super().__init__(
             n_samples=n_samples,
             conf=conf,
-            n_fidelities=n_fidelities,
+            fidelities=fidelities,
             fidelity_action=fidelity_action,
         )
         self._validate_grid_env(conf)
-        if output_bounds is not None:
-            self._out_lb = torch.tensor(
-                [lo for lo, _ in output_bounds], dtype=torch.float64
-            )
-            self._out_ub = torch.tensor(
-                [hi for _, hi in output_bounds], dtype=torch.float64
-            )
-        else:
-            self._out_lb = None
-            self._out_ub = None
+        if domain_bounds is not None:
+            self._validate_domain_bounds(domain_bounds, conf)
+        self.domain_bounds = domain_bounds
+
+    # ------------------------------------------------------------------
+    # Validation
+    # ------------------------------------------------------------------
 
     @staticmethod
     def _validate_grid_env(conf: DictConfig) -> None:
@@ -97,58 +111,85 @@ class GFlowNetGridSampler(GFlowNetSampler):
             )
 
     @staticmethod
-    def _get_grid_bounds(env: Any) -> tuple[torch.Tensor, torch.Tensor]:
-        """Extract cell bounds from the built Grid env.
-
-        For multi-fidelity envs the base env is retrieved from
-        ``env.env_base``. Grid stores its cell positions in ``env.cells``
-        (a 1-D array from ``np.linspace(cell_min, cell_max, length)``), so
-        the actual bounds are ``cells[0]`` and ``cells[-1]``.
-
-        Parameters
-        ----------
-        env : GFlowNetEnv
-            The environment (or MF wrapper) built by the GFlowNet agent.
-
-        Returns
-        -------
-        grid_min, grid_max : torch.Tensor
-            Scalar float64 tensors with the grid's lower and upper coordinate bounds.
-        """
-        base_env = (
-            env.env_base
-            if isinstance(env, MultiFidelityGFlowNetEnvWrapperBase)
-            else env
-        )
-        grid_min = torch.tensor(float(base_env.cells[0]), dtype=torch.float64)
-        grid_max = torch.tensor(float(base_env.cells[-1]), dtype=torch.float64)
-        return grid_min, grid_max
-
-    def _states_to_candidates(self, states: Any, env: Any) -> list[Candidate]:
-        """Convert GFlowNet states to :class:`~activelearning.utils.types.Candidate` objects.
-
-        If ``output_bounds`` was provided, linearly rescales each coordinate from
-        the grid's native ``[cell_min, cell_max]`` range (read from the built env)
-        to the target domain.
-
-        Parameters
-        ----------
-        states : tensor or list
-            Terminating states from the GFlowNet trajectory batch.
-        env : GFlowNetEnv
-            The environment used to convert states to proxy coordinates.
-        """
-        candidates = super()._states_to_candidates(states, env)
-        if self._out_lb is None:
-            return candidates
-        grid_min, grid_max = self._get_grid_bounds(env)
-        grid_range = grid_max - grid_min
-        rescaled = []
-        for c in candidates:
-            coords = torch.tensor(c.x, dtype=torch.float64)
-            normed = (coords - grid_min) / grid_range
-            new_coords = normed * (self._out_ub - self._out_lb) + self._out_lb
-            rescaled.append(
-                Candidate(x=tuple(new_coords.tolist()), fidelity=c.fidelity)
+    def _validate_domain_bounds(
+        domain_bounds: List[List[float]], conf: DictConfig
+    ) -> None:
+        """Raise ValueError if domain_bounds is malformed or mismatches n_dim."""
+        n_dim = conf.env.get("n_dim", 2)
+        if len(domain_bounds) != n_dim:
+            raise ValueError(
+                f"domain_bounds has {len(domain_bounds)} entries but "
+                f"conf.env.n_dim={n_dim}. Provide one [lo, hi] pair per dimension."
             )
-        return rescaled
+        for i, bounds in enumerate(domain_bounds):
+            lo, hi = bounds
+            if lo >= hi:
+                raise ValueError(
+                    f"domain_bounds[{i}] has lo={lo} >= hi={hi}. "
+                    "Each bound must satisfy lo < hi."
+                )
+
+    # ------------------------------------------------------------------
+    # Agent construction
+    # ------------------------------------------------------------------
+
+    def _build_agent(self, acquisition, cost_fn=None):
+        """Build agent, applying per-dimension coordinate bounds to the env if set."""
+        agent = super()._build_agent(acquisition, cost_fn=cost_fn)
+        # For multi-fidelity, bounds are applied inside _build_multi_fidelity_env.
+        if self.domain_bounds is not None and self.fidelities is None:
+            _apply_per_dimension_bounds(agent.env, self.domain_bounds)
+        return agent
+
+    def _build_multi_fidelity_env(
+        self, conf: DictConfig, device: str, fp: int
+    ) -> MultiFidelityGFlowNetEnvWrapperBase:
+        """Construct the multi-fidelity env, applying per-dimension bounds if set."""
+        env = super()._build_multi_fidelity_env(conf, device, fp)
+        if self.domain_bounds is not None:
+            _apply_per_dimension_bounds(env.env_base, self.domain_bounds)
+        return env
+
+
+def _apply_per_dimension_bounds(
+    env: Grid,
+    domain_bounds: List[List[float]],
+) -> None:
+    """Configure a Grid env to use per-dimension coordinate ranges.
+
+    By default the Grid env maps all dimensions to the same ``[cell_min,
+    cell_max]`` range.  This function overrides that mapping so each dimension
+    uses its own independent linspace, making the grid cover an axis-aligned
+    rectangular domain.
+
+    Parameters
+    ----------
+    env : Grid
+        The Grid env instance to configure.
+    domain_bounds : list of [lo, hi] pairs
+        Per-dimension coordinate ranges. Length must match ``env.n_dim``.
+    """
+    n_dim = env.n_dim
+    length = env.length
+
+    cells_matrix = torch.stack(
+        [
+            torch.tensor(
+                np.linspace(lo, hi, length), device=env.device, dtype=env.float
+            )
+            for lo, hi in domain_bounds
+        ],
+        dim=0,
+    )
+
+    def states2proxy_per_dim(self, states):
+        states = tfloat(states, device=self.device, float_type=self.float)
+        # states2policy returns (batch, n_dim * length); reshape to (batch, n_dim, length)
+        return (
+            self.states2policy(states).reshape((states.shape[0], n_dim, length))
+            * cells_matrix.to(states.device)[None, :, :]
+        ).sum(axis=2)
+
+    env.states2proxy = MethodType(states2proxy_per_dim, env)
+    env.cells = np.linspace(domain_bounds[0][0], domain_bounds[0][1], length)
+    env.cells_torch = cells_matrix[0]

@@ -194,13 +194,13 @@ The example below was generated from a short fidelity-1 EA run over the bundled 
 
 ## **4. Run the single-fidelity SELFIES GFlowNet sampler**
 
-The single-fidelity GFlowNet molecule configs replace the finite pool sampler with a SELFIES sequence environment and stamp every sampled molecule with `fixed_fidelity: 1`:
+The single-fidelity GFlowNet molecule configs replace the finite pool sampler with a SELFIES sequence environment and use `fidelities: [1]` to stamp every sampled molecule with fidelity level 1:
 
 ```yaml
 sampler:
     type: GFlowNetSampler
     n_samples: 16
-    fixed_fidelity: 1
+    fidelities: [1]
     conf:
         env:
             _target_: gflownet.envs.sequences.selfies.Selfies
@@ -239,7 +239,7 @@ The exact multi-fidelity GFlowNet config lets the policy sample both a SELFIES s
 sampler:
     type: GFlowNetSampler
     n_samples: 64
-    n_fidelities: 3
+    fidelities: [1, 2, 3]
     fidelity_action: any
     conf:
         env:
@@ -287,8 +287,7 @@ The main molecule-specific fields are:
 | `surrogate.target_fidelity` | Fidelity level used when MF acquisitions project candidates to the target objective. |
 | `sampler.candidate_pool_file` | SELFIES pool used by `PoolFileSampler`. |
 | `sampler.conf.env._target_` | GFlowNet environment class for generated SELFIES. |
-| `sampler.fixed_fidelity` | Fixed fidelity assigned to GFlowNet-generated molecules in the single-fidelity examples. |
-| `sampler.n_fidelities` | Number of fidelity levels exposed to the GFlowNet policy. Values greater than `1` enable joint molecule-fidelity sampling. |
+| `sampler.fidelities` | Fidelity levels exposed to the GFlowNet policy. `[1]` stamps fidelity 1 on every candidate (single-fidelity); `[1, 2, 3]` enables joint molecule-fidelity sampling (multi-fidelity). |
 | `sampler.fidelity_action` | Where the fidelity choice appears in the trajectory; `"any"` lets the policy interleave fidelity selection with token actions. |
 | `acquisition.type` | `UpperConfidenceBound` in stages 1 and 3, or `QMultiFidelityLowerBoundMaxValueEntropy` in stages 2, 4, and 5. |
 | `acquisition.cost_aware_utility` | Cost model baked into the BoTorch multi-fidelity acquisition during `acquisition.update(...)`. In the GFlowNet multi-fidelity configs this makes the sampler reward proxy cost-aware before top-k selection. |

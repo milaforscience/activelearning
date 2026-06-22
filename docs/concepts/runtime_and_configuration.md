@@ -76,17 +76,17 @@ The top-level sections correspond to the loop's conceptual components:
 
 <div class="schema-table" markdown>
 
-| Section | Methodological Role | Operational Scope |
+| Section | Methodological Role | Operational Objective |
 | --- | --- | --- |
-| `runtime` | Shared execution context | Device selection and floating-point precision; the logger is inserted into the same context after construction. |
-| `dataset` | Observation store | Records all candidate-fidelity queries and their outcomes. |
-| `surrogate` | Probabilistic model | Fitted on the current dataset to approximate the expensive objective. |
-| `acquisition` | Utility function | Scores candidate-fidelity queries $(x, m)$ by expected utility per unit cost $c(x, m)$. |
-| `sampler` | Proposal mechanism | Generates the tractable candidate set $\mathcal{P}$ or candidate-fidelity pairs $(x, m)$. |
-| `selector` | Budget-aware filter | Selects the executable subset $\mathcal{B} \subset \mathcal{P}$ subject to the round budget. |
-| `oracle` | Black-box evaluator | Evaluates the objective at the requested fidelity, realizing cost $c(x, m)$. |
-| `budget` | Constraint scheduler | Enforces total budget and per-round spending policy. |
-| `logger` | Experiment telemetry | Records runtime metrics, artifacts, and configurations; set to `null` to disable. |
+| `runtime` | Infrastructure state | Synchronizes device (`cuda`/`cpu`) and tensor dtypes across modules. |
+| `dataset` | State ($\mathcal{D}$) | Records observed candidate-fidelity queries and their outcomes. |
+| `surrogate` | Multi-fidelity probabilistic model of the oracle | Computes the predictive distribution over $(x, m)$ pairs. |
+| `acquisition` | Utility function | Quantifies the cost-aware expected utility of proposed queries. |
+| `sampler` | Proposal mechanism | Generates a tractable set of candidate-fidelity pairs for evaluation. |
+| `selector` | Budget-aware filter | Subsets proposed queries to satisfy per-iteration budget constraints. |
+| `oracle` | Black-box evaluator | Evaluates the objective $f(x)$ at fidelity $m$, realizing cost $c(x, m)$. |
+| `budget` | Constraint scheduler | Enforces strict per-iteration and total computational cost limits. |
+| `logger` | Experiment telemetry | Persists runtime metrics, model artifacts, and configurations. |
 
 </div>
 

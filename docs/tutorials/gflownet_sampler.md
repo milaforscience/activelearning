@@ -10,7 +10,7 @@ A GFlowNet (Generative Flow Network) is an amortised sampler that learns a stoch
 
 $$\pi_\theta(x) \propto R(x).$$
 
-Candidates are built step by step along a trajectory $\tau = (s_0 \to s_1 \to \ldots \to x)$, with transitions drawn from a forward policy $P_F(s_{t+1} \mid s_t; \theta)$. Because probability mass is spread over every mode of $R$, the sampler naturally discovers multiple high-reward regions instead of collapsing to one — a property that RL-based alternatives typically lack.
+Candidates are built step by step along a trajectory $\tau = (s_0 \to s_1 \to \ldots \to x)$, with transitions drawn from a forward policy $P_F(s_{t+1} \mid s_t; \theta)$. GFlowNets are trained to spread probability mass across all modes of $R$, which can help discover multiple high-reward regions — though exact mode coverage is only guaranteed at zero loss over all trajectories, which is rarely achieved in practice. This diversity-seeking behaviour nonetheless contrasts favourably with RL-based alternatives, which tend to collapse onto a single mode.
 
 !!! note "The partition function $Z$"
     The normalising constant $Z = \sum_{x \in \mathcal{X}} R(x)$ is called the *partition function*. It cannot be computed directly for large search spaces, so the GFlowNet learns a trainable estimate $Z_\theta$ alongside the policy via the **trajectory balance** objective ([Malkin et al., 2022](https://arxiv.org/abs/2201.13259)). Trajectory balance is satisfied exactly when $\pi_\theta(x) \propto R(x)$, so $\log Z_\theta$ converging toward $\log Z$ is a direct signal that training has succeeded — see [Training convergence](#training-convergence-log-z) below.
@@ -22,7 +22,7 @@ Candidates are built step by step along a trajectory $\tau = (s_0 \to s_1 \to \l
 
 In an active learning loop the reward is defined from the **acquisition function**: $R(x, m) = f(\alpha(x, m); \beta)$, where $f$ is a tempered non-negativity transform (exponential or power) controlled by a temperature $\beta$. This step — mapping raw acquisition scores, which may be negative or span many orders of magnitude, to a non-negative reward — is handled by the GFlowNet library's [proxy component](#reward-function) (see [Hernandez-Garcia et al., 2023](https://arxiv.org/abs/2306.11715), Appendix C.3).
 
-Each call to [`sample()`](../reference/activelearning/sampler/sampler/#activelearning.sampler.sampler.Sampler.sample) trains a fresh policy $\pi_\theta$ against the current $R$. As the surrogate sharpens round by round, the GFlowNet adapts automatically: earlier rounds explore broadly, later rounds concentrate near the emerging optima. In multi-fidelity mode the policy jointly samples objects and fidelities $(x, m)$, amortising expensive high-fidelity queries over cheap low-fidelity exploration.
+Each call to [`sample()`](../reference/activelearning/sampler/sampler/#activelearning.sampler.sampler.Sampler.sample) trains a fresh policy $\pi_\theta$ against the current $R$. The GFlowNet learns to sample proportionally to the acquisition function defined by the current surrogate — any shift in sampling behaviour across rounds (e.g., broader early exploration or tighter concentration around optima) is a property of how the acquisition function changes as the surrogate evolves, not of the GFlowNet itself. In multi-fidelity settings, the policy samples jointly over objects and fidelities $(x, m)$, amortising expensive high-fidelity queries over cheap low-fidelity exploration.
 
 !!! note "Reference"
     The multi-fidelity GFlowNet active learning algorithm is described in [Hernandez-Garcia et al., 2023](https://arxiv.org/abs/2306.11715), TMLR 2024.
@@ -39,9 +39,9 @@ The negated Branin function has three equivalent global minima (red ✕) separat
 
 ### Sampling the reward landscape
 
-![GFlowNet samples on the target density](../assets/gflownet_samples.png)
+![Target versus learned GFlowNet density](../assets/gflownet_samples.png)
 
-The heatmap is the theoretical target $p(x) \propto \exp(\beta \cdot \text{score}(x))$ — the distribution the GFlowNet is trained to match. This example uses a Grid environment, so the GFlowNet builds candidates by stepping along a discrete 2D grid; that is why the white dots appear on a regular lattice rather than at arbitrary positions. Each dot sits on a unique grid cell and its opacity is proportional to how often that cell was visited by the trained policy. A well-trained GFlowNet concentrates bright dots on all three peaks simultaneously; uniform dot brightness across the space indicates under-training or a $\beta$ that is too small; collapse onto a single peak indicates $\beta$ that is too large.
+The left panel is the theoretical target $p(x) \propto \exp(\beta \cdot \text{score}(x))$ — the distribution the GFlowNet is trained to match. The right panel is the exact terminal-state marginal induced by the learned forward policy on the same discrete grid, computed by summing probability mass over all forward trajectories that terminate at each grid cell. A well-trained GFlowNet lights up all three target regions in roughly the same pattern as the left panel; diffuse mass indicates under-training or a $\beta$ that is too small, while concentration on only one peak indicates mode collapse or a $\beta$ that is too large.
 
 ### Training convergence ($\log Z$)
 
@@ -49,15 +49,18 @@ The heatmap is the theoretical target $p(x) \propto \exp(\beta \cdot \text{score
 
 The blue curve is the running estimate $\log Z_\theta$; the red dashed line is the exact $\log Z^* = \log \sum_{x, m} R(x, m)$ obtained by enumerating the discrete grid. Convergence of $\log Z_\theta$ to $\log Z^*$ indicates that trajectory balance has reached its fixed point and the policy is sampling proportionally to $R$. A persistent gap usually means insufficient training steps or a poorly chosen `lr_z_mult` — see [Configuration reference](#configuration-reference).
 
-!!! note "Only possible because the grid is finite"
-    Computing $\log Z^*$ exactly requires enumerating every terminal state. For this small Branin grid that is feasible, but for realistic scientific discovery tasks — molecules, proteins, or crystal structures with combinatorially large state spaces — exhaustive enumeration is intractable. In those settings, $\log Z_\theta$ can still be monitored during training as a relative convergence signal, and quality is assessed via the Top-$K$ metrics below.
+!!! note "Interpreting $\log Z_\theta$ in practice"
+    Computing $\log Z^*$ exactly requires enumerating every terminal state — feasible here, but intractable for realistic scientific discovery tasks. In those settings $\log Z_\theta$ can still be monitored as a convergence signal: it should rise steadily as the GFlowNet discovers high-reward regions and then plateau as probability flows reach equilibrium.
+
+    A stable plateau is a **necessary** condition for correct proportional sampling. The Trajectory Balance objective requires $\log Z_\theta + \sum \log P_F \approx \log R(x) + \sum \log P_B$ across all trajectories; if $\log Z_\theta$ has not converged, this equality cannot hold globally and the policy cannot be sampling proportionally to $R$.
+
+    It is **not sufficient**, however. $\log Z_\theta$ is a single global scalar and can converge cleanly to the partition function of only a subset of modes (mode collapse), or errors in $P_F$ and $P_B$ can cancel along specific paths while the marginal distribution over objects remains wrong.     Always evaluate $\log Z_\theta$ alongside empirical metrics — Top-$K$ score and Top-$K$ diversity — to build confidence that the policy is sampling meaningfully from the target distribution.
 
 ### Per-fidelity calibration
 
 ![Per-fidelity split-violin calibration](../assets/gflownet_fidelity.png)
 
-One violin per fidelity level. The left half (solid fill) is the $R(x, m)$-weighted theoretical score distribution at that fidelity; the right half (hatched, dashed edge) is the empirical distribution of GFlowNet samples at that fidelity. A calibrated policy produces right halves that mirror the left halves at each fidelity. The target shape itself can differ across fidelities because lower-fidelity oracles are noisier approximations of the high-fidelity one — mismatch at a single fidelity therefore points to that wrapper layer as the bottleneck.
-
+To illustrate what the GFlowNet actually learns, this figure compares the learned sampling distribution against the theoretical target across fidelities (only possible here because we have access to the ground-truth oracle). Each violin corresponds to one fidelity level: the left half (solid fill) is the $R(x, m)$-weighted theoretical score distribution at that fidelity; the right half (hatched, dashed edge) is the empirical distribution of GFlowNet samples at that fidelity. When the two halves mirror each other, the policy has learned to sample proportionally to $R$ at that fidelity level. In a real AL run the theoretical distribution is unavailable, so only the empirical right-hand side would be observable.
 ### Quality in a real AL run
 
 When the reward is the acquisition function and the exact target is unknown, the quality proxies reported in the paper are:
@@ -88,7 +91,7 @@ uv run activelearning config/branin/gflownet_multi_fidelity.yaml
 Three fidelity levels with costs `0.01 / 0.1 / 1.0`. The GFlowNet jointly samples $(x, m)$ proportionally to the acquisition function, amortising high-fidelity oracle queries over cheap low-fidelity exploration.
 
 !!! tip "Quick sanity check and swapping oracles"
-    Use `budget.available_budget=30.0` to preview a short run before committing to a full experiment. To apply the same sampler to a different oracle, point `oracle.type` at your own class and adjust `output_bounds` — nothing else needs to change.
+    Use `budget.available_budget=30.0` to preview a short run before committing to a full experiment. To apply the same sampler to a different oracle, point `oracle.type` at your own class and update `cell_min`/`cell_max` in `conf.env` to match the new domain — nothing else needs to change.
 
 ## **Configuration reference**
 
@@ -100,13 +103,8 @@ The sections below document every significant knob in the multi-fidelity config 
 sampler:
   type: GFlowNetGridSampler   # grid-based GFlowNet for bounded continuous spaces
   n_samples: 100              # candidates returned per sample() call
-  n_fidelities: 3             # 1 = single-fidelity; >1 enables multi-fidelity wrapper
-  output_bounds:              # rescales grid coords to oracle domain after sampling
-    - [-5.0, 10.0]
-    - [0.0, 15.0]
+  fidelities: [1, 2, 3]      # list of fidelity levels; omit or set to null for single-fidelity
 ```
-
-`output_bounds` is required whenever the oracle domain differs from the GFlowNet Grid's native coordinate space, which defaults to $[-1, 1]^n$. The sampler applies a linear map after drawing samples, so every candidate returned by `sample()` is already in oracle coordinates — your acquisition function and oracle never see grid-internal indices.
 
 ### Grid environment
 
@@ -115,11 +113,15 @@ sampler:
     env:
       n_dim: 2       # dimensionality of the search space
       length: 100    # grid cells per dimension — finer = higher resolution
+      cell_min: -5.0 # lower bound of the coordinate range (all dimensions)
+      cell_max: 15.0 # upper bound of the coordinate range (all dimensions)
       max_increment: 1          # max step size per action (default)
       max_dim_per_action: 1     # dimensions incremented per action (default)
 ```
 
-The GFlowNet builds candidates step by step from the source state `[0, 0]`, so trajectory length scales with the grid-index distance between the source and each mode. Setting `max_increment > 1` lets the policy take larger jumps per action — for a 2D Branin grid, `max_increment: 5` cuts the longest possible path from ~200 to ~40 steps and roughly halves training time. Tune `max_increment` together with `length`: a finer grid with larger increments keeps resolution high while keeping trajectories short.
+`cell_min` and `cell_max` define the coordinate space the GFlowNet operates in and **must match the domain of your acquisition function and oracle**.  The Grid env uses a single range for all dimensions; for problems with asymmetric per-dimension bounds (like Branin: $x_1 \in [-5, 10]$, $x_2 \in [0, 15]$), choose a common range that covers the full domain — here `[-5, 15]` — accepting slight over-coverage on each side.
+
+The GFlowNet builds candidates step by step from the source state `[0, 0]`, so the trajectory length scales with the grid-index distance between the source and each mode. Because the Grid environment is a DAG (actions only increment coordinates, never decrement), in 2D with `max_dim_per_action: 1` there are only 3 actions when `max_increment: 1`: increment dim 0, increment dim 1, or EOS. Setting `max_increment > 1` lets the policy take larger jumps, reducing the minimum path length at the cost of a larger action space — for a 2D grid with `length: 100`, `max_increment: 5` reduces the minimum path to `[99, 99]` from ~198 to ~40 steps while expanding the action space to 11. There is an inherent trade-off: increasing `max_increment` shortens minimum trajectories but grows the action space, making the policy harder to train; increasing `length` improves resolution but lengthens minimum trajectories. These two parameters should therefore be tuned together.
 
 ### Optimizer and policy
 

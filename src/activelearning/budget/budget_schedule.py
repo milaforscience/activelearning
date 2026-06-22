@@ -1,7 +1,7 @@
-import torch
-from typing import Annotated, Callable, Literal, Union
+"""Pydantic model for the configuration of the budget schedules."""
 
-from pydantic import BaseModel, Field
+import torch
+from typing import Callable
 
 
 def constant_schedule(value: float) -> Callable[[int], float]:
@@ -59,7 +59,22 @@ def sigmoid_iteration_schedule(
         A callable that accepts a round index and returns the pre-computed
         budget allocation for that round. Returns ``0.0`` for out-of-range
         indices.
+
+    Raises
+    ------
+    ValueError
+        If any parameter is out of its valid range.
     """
+    if total_budget <= 0:
+        raise ValueError(f"total_budget must be positive, got {total_budget}.")
+    if num_iterations <= 0:
+        raise ValueError(f"num_iterations must be positive, got {num_iterations}.")
+    if not (0 < midpoint_fraction < 1):
+        raise ValueError(
+            f"midpoint_fraction must be in (0, 1), got {midpoint_fraction}."
+        )
+    if steepness <= 0:
+        raise ValueError(f"steepness must be positive, got {steepness}.")
 
     def _sigmoid(x: float) -> float:
         return torch.sigmoid(torch.tensor(steepness * (x - midpoint_fraction))).item()
@@ -84,24 +99,3 @@ def sigmoid_iteration_schedule(
         return allocations[current_round]
 
     return schedule
-
-
-class ConstantScheduleConfig(BaseModel):
-    type: Literal["constant"] = "constant"
-    value: float = Field(ge=0.0)
-
-
-class SigmoidIterationScheduleConfig(BaseModel):
-    type: Literal["sigmoid_iterations"] = "sigmoid_iterations"
-    num_iterations: int = Field(gt=0)
-    midpoint_fraction: float = Field(default=0.5, gt=0.0, lt=1.0)
-    steepness: float = Field(default=10.0, gt=0.0)
-
-
-ScheduleConfig = Annotated[
-    Union[
-        ConstantScheduleConfig,
-        SigmoidIterationScheduleConfig,
-    ],
-    Field(discriminator="type"),
-]

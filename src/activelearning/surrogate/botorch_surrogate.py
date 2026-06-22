@@ -278,6 +278,7 @@ class BoTorchGPSurrogate(Surrogate):
         -------
         result : Mapping[str, Any]
             Dictionary containing:
+
             - ``"mean"``: posterior means as a list for single-output models,
               or a nested list of shape ``(N, m)`` for multi-output models
             - ``"std"``: posterior standard deviations with the same shape
@@ -495,8 +496,9 @@ class BoTorchGPSurrogate(Surrogate):
         encoded_batches = [self.encode_candidates(batch) for batch in batch_list]
         return torch.stack(encoded_batches, dim=0)
 
+    @property
     def is_multi_fidelity(self) -> bool:
-        """Return whether the fitted surrogate is operating in multi-fidelity mode.
+        """Whether the fitted surrogate is operating in multi-fidelity mode.
 
         Returns
         -------

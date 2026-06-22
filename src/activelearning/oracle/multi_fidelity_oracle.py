@@ -14,6 +14,7 @@ class MultiFidelityOracle(Oracle):
     fidelity_configs : dict[int, dict[str, Any]]
         Dictionary mapping fidelity level (int) to configuration.
         Each config must contain:
+
         - 'cost_per_sample'
             float - Cost per sample at this fidelity
         - 'score_fn'
@@ -87,6 +88,18 @@ class MultiFidelityOracle(Oracle):
             )
             costs.append(self.fidelity_configs[fidelity]["cost_per_sample"])
         return costs
+
+    def get_min_query_cost(self) -> float:
+        """Return the minimum cost across all fidelity levels.
+
+        Returns
+        -------
+        min_cost : float
+            Cheapest ``cost_per_sample`` among all configured fidelities.
+        """
+        return min(
+            config["cost_per_sample"] for config in self.fidelity_configs.values()
+        )
 
     def query(self, candidates: Sequence[Candidate]) -> list[Observation]:
         """Query the oracle for observations of the given candidates.

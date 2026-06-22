@@ -1,8 +1,8 @@
 # **Multi-Fidelity Active Learning**
 
-A Python framework for **multi-fidelity active learning** over expensive black-box functions.
+A Python framework for **multi-fidelity active learning** over combinatorially large and structured design spaces, with expensive black-box functions.
 
-To evaluate candidates on a limited budget, this framework queries **oracles** (evaluation environments like simulations, model training, or lab experiments) across different **fidelity levels**. By blending fast, approximate estimates (low fidelity) with slow, highly precise measurements (high fidelity), it intelligently decides not just which candidate to try next, but at what fidelity.
+To evaluate candidates on a limited budget, this framework queries **oracles** (evaluation environments like simulations, pre-trained ML models, or lab experiments) across different **fidelity levels**. By blending fast, approximate estimates (low fidelity) with slow, highly precise measurements (high fidelity), it intelligently decides not just which candidate to try next, but at what fidelity.
 
 Designed with a modular architecture, it provides a flexible foundation that allows users to easily swap components and extend the framework for novel research or custom workflows.
 
@@ -26,7 +26,7 @@ Every core component in this loop is designed to be strictly modular. This means
 
 <div class="grid cards" markdown>
 
--   :material-download-circle:{ .lg .middle } **Install & Run**
+-   :material-download-circle:{ .lg .middle } [**Install & Run**](getting-started/installation.md)
 
     ---
 
@@ -35,7 +35,7 @@ Every core component in this loop is designed to be strictly modular. This means
     [:octicons-arrow-right-24: Installation](getting-started/installation.md)
     · [Quickstart](getting-started/quickstart.md)
 
--   :material-book-open-variant:{ .lg .middle } **Understand the Framework**
+-   :material-book-open-variant:{ .lg .middle } [**Understand the Framework**](concepts/overview.md)
 
     ---
 
@@ -45,7 +45,7 @@ Every core component in this loop is designed to be strictly modular. This means
     · [Active Learning Loop](concepts/active_learning_loop.md)
     · [Multi-Fidelity Setting](concepts/multi_fidelity.md)
 
--   :material-puzzle-edit:{ .lg .middle } **Extend to Your Use Case**
+-   :material-puzzle-edit:{ .lg .middle } [**Extend to Your Use Case**](extension-guide/overview.md)
 
     ---
 
@@ -54,7 +54,7 @@ Every core component in this loop is designed to be strictly modular. This means
     [:octicons-arrow-right-24: Extension Guide](extension-guide/overview.md)
     · [API Reference](reference/)
 
--   :material-flask-outline:{ .lg .middle } **Run Experiments**
+-   :material-flask-outline:{ .lg .middle } [**Run Experiments**](tutorials/synthetic_function_experiment.md)
 
     ---
 

@@ -1,3 +1,10 @@
+"""Pydantic models of surrogate models.
+
+Changes in the interface of existing surrogates should be reflected in this
+configuration. New surrogates should define their corresponding pydantic model here and
+be added to ``SurrogateConfig``.
+"""
+
 from typing import Annotated, Any, Callable, Literal, Union, cast
 
 from pydantic import BaseModel, Field, ImportString, field_validator, model_validator

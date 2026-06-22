@@ -23,17 +23,16 @@ cd activelearning
 ### **Local setup**
 
 This project uses [`uv`](https://docs.astral.sh/uv/) for dependency management.
-A single command installs `uv` (if missing), syncs all development dependencies,
-and registers the pre-commit hooks:
-
-```sh
-make setup
-```
-
 If `uv` is not on your `PATH` yet, install it first:
 
 ```sh
 make install-uv
+```
+
+Then sync all development dependencies and register the pre-commit hooks:
+
+```sh
+make setup
 ```
 
 ### **Verify the setup**
@@ -48,7 +47,28 @@ make check && make test && make docs-build
 
 ## **2. Coding Conventions**
 
-Consistent, readable code reduces maintenance burden and simplifies review.
+Consistent, readable code reduces the maintenance burden and simplifies review.
+
+### **Code style and linting**
+
+This project uses [Ruff](https://docs.astral.sh/ruff/) for both formatting and linting (replacing `black`, `flake8`, and `isort`).
+
+**Formatting** follows [Black](https://black.readthedocs.io/)-compatible style:
+
+- Maximum line length: **88 characters**
+- Double quotes for strings
+- Trailing commas in multi-line expressions
+
+**Linting** enforces the default Ruff rule sets:
+
+- [`E` / `W`](https://docs.astral.sh/ruff/rules/#pycodestyle-e-w) — [PEP 8](https://peps.python.org/pep-0008/) style errors and warnings (pycodestyle)
+- [`F`](https://docs.astral.sh/ruff/rules/#pyflakes-f) — undefined names, unused imports, and similar issues (Pyflakes)
+
+The hooks run on every commit, but you can trigger them manually at any time:
+
+```sh
+make check
+```
 
 ### **Type hints**
 
@@ -253,7 +273,7 @@ need a local build.
 ### **Terminology**
 
 Keep all user-facing text aligned with the [Methodology](concepts/overview.md)
-section (see also [Research-Facing Contributions](#9-research-facing-contributions) below).
+section (see also [Research-Facing Contributions](#8-research-facing-contributions) below).
 
 ---
 
@@ -294,7 +314,7 @@ A complete description addresses three questions:
 
 ---
 
-## **8. Reporting Issues and Requesting Features**
+## **Reporting Issues and Requesting Features**
 
 ### **Bug reports**
 
@@ -316,15 +336,13 @@ Describe:
 
 ---
 
-## **9. Research-Facing Contributions**
+## **8. Research-Facing Contributions**
 
 For methodology, benchmark, and paper-replication changes, keep terminology aligned with
 the [Methodology](concepts/overview.md) and paper-replication pages:
 
 - Describe explicit multi-fidelity actions as candidate-fidelity queries `(x, m)`.
 - Describe spend as **oracle cost** or **accumulated oracle cost**.
-- Use terms such as **study**, **run**, **runnable baseline**, and **scaffold** when they
-  match the current implementation status.
 - When referencing acquisition functions or surrogate models, use the names defined in
   the API reference rather than informal shorthand.
 

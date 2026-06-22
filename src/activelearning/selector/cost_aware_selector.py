@@ -4,6 +4,10 @@ from activelearning.acquisition.acquisition import Acquisition
 from activelearning.selector.selector import Selector
 from activelearning.utils.types import Candidate
 
+# Absolute tolerance for budget comparisons to avoid floating-point accumulation
+# drift when many small-cost candidates are summed
+_BUDGET_ATOL = 1e-9
+
 
 class CostAwareSelector(Selector):
     """Selector that maximizes acquisition value within budget using greedy knapsack.
@@ -87,7 +91,7 @@ class CostAwareSelector(Selector):
 
         for _, idx in ratios:
             candidate_cost = costs[idx]
-            if budget_used + candidate_cost <= round_budget:
+            if budget_used + candidate_cost <= round_budget + _BUDGET_ATOL:
                 selected.append(candidates[idx])
                 budget_used += candidate_cost
                 if budget_used >= round_budget:

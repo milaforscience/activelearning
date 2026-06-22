@@ -1,5 +1,6 @@
+import warnings
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Iterable, Optional
+from typing import Any, Callable, ClassVar, Iterable, Optional
 
 import torch
 
@@ -22,6 +23,9 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
     ``_build_botorch_acquisition()`` to construct the BoTorch acquisition
     and optionally ``_score_encoded()`` to customize how scores are computed.
     """
+
+    # Overridden to True by multi-fidelity subclasses.
+    _supports_multi_fidelity: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -95,11 +99,26 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         ------
         TypeError
             If the surrogate is not a ``BoTorchGPSurrogate``.
+
+        Warns
+        -----
+        UserWarning
+            If a multi-fidelity surrogate is paired with a non-multi-fidelity
+            acquisition function.
         """
         if not isinstance(surrogate, BoTorchGPSurrogate):
             raise TypeError(
                 f"{self.__class__.__name__} requires a BoTorchGPSurrogate, "
                 f"but received {type(surrogate).__name__}."
+            )
+        if surrogate.is_multi_fidelity and not self._supports_multi_fidelity:
+            warnings.warn(
+                f"{type(self).__name__} is not a multi-fidelity acquisition function "
+                "and will not account for fidelity costs or structure. "
+                "Acquisition scores may not reflect the true cost-adjusted value "
+                "of querying at lower fidelities.",
+                UserWarning,
+                stacklevel=2,
             )
         obs_list = list(observations) if observations is not None else None
         super().update(surrogate, obs_list)
@@ -175,13 +194,13 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
             If projection is requested in multi-fidelity mode but required
             fidelity metadata is unavailable.
         """
-        if self._project_to_target_fidelity_fn_override is not None:
-            return self._project_to_target_fidelity_fn_override
-
         if self._botorch_surrogate is None:
             return None
-        if not self._botorch_surrogate.is_multi_fidelity():
+        if not self._botorch_surrogate.is_multi_fidelity:
             return None
+
+        if self._project_to_target_fidelity_fn_override is not None:
+            return self._project_to_target_fidelity_fn_override
 
         fidelity_dim = self._botorch_surrogate.get_fidelity_dimension()
         target_value = self._resolved_target_fidelity_value

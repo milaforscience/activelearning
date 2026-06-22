@@ -49,25 +49,30 @@ class TestGFlowNetSamplerInstantiation:
         sampler = GFlowNetSampler(n_samples=7, conf=conf)
         assert sampler.n_samples == 7
 
-    def test_instantiation_stores_n_fidelities(self, gflownet_conf_2d):
+    def test_instantiation_stores_fidelities(self, gflownet_conf_2d):
         conf, _ = gflownet_conf_2d
-        sampler = GFlowNetSampler(n_samples=3, conf=conf, n_fidelities=2)
-        assert sampler.n_fidelities == 2
+        sampler = GFlowNetSampler(n_samples=3, conf=conf, fidelities=[1, 2])
+        assert sampler.fidelities == [1, 2]
 
-    def test_default_n_fidelities_is_one(self, gflownet_conf_2d):
+    def test_default_fidelities_is_none(self, gflownet_conf_2d):
         conf, _ = gflownet_conf_2d
         sampler = GFlowNetSampler(n_samples=3, conf=conf)
-        assert sampler.n_fidelities == 1
+        assert sampler.fidelities is None
+
+    def test_n_fidelities_derived_from_list(self, gflownet_conf_2d):
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=3, conf=conf, fidelities=[1, 2, 3])
+        assert sampler._n_fidelities == 3
+
+    def test_n_fidelities_is_one_when_fidelities_none(self, gflownet_conf_2d):
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=3, conf=conf)
+        assert sampler._n_fidelities == 1
 
     def test_default_fidelity_action_is_any(self, gflownet_conf_2d):
         conf, _ = gflownet_conf_2d
         sampler = GFlowNetSampler(n_samples=3, conf=conf)
         assert sampler.fidelity_action == "any"
-
-    def test_instantiation_stores_fixed_fidelity(self, gflownet_conf_2d):
-        conf, _ = gflownet_conf_2d
-        sampler = GFlowNetSampler(n_samples=3, conf=conf, fixed_fidelity=1)
-        assert sampler.fixed_fidelity == 1
 
     @pytest.mark.parametrize("action", ["any", "first", "last"])
     def test_fidelity_action_is_stored(self, gflownet_conf_2d, action):
@@ -75,15 +80,16 @@ class TestGFlowNetSamplerInstantiation:
         sampler = GFlowNetSampler(n_samples=3, conf=conf, fidelity_action=action)
         assert sampler.fidelity_action == action
 
-    def test_fixed_fidelity_requires_single_fidelity(self, gflownet_conf_2d):
-        conf, _ = gflownet_conf_2d
-        with pytest.raises(ValueError, match="fixed_fidelity"):
-            GFlowNetSampler(n_samples=3, conf=conf, n_fidelities=2, fixed_fidelity=1)
-
     @pytest.mark.parametrize("action", ["first", "last"])
     def test_warns_when_fidelity_action_set_with_single_fidelity(
         self, gflownet_conf_2d, action, caplog
     ):
+        """Warn when fidelity_action is explicitly set but fidelities is None.
+
+        In single-fidelity mode no multi-fidelity wrapper is used, so
+        fidelity_action has no effect.  An explicit "first" or "last" suggests
+        the user intended multi-fidelity, hence the warning.
+        """
         import logging
 
         conf, _ = gflownet_conf_2d
@@ -92,13 +98,18 @@ class TestGFlowNetSamplerInstantiation:
             logger="activelearning.sampler.gflownet.gflownet_sampler",
         ):
             GFlowNetSampler(
-                n_samples=3, conf=conf, n_fidelities=1, fidelity_action=action
+                n_samples=3, conf=conf, fidelities=None, fidelity_action=action
             )
         assert any("fidelity_action" in r.message for r in caplog.records)
 
     def test_no_warning_when_fidelity_action_any_with_single_fidelity(
         self, gflownet_conf_2d, caplog
     ):
+        """No warning when fidelity_action is the default "any" in single-fidelity.
+
+        "any" is the default value, so the user didn't explicitly request
+        multi-fidelity behaviour — there is nothing to warn about.
+        """
         import logging
 
         conf, _ = gflownet_conf_2d
@@ -107,7 +118,7 @@ class TestGFlowNetSamplerInstantiation:
             logger="activelearning.sampler.gflownet.gflownet_sampler",
         ):
             GFlowNetSampler(
-                n_samples=3, conf=conf, n_fidelities=1, fidelity_action="any"
+                n_samples=3, conf=conf, fidelities=None, fidelity_action="any"
             )
         assert not caplog.records
 
@@ -122,7 +133,7 @@ class TestGFlowNetSamplerInstantiation:
             logger="activelearning.sampler.gflownet.gflownet_sampler",
         ):
             GFlowNetSampler(
-                n_samples=3, conf=conf, n_fidelities=2, fidelity_action="first"
+                n_samples=3, conf=conf, fidelities=[1, 2], fidelity_action="first"
             )
         assert not caplog.records
 
@@ -149,7 +160,7 @@ class TestGFlowNetSamplerFidelityActionWrapperSelection:
     def test_correct_wrapper_class_is_instantiated(self, gflownet_conf_2d, action):
         conf, _ = gflownet_conf_2d
         sampler = GFlowNetSampler(
-            n_samples=2, conf=conf, n_fidelities=2, fidelity_action=action
+            n_samples=2, conf=conf, fidelities=[1, 2], fidelity_action=action
         )
         sampler.bind_runtime_context(RuntimeContext())
 
@@ -188,7 +199,7 @@ class TestGFlowNetSamplerFidelityActionWrapperSelection:
         sampler = GFlowNetSampler(
             n_samples=2,
             conf=conf,
-            n_fidelities=2,
+            fidelities=[1, 2],
             fidelity_action="bad",  # type: ignore[arg-type]
         )
         sampler.bind_runtime_context(RuntimeContext())
@@ -228,11 +239,13 @@ class TestStatesToCandidatesGuards:
     def test_empty_tensor_returns_empty(self, sampler):
         assert sampler._states_to_candidates(torch.empty(0, 2), Mock()) == []
 
-    def test_non_list_non_tensor_returns_empty(self, sampler):
-        assert sampler._states_to_candidates("not_a_state", Mock()) == []
+    def test_non_list_non_tensor_raises(self, sampler):
+        with pytest.raises(TypeError):
+            sampler._states_to_candidates("not_a_state", Mock())
 
-    def test_none_returns_empty(self, sampler):
-        assert sampler._states_to_candidates(None, Mock()) == []
+    def test_none_raises(self, sampler):
+        with pytest.raises(TypeError):
+            sampler._states_to_candidates(None, Mock())
 
 
 # ---------------------------------------------------------------------------
@@ -254,24 +267,19 @@ class TestGFlowNetSamplerSampleErrors:
 
 
 class TestGFlowNetSamplerSmokeTest:
-    def test_sample_returns_candidates(self, gflownet_conf_2d):
-        """sample() returns the requested number of Candidate objects."""
+    def test_sample_returns_candidates_with_2d_coordinates(self, gflownet_conf_2d):
+        """One smoke run validates count/type and 2-D candidate coordinates."""
         conf, _ = gflownet_conf_2d
         sampler = GFlowNetSampler(n_samples=4, conf=conf)
         candidates = sampler.sample(acquisition=_ConstantAcquisition())
         assert len(candidates) == 4
         assert all(isinstance(c, Candidate) for c in candidates)
-
-    def test_sample_returns_2d_coordinates(self, gflownet_conf_2d):
-        """Each candidate has 2 coordinates (matching the 2-D grid env)."""
-        conf, _ = gflownet_conf_2d
-        sampler = GFlowNetSampler(n_samples=3, conf=conf)
-        candidates = sampler.sample(acquisition=_ConstantAcquisition())
         assert all(len(c.x) == 2 for c in candidates)
 
-    def test_sample_applies_fixed_fidelity(self, gflownet_conf_2d):
+    def test_sample_with_single_fidelity_stamps_fidelity(self, gflownet_conf_2d):
+        """fidelities=[1] routes through the MF wrapper and stamps fidelity 1 on every candidate."""
         conf, _ = gflownet_conf_2d
-        sampler = GFlowNetSampler(n_samples=3, conf=conf, fixed_fidelity=1)
+        sampler = GFlowNetSampler(n_samples=3, conf=conf, fidelities=[1])
         candidates = sampler.sample(acquisition=_ConstantAcquisition())
         assert all(candidate.fidelity == 1 for candidate in candidates)
 
@@ -282,8 +290,8 @@ class TestGFlowNetSamplerSmokeTest:
 
 
 class TestGFlowNetSamplerRuntimeLogger:
-    def test_runtime_logger_receives_metrics(self, gflownet_conf_2d):
-        """Binding a runtime logger causes metrics to be forwarded during training."""
+    def test_runtime_logger_metrics_and_lifecycle_contract(self, gflownet_conf_2d):
+        """Sampler logs metrics but never advances or ends the runtime logger."""
         conf, _ = gflownet_conf_2d
         sampler = GFlowNetSampler(n_samples=3, conf=conf)
         runtime_logger = Mock()
@@ -292,17 +300,8 @@ class TestGFlowNetSamplerRuntimeLogger:
         sampler.sample(acquisition=_ConstantAcquisition())
 
         runtime_logger.log_metric.assert_called()
-        # log_step must NOT be called by the wrapper — it belongs to the AL loop.
+        # log_step/end belong to the AL loop, not the sampler.
         runtime_logger.log_step.assert_not_called()
-
-    def test_runtime_logger_end_not_called_by_sampler(self, gflownet_conf_2d):
-        """The sampler must not call logger.end(); that belongs to the AL loop."""
-        conf, _ = gflownet_conf_2d
-        sampler = GFlowNetSampler(n_samples=3, conf=conf)
-        runtime_logger = Mock()
-        sampler.bind_runtime_context(RuntimeContext(logger=runtime_logger))
-
-        sampler.sample(acquisition=_ConstantAcquisition())
 
         runtime_logger.end.assert_not_called()
 
@@ -321,12 +320,24 @@ class TestGFlowNetSamplerConfigRoundTrip:
         cfg = GFlowNetSamplerConfig(n_samples=3)
         assert cfg.fidelity_action == "any"
 
+    def test_default_fidelities_in_config_is_none(self):
+        from activelearning.sampler.config import GFlowNetSamplerConfig
+
+        cfg = GFlowNetSamplerConfig(n_samples=3)
+        assert cfg.fidelities is None
+
     @pytest.mark.parametrize("action", ["any", "first", "last"])
     def test_config_stores_fidelity_action(self, action):
         from activelearning.sampler.config import GFlowNetSamplerConfig
 
         cfg = GFlowNetSamplerConfig(n_samples=3, fidelity_action=action)
         assert cfg.fidelity_action == action
+
+    def test_config_stores_fidelities_list(self):
+        from activelearning.sampler.config import GFlowNetSamplerConfig
+
+        cfg = GFlowNetSamplerConfig(n_samples=3, fidelities=[1, 2, 3])
+        assert cfg.fidelities == [1, 2, 3]
 
     @pytest.mark.parametrize("action", ["any", "first", "last"])
     def test_config_build_passes_fidelity_action_to_sampler(
@@ -343,13 +354,81 @@ class TestGFlowNetSamplerConfigRoundTrip:
         sampler = cfg.build()
         assert sampler.fidelity_action == action
 
-    def test_config_build_passes_fixed_fidelity_to_sampler(self, gflownet_conf_2d):
+    def test_config_build_passes_fidelities_to_sampler(self, gflownet_conf_2d):
         from activelearning.sampler.config import GFlowNetSamplerConfig
-
-        conf_dict, _ = gflownet_conf_2d
         from omegaconf import OmegaConf
 
+        conf_dict, _ = gflownet_conf_2d
         conf_raw = OmegaConf.to_container(conf_dict, resolve=True)
-        cfg = GFlowNetSamplerConfig(n_samples=3, fixed_fidelity=1, conf=conf_raw)
+        cfg = GFlowNetSamplerConfig(n_samples=3, fidelities=[1, 2, 3], conf=conf_raw)
         sampler = cfg.build()
-        assert sampler.fixed_fidelity == 1
+        assert sampler.fidelities == [1, 2, 3]
+
+
+# ---------------------------------------------------------------------------
+# Fidelity mapping: multi-fidelity sampler stamps correct fidelity values
+# ---------------------------------------------------------------------------
+
+
+class TestGFlowNetSamplerFidelityMapping:
+    """Verify that fidelities list is correctly mapped onto candidate.fidelity."""
+
+    def test_standard_fidelities_stamped_on_candidates(self, gflownet_conf_2d):
+        """fidelities=[1,2,3] produces candidates with fidelity in {1,2,3}."""
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(
+            n_samples=10, conf=conf, fidelities=[1, 2, 3], fidelity_action="any"
+        )
+        candidates = sampler.sample(acquisition=_ConstantAcquisition())
+        assert len(candidates) == 10
+        for c in candidates:
+            assert c.fidelity in {1, 2, 3}, (
+                f"Expected fidelity in {{1,2,3}}, got {c.fidelity}"
+            )
+
+    def test_non_standard_fidelities_not_zero_based(self, gflownet_conf_2d):
+        """fidelities=[5,10,15] must produce fidelity in {5,10,15}, not {0,1,2}."""
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(
+            n_samples=10, conf=conf, fidelities=[5, 10, 15], fidelity_action="any"
+        )
+        candidates = sampler.sample(acquisition=_ConstantAcquisition())
+        for c in candidates:
+            assert c.fidelity in {5, 10, 15}, (
+                f"Expected fidelity in {{5,10,15}}, got {c.fidelity} — "
+                "raw 0-based index was not mapped to fidelity list values"
+            )
+
+    def test_two_fidelity_levels_stamped_correctly(self, gflownet_conf_2d):
+        """fidelities=[3, 7] produces fidelity in {3, 7}."""
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(
+            n_samples=10, conf=conf, fidelities=[3, 7], fidelity_action="first"
+        )
+        candidates = sampler.sample(acquisition=_ConstantAcquisition())
+        for c in candidates:
+            assert c.fidelity in {3, 7}, (
+                f"Expected fidelity in {{3, 7}}, got {c.fidelity}"
+            )
+
+    def test_single_fidelity_candidates_have_no_fidelity(self, gflownet_conf_2d):
+        """fidelities=None (single-fidelity) produces candidates with fidelity=None."""
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=5, conf=conf, fidelities=None)
+        candidates = sampler.sample(acquisition=_ConstantAcquisition())
+        for c in candidates:
+            assert c.fidelity is None, (
+                f"Expected fidelity=None for single-fidelity sampler, got {c.fidelity}"
+            )
+
+    def test_fidelity_values_are_integers(self, gflownet_conf_2d):
+        """Stamped fidelity values must be plain Python ints."""
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(
+            n_samples=6, conf=conf, fidelities=[2, 4, 8], fidelity_action="last"
+        )
+        candidates = sampler.sample(acquisition=_ConstantAcquisition())
+        for c in candidates:
+            assert isinstance(c.fidelity, int), (
+                f"Fidelity must be int, got {type(c.fidelity)}"
+            )
