@@ -185,7 +185,7 @@ The example below was generated from a short fidelity-1 EA run over the bundled 
 
 ## **4. Run the single-fidelity SELFIES GFlowNet sampler**
 
-The single-fidelity GFlowNet molecule configs replace the finite pool sampler with a SELFIES sequence environment and use `fidelities: [1]` to stamp every sampled molecule with fidelity level 1:
+The single-fidelity GFlowNet molecule configs replace the finite pool sampler with a SELFIES sequence environment. Setting `fidelities: [1]` restricts the GFlowNet to proposing only fidelity-1 candidates — the policy learns to generate promising SELFIES strings, but fidelity selection is removed from the action space entirely:
 
 ```yaml
 sampler:
