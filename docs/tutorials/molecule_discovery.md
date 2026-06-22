@@ -38,7 +38,7 @@ The repository includes five example molecule configs arranged as an incremental
 | `config/molecules/gflownet_variational_multi_fidelity.yaml` | SELFIES GFlowNet | Variational SELFIES DKL | MF-MES with cost utility | learned fidelity `1 / 2 / 3` | Stage 5: keep the MF GFlowNet and swap in the scalable variational surrogate |
 
 !!! note "Small defaults for fast checks"
-    These examples are tuned to be runnable tutorial setups, not fully optimized molecule-discovery runs. The short command overrides below keep the active-learning budget small enough for a quick functional check, and the checked-in GFlowNet examples also use relatively short training schedules in the exact-surrogate stages so you can verify the full loop quickly. For better learning, increase both the oracle budget so the surrogate sees more observations and the GFlowNet optimization steps so the policy can better approximate reward-proportional sampling.
+    These examples are tuned to be runnable tutorial setups, not fully optimized molecule-discovery runs. The short command overrides below keep the active-learning budget small enough for a quick functional check, and the provided GFlowNet examples also use relatively short training schedules in the exact-surrogate stages so you can verify the full loop quickly. For better learning, increase both the oracle budget so the surrogate sees more observations and the GFlowNet optimization steps so the policy can better approximate reward-proportional sampling.
 
 ## **What are SELFIES?**
 
@@ -92,7 +92,7 @@ The pool-based configs read one SELFIES string per line from:
 config/data/molecules.txt
 ```
 
-You can replace that file with your own pool later. For now, keep the checked-in pool so the config paths work unchanged.
+You can replace that file with your own pool later. For now, keep the provided pool so the config paths work unchanged.
 
 ## **2. Run the pool-based DKL examples**
 
@@ -287,7 +287,7 @@ The main molecule-specific fields are:
 | `oracle.molecule_visualization_limit` | Maximum number of molecules shown per logged grid. |
 
 !!! warning "Sequence length and oracle cost"
-    Increasing `sampler.conf.env.max_length` or `surrogate.encoder.max_length` expands the molecular search space quickly. Start with the checked-in values, verify that xTB runs successfully, and only then increase sequence length or per-round budget.
+    Increasing `sampler.conf.env.max_length` or `surrogate.encoder.max_length` expands the molecular search space quickly. Start with the provided default values, verify that xTB runs successfully, and only then increase sequence length or per-round budget.
 
 ## **What comes next**
 
