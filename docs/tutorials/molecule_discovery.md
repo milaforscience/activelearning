@@ -63,13 +63,13 @@ The built-in [`XTBIPEAOracle`](../reference/activelearning/applications/molecule
 | `ea` | [Electron affinity](https://en.wikipedia.org/wiki/Electron_affinity) | Energy change when the molecule accepts an electron. |
 | `ip` | [Ionisation potential](https://en.wikipedia.org/wiki/Ionization_energy) | Energy required to remove an electron. |
 
-The three xTB fidelities trade cost for accuracy:
+The three xTB fidelities trade cost for accuracy. Each higher fidelity runs more expensive geometry optimization steps before computing the property, producing a more physically accurate result at the cost of more CPU time.
 
 | Fidelity | What happens | Cost in the provided configs |
 |----------|--------------|------------------------------|
-| `1` | RDKit/MMFF geometry, then vertical IP/EA with xTB. | `1.0` |
-| `2` | xTB-optimise the neutral geometry, then compute vertical IP/EA. | `3.5` |
-| `3` | Optimise neutral and ionic geometries, then compute adiabatic IP/EA. | `7.0` |
+| `1` | Generate a rough 3-D shape with RDKit/MMFF (a fast empirical force field), then evaluate IP/EA directly on that unoptimised geometry. Cheapest, least accurate. | `1.0` |
+| `2` | Take the fidelity-1 starting geometry and relax it with xTB until it reaches a local energy minimum (neutral geometry optimisation), then evaluate IP/EA. More accurate because the geometry is physically relaxed, but costs one extra xTB run. | `3.5` |
+| `3` | Optimise both the neutral and the charged (ionic) geometries with xTB, then compute the *adiabatic* IP/EA as the energy difference between the two relaxed states. Most accurate, but requires two xTB geometry optimisations instead of one. | `7.0` |
 
 !!! warning "External dependency"
     The Python `molecules` extra installs SELFIES and RDKit, but the `xtb` executable must be installed separately and available on your `PATH`. Check this before running a molecule experiment:
