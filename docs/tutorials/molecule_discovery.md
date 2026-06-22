@@ -124,7 +124,7 @@ The exact numbers depend on which candidate was selected and whether xTB succeed
 
     Both failure types are handled automatically: `NaN` labels are filtered out before the surrogate is fitted, so a few failed queries do not break the active-learning loop.
 
-Once the plumbing is working, run the full single-fidelity exact-DKL config:
+Once you've confirmed the first round completes successfully, run the full single-fidelity exact-DKL config:
 
 ```sh
 uv run activelearning config/molecules/exact.yaml
