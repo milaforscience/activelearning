@@ -37,9 +37,6 @@ The repository includes five example molecule configs arranged as an incremental
 | `config/molecules/gflownet_exact_multi_fidelity.yaml` | SELFIES GFlowNet | Exact SELFIES DKL | MF-MES with cost utility | learned fidelity `1 / 2 / 3` | Stage 4: let the GFlowNet learn molecule-fidelity pairs |
 | `config/molecules/gflownet_variational_multi_fidelity.yaml` | SELFIES GFlowNet | Variational SELFIES DKL | MF-MES with cost utility | learned fidelity `1 / 2 / 3` | Stage 5: keep the MF GFlowNet and swap in the scalable variational surrogate |
 
-!!! tip
-    The easiest way to understand the molecule examples is to work through them in order: start with `exact.yaml`, then add multi-fidelity structure with `exact_multi_fidelity.yaml`, then switch samplers with `gflownet_exact.yaml`, and only introduce the variational surrogate in the last step with `gflownet_variational_multi_fidelity.yaml`.
-
 !!! note "Small defaults for fast checks"
     These examples are tuned to be runnable tutorial setups, not fully optimized molecule-discovery runs. The short command overrides below keep the active-learning budget small enough for a quick functional check, and the checked-in GFlowNet examples also use relatively short training schedules in the exact-surrogate stages so you can verify the full loop quickly. For better learning, increase both the oracle budget so the surrogate sees more observations and the GFlowNet optimization steps so the policy can better approximate reward-proportional sampling.
 
