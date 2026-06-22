@@ -45,7 +45,7 @@ The repository includes five example molecule configs arranged as an incremental
 
 ## **What are SELFIES?**
 
-[SELFIES](https://arxiv.org/abs/1905.13741) (**Self-Referencing Embedded Strings**) are a string representation for molecules. Like SMILES, they encode molecular graphs as text. Unlike SMILES, SELFIES are designed so that generated token sequences decode into chemically valid molecular graphs under the SELFIES grammar.
+[SELFIES](https://arxiv.org/abs/1905.13741) (**Self-Referencing Embedded Strings**) are a string representation for molecules. Like SMILES, they encode molecular graphs as text. Unlike SMILES, SELFIES provide a hard validity guarantee: *every* sequence of tokens that is valid under the SELFIES grammar decodes to a chemically valid molecular graph.
 
 That property is useful for active learning: a sampler can operate over discrete tokens without constantly producing invalid molecules. In this framework:
 
