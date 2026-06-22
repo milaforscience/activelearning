@@ -220,7 +220,7 @@ uv run activelearning config/molecules/gflownet_exact.yaml
 ```
 
 !!! note "Why keep the single-fidelity GFlowNet config?"
-    It is the cheapest molecule GFlowNet example in the repository and is convenient for checking that the SELFIES environment, xTB oracle, and GFlowNet training loop all run end-to-end before spending budget on multi-fidelity experiments.
+    It is the cheapest molecule GFlowNet example in the repository and is convenient for verifying that the SELFIES environment and GFlowNet training loop run end-to-end before spending budget on multi-fidelity experiments.
 
 ## **5. Run the multi-fidelity SELFIES GFlowNet sampler**
 
@@ -278,7 +278,7 @@ The main molecule-specific fields are:
 | `surrogate.target_fidelity` | Fidelity level used when MF acquisitions project candidates to the target objective. |
 | `sampler.candidate_pool_file` | SELFIES pool used by `PoolFileSampler`. |
 | `sampler.conf.env._target_` | GFlowNet environment class for generated SELFIES. |
-| `sampler.fidelities` | Fidelity levels exposed to the GFlowNet policy. `[1]` stamps fidelity 1 on every candidate (single-fidelity); `[1, 2, 3]` enables joint molecule-fidelity sampling (multi-fidelity). |
+| `sampler.fidelities` | Fidelity levels available to the GFlowNet policy. `[1]` restricts the policy to fidelity 1 only (single-fidelity); `[1, 2, 3]` enables joint molecule-fidelity sampling (multi-fidelity). |
 | `sampler.fidelity_action` | Where the fidelity choice appears in the trajectory; `"any"` lets the policy interleave fidelity selection with token actions. |
 | `acquisition.type` | `UpperConfidenceBound` in stages 1 and 3, or `QMultiFidelityLowerBoundMaxValueEntropy` in stages 2, 4, and 5. |
 | `acquisition.cost_aware_utility` | Cost model baked into the BoTorch multi-fidelity acquisition during `acquisition.update(...)`. In the GFlowNet multi-fidelity configs this makes the sampler reward proxy cost-aware before top-k selection. |
