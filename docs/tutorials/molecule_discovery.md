@@ -136,12 +136,7 @@ Then move to the multi-fidelity pool version, which keeps the exact SELFIES DKL 
 uv run activelearning config/molecules/exact_multi_fidelity.yaml
 ```
 
-This second stage is the first place where the active-learning loop has to decide how much accuracy is worth paying for. The acquisition scores candidates with respect to the target high-fidelity objective, while the selector divides by query cost so cheap fidelities are favored when they carry similar information. In this pool-based setup, that cost penalty is applied only in the selector; the GFlowNet multi-fidelity configs instead keep the cost model inside the acquisition because the reward itself must become cost-aware.
-
-For the GFlowNet stages, the acquisition-side cost model is baked into the
-BoTorch acquisition object during `acquisition.update(...)`. The sampler's
-reward proxy and any later consumer of `acquisition.score(...)` therefore see
-the same weighted acquisition values.
+This second stage is the first place where the active-learning loop has to decide how much accuracy is worth paying for. The acquisition function scores candidates with respect to the target high-fidelity objective, while the [`CostAwareSelector`](../reference/activelearning/selector/cost_aware_selector/#activelearning.selector.cost_aware_selector.CostAwareSelector) divides each score by its query cost so that cheap fidelities are favoured when they carry similar information. In this pool-based setup, the cost penalty is handled entirely by the selector — the acquisition itself has no cost model.
 
 ## **3. Log molecule visualizations**
 
