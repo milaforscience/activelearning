@@ -242,7 +242,7 @@ sampler:
 
 In this setup, the GFlowNet is not limited to a fixed oracle level. It learns a policy over molecule-fidelity pairs, and the MF-MES acquisition rewards candidates that are informative about the target high-fidelity objective while the cost-aware utility discounts unnecessarily expensive queries. That is one of the main reasons GFlowNets are attractive in the multi-fidelity setting: the same policy can discover promising molecule structures and learn when a cheap xTB evaluation is enough versus when it is worth paying for a higher-fidelity query.
 
-The smaller exact-GP multi-fidelity example is:
+There are two multi-fidelity GFlowNet configs. The first uses an exact GP surrogate, which is simpler and faster for smaller datasets:
 
 ```sh
 uv run activelearning config/molecules/gflownet_exact_multi_fidelity.yaml
@@ -258,7 +258,7 @@ uv run activelearning config/molecules/gflownet_exact_multi_fidelity.yaml \
   budget.schedule.value=28.0
 ```
 
-The last step keeps the same multi-fidelity GFlowNet structure but swaps the exact GP for a variational surrogate:
+The second config keeps the same multi-fidelity GFlowNet structure but replaces the exact GP with a variational surrogate:
 
 ```sh
 uv run activelearning config/molecules/gflownet_variational_multi_fidelity.yaml
