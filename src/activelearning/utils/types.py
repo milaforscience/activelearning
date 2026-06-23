@@ -56,6 +56,60 @@ class Observation:
     metadata: Optional[dict[str, Any]] = None
 
 
+def has_finite_target(observation: Observation) -> bool:
+    """Return True if the observation has a usable label for model training.
+
+    Returns False when:
+
+    - ``y`` is ``None`` (explicit absence of a label, e.g. a failed oracle evaluation)
+    - ``y`` is a numeric scalar, list, or array that contains NaN or infinite values
+
+    Non-numeric targets (strings, dicts, etc.) cannot be checked for finiteness
+    and are treated as valid (``True``).
+
+    Parameters
+    ----------
+    observation : Observation
+        The observation to check.
+
+    Returns
+    -------
+    bool
+        ``True`` if the target is usable, ``False`` if it should be excluded
+        from model training.
+    """
+    value = observation.y
+    if value is None:
+        return False
+    try:
+        tensor = torch.as_tensor(value, dtype=torch.float64)
+        return bool(torch.isfinite(tensor).all())
+    except (TypeError, ValueError, RuntimeError):
+        return True
+
+
+def filter_finite_target_observations(
+    observations: Iterable[Observation],
+) -> list[Observation]:
+    """Return only observations with finite numeric or non-numeric targets.
+
+    Drops observations where ``y`` is ``None`` or a numeric value containing NaN
+    or infinite entries. Non-numeric targets (strings, dicts, etc.) pass through
+    unchanged.
+
+    Parameters
+    ----------
+    observations : Iterable[Observation]
+        Iterable of observations to filter.
+
+    Returns
+    -------
+    list[Observation]
+        Filtered list containing only valid observations.
+    """
+    return [obs for obs in observations if has_finite_target(obs)]
+
+
 def label_candidates(
     candidates: Iterable[Candidate], labels: Iterable[Any]
 ) -> list[Observation]:

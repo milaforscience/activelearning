@@ -374,3 +374,148 @@ def test_active_learning_binds_runtime_context_to_modules_for_logging(capsys):
     assert "dataset_records=" in out
     assert "budget_round_limit=" in out
     assert "[Logger] Run 'runtime_test_run' finished." in out
+
+
+# ---------------------------------------------------------------------------
+# Oracle invalid-output filtering at the AL boundary
+# ---------------------------------------------------------------------------
+
+
+def _make_nan_oracle() -> MultiFidelityOracle:
+    """Return a single-fidelity oracle whose score function always returns NaN."""
+    return MultiFidelityOracle(
+        fidelity_configs={
+            0: {
+                "cost_per_sample": 1.0,
+                "score_fn": lambda _x: float("nan"),
+                "fidelity_confidence": 1.0,
+            }
+        }
+    )
+
+
+def _make_mixed_oracle() -> MultiFidelityOracle:
+    """Return a single-fidelity oracle that returns NaN for odd candidates."""
+    return MultiFidelityOracle(
+        fidelity_configs={
+            0: {
+                "cost_per_sample": 1.0,
+                "score_fn": lambda x: float("nan") if int(x) % 2 == 1 else float(x),
+                "fidelity_confidence": 1.0,
+            }
+        }
+    )
+
+
+def _make_pool_sampler_single_fidelity(
+    n_candidates: int, n_samples: int
+) -> PoolScoreSampler:
+    pool = [Candidate(i, fidelity=0) for i in range(n_candidates)]
+    return PoolScoreSampler(candidate_pool=pool, num_samples=n_samples)
+
+
+def test_al_loop_drops_nan_oracle_observations():
+    """Oracle observations with NaN targets are not added to the dataset."""
+    nan_oracle = _make_nan_oracle()
+    dataset = ListDataset()
+    surrogate = DummyMeanSurrogate()
+    acquisition = DummyAcquisition()
+    sampler = _make_pool_sampler_single_fidelity(50, 20)
+    selector = TopKAcquisitionSelector(num_samples=5)
+    budget = Budget(available_budget=20.0, schedule=lambda _: 20.0)
+
+    dataset_out, _cost, _num_iter = active_learning(
+        dataset=dataset,
+        surrogate=surrogate,
+        acquisition=acquisition,
+        sampler=sampler,
+        selector=selector,
+        oracle=nan_oracle,
+        budget=budget,
+    )
+
+    # All oracle outputs were NaN → dataset must remain empty
+    assert dataset_out.get_observations_iterable() == []
+
+
+def test_al_loop_keeps_valid_from_mixed_oracle():
+    """Only the valid observations from a mixed oracle batch enter the dataset."""
+    mixed_oracle = _make_mixed_oracle()
+    dataset = ListDataset()
+    surrogate = DummyMeanSurrogate()
+    acquisition = DummyAcquisition()
+    # Use a pool of even-indexed candidates only → all scores will be finite
+    pool = [Candidate(i * 2, fidelity=0) for i in range(50)]
+    sampler = PoolScoreSampler(candidate_pool=pool, num_samples=20)
+    selector = TopKAcquisitionSelector(num_samples=5)
+    budget = Budget(available_budget=10.0, schedule=lambda _: 10.0)
+
+    dataset_out, _cost, _num_iter = active_learning(
+        dataset=dataset,
+        surrogate=surrogate,
+        acquisition=acquisition,
+        sampler=sampler,
+        selector=selector,
+        oracle=mixed_oracle,
+        budget=budget,
+    )
+
+    observations = list(dataset_out.get_observations_iterable())
+    # All stored observations must have finite y values
+    assert all(o.y is not None for o in observations)
+    import math
+
+    assert all(math.isfinite(float(o.y)) for o in observations)
+
+
+def test_al_loop_all_invalid_oracle_does_not_crash():
+    """A round where all oracle outputs are invalid does not crash the loop."""
+    nan_oracle = _make_nan_oracle()
+    dataset = ListDataset()
+    surrogate = DummyMeanSurrogate()
+    acquisition = DummyAcquisition()
+    sampler = _make_pool_sampler_single_fidelity(20, 10)
+    selector = TopKAcquisitionSelector(num_samples=3)
+    # Budget for exactly one round
+    budget = Budget(available_budget=3.0, schedule=lambda _: 3.0)
+
+    dataset_out, cost, num_iter = active_learning(
+        dataset=dataset,
+        surrogate=surrogate,
+        acquisition=acquisition,
+        sampler=sampler,
+        selector=selector,
+        oracle=nan_oracle,
+        budget=budget,
+    )
+
+    # One round ran, budget was consumed, but dataset has nothing valid
+    assert num_iter == 1
+    assert cost > 0.0
+    assert dataset_out.get_observations_iterable() == []
+
+
+def test_al_loop_warns_when_invalid_observations_dropped(caplog):
+    """The AL loop emits a warning when oracle observations are dropped."""
+    import logging
+
+    nan_oracle = _make_nan_oracle()
+    dataset = ListDataset()
+    surrogate = DummyMeanSurrogate()
+    acquisition = DummyAcquisition()
+    sampler = _make_pool_sampler_single_fidelity(20, 10)
+    selector = TopKAcquisitionSelector(num_samples=3)
+    budget = Budget(available_budget=3.0, schedule=lambda _: 3.0)
+
+    with caplog.at_level(logging.WARNING, logger="activelearning.active_learning"):
+        active_learning(
+            dataset=dataset,
+            surrogate=surrogate,
+            acquisition=acquisition,
+            sampler=sampler,
+            selector=selector,
+            oracle=nan_oracle,
+            budget=budget,
+        )
+
+    assert any("Dropped" in record.message for record in caplog.records)
