@@ -175,7 +175,18 @@ def _extract_raw_molecule(candidate: Candidate, observation: Observation) -> str
 
 
 def _decode_selfies(molecule: str) -> tuple[str | None, str | None]:
-    """Decode a SELFIES string to SMILES, returning an invalid reason on failure."""
+    """Decode a SELFIES string to SMILES, returning an invalid reason on failure.
+
+    Known failure modes:
+
+    - ``sf.DecoderError``: raised by the selfies library when the input string
+      violates the SELFIES grammar — e.g. malformed bracket tokens (unclosed
+      brackets) or atoms with impossible valence counts (e.g. ``[CH5]``,
+      ``[OH9]``).
+    - Empty SMILES: ``sf.decoder`` returns an empty string for semantically
+      valid but chemically empty SELFIES (e.g. ``""``) without raising an
+      exception; treated as an invalid molecule.
+    """
     try:
         smiles = sf.decoder(molecule)
     except sf.DecoderError as exc:
