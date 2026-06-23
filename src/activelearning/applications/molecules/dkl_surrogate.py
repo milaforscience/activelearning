@@ -121,11 +121,11 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         self._encoder = self._encoder.to(device=self.device, dtype=self.dtype)
         if self.model is not None:
             self.model = self.model.to(device=self.device, dtype=self.dtype)
-        if getattr(self, "_gp_model", None) is not None:
+        if hasattr(self, "_gp_model") and self._gp_model is not None:
             self._gp_model = self._gp_model.to(device=self.device, dtype=self.dtype)
-        if getattr(self, "_likelihood", None) is not None:
+        if hasattr(self, "_likelihood") and self._likelihood is not None:
             self._likelihood = self._likelihood.to(device=self.device, dtype=self.dtype)
-        if getattr(self, "_botorch_adapter", None) is not None:
+        if hasattr(self, "_botorch_adapter") and self._botorch_adapter is not None:
             self._botorch_adapter = self._botorch_adapter.to(
                 device=self.device, dtype=self.dtype
             )
@@ -306,14 +306,14 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         if self.model is not None:
             self.model.train()
         self._encoder.train()
-        if getattr(self, "_likelihood", None) is not None:
+        if hasattr(self, "_likelihood") and self._likelihood is not None:
             self._likelihood.train()
 
     def _set_eval_mode(self) -> None:
         if self.model is not None:
             self.model.eval()
         self._encoder.eval()
-        if getattr(self, "_likelihood", None) is not None:
+        if hasattr(self, "_likelihood") and self._likelihood is not None:
             self._likelihood.eval()
 
 
