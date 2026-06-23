@@ -1,6 +1,7 @@
 """Tests for SelfiesTokenizer."""
 
 import pytest
+import selfies as sf
 import torch
 
 from activelearning.applications.molecules.selfies_tokenizer import (
@@ -10,6 +11,7 @@ from activelearning.applications.molecules.selfies_tokenizer import (
 
 BENZENE = "[C][=C][C][=C][C][=C][Ring1][=Branch1]"
 ALANINE = "[C][C][Branch1][C][N][C][=Branch1][C][=O][O]"
+ETHANOL = "[C][C][O]"
 LONG_SELFIES = "[C]" * 80
 
 
@@ -44,11 +46,37 @@ class TestSelfiesTokenizer:
         assert ids.shape == (32,)
         assert ids.dtype == torch.long
 
-    def test_encode_selfies_padding(self, tokenizer: SelfiesTokenizer):
-        ids = tokenizer.encode_selfies(BENZENE, max_length=64)
-        # Benzene is short; remaining positions should be padding
-        pad_count = (ids == tokenizer.padding_idx).sum().item()
-        assert pad_count > 0
+    @pytest.mark.parametrize("selfies_string", [BENZENE, ALANINE, ETHANOL])
+    def test_encode_selfies_padding(
+        self, tokenizer: SelfiesTokenizer, selfies_string: str
+    ) -> None:
+        """encode_selfies pads to exact length and encodes the right real-token count."""
+        max_length = 32
+        real_count = sf.len_selfies(selfies_string)
+        ids = tokenizer.encode_selfies(selfies_string, max_length=max_length)
+
+        assert (ids != tokenizer.padding_idx).sum().item() == real_count
+        assert (ids == tokenizer.padding_idx).sum().item() == max_length - real_count
+
+    @pytest.mark.parametrize(
+        ("selfies_string", "expected_distinct_count"),
+        [
+            (BENZENE, 4),
+            (ALANINE, 6),
+            (ETHANOL, 2),
+        ],
+    )
+    def test_encode_selfies_distinct_token_count(
+        self,
+        tokenizer: SelfiesTokenizer,
+        selfies_string: str,
+        expected_distinct_count: int,
+    ) -> None:
+        """Encoded SELFIES retain the expected number of distinct token IDs."""
+        ids = tokenizer.encode_selfies(selfies_string, max_length=32)
+        non_padding_ids = ids[ids != tokenizer.padding_idx].tolist()
+
+        assert len(set(non_padding_ids)) == expected_distinct_count
 
     def test_encode_selfies_truncates_long_sequence(
         self, tokenizer: SelfiesTokenizer
@@ -69,12 +97,22 @@ class TestSelfiesTokenizer:
         out = tokenizer.transform_batch(raw)
         assert int(out[0, 0]) == tokenizer.cls_idx
 
-    def test_transform_batch_eos_inserted(self, tokenizer: SelfiesTokenizer):
-        raw = torch.stack([tokenizer.encode_selfies(BENZENE, 32)])
+    @pytest.mark.parametrize(
+        "selfies_list",
+        [
+            [BENZENE],
+            [BENZENE, ALANINE, ETHANOL],
+        ],
+    )
+    def test_transform_batch_eos_inserted(
+        self, tokenizer: SelfiesTokenizer, selfies_list: list[str]
+    ) -> None:
+        """Each row in the transformed batch contains exactly one EOS token."""
+        raw = torch.stack([tokenizer.encode_selfies(s, 32) for s in selfies_list])
         out = tokenizer.transform_batch(raw)
-        # [EOS] should appear exactly once per sequence
-        eos_count = (out[0] == tokenizer.eos_idx).sum().item()
-        assert eos_count == 1
+
+        for row in out:
+            assert (row == tokenizer.eos_idx).sum().item() == 1
 
     def test_transform_batch_requires_2d(self, tokenizer: SelfiesTokenizer):
         with pytest.raises(ValueError, match="2-D"):
@@ -92,10 +130,47 @@ class TestSelfiesTokenizer:
         assert batch.shape == (2, 18)
         assert batch.dtype == torch.long
 
+    @pytest.mark.parametrize(
+        "selfies_string",
+        [BENZENE, ALANINE, ETHANOL],
+    )
+    def test_batch_from_selfies_exact_layout(
+        self, tokenizer: SelfiesTokenizer, selfies_string: str
+    ) -> None:
+        """Single-sequence batches place CLS, tokens, EOS, and padding exactly."""
+        max_length = 32
+        real_token_count = sf.len_selfies(selfies_string)
+        batch = tokenizer.batch_from_selfies([selfies_string], max_length=max_length)
+        row = batch[0]
+        eos_index = real_token_count + 1
+
+        assert int(row[0]) == tokenizer.cls_idx
+        assert int(row[eos_index]) == tokenizer.eos_idx
+        assert torch.all(row[eos_index + 1 :] == tokenizer.padding_idx)
+        assert int((row == tokenizer.padding_idx).sum().item()) == (
+            max_length - real_token_count
+        )
+
     def test_batch_from_selfies_device(self, tokenizer: SelfiesTokenizer):
         device = torch.device("cpu")
         batch = tokenizer.batch_from_selfies([BENZENE], max_length=32, device=device)
         assert batch.device.type == "cpu"
+
+    def test_transform_batch_cls_eos_for_all_rows(
+        self, tokenizer: SelfiesTokenizer
+    ) -> None:
+        """Each transformed row starts with CLS and contains exactly one EOS."""
+        raw = torch.stack(
+            [
+                tokenizer.encode_selfies(BENZENE, 32),
+                tokenizer.encode_selfies(ALANINE, 32),
+            ]
+        )
+        out = tokenizer.transform_batch(raw)
+
+        assert torch.all(out[:, 0] == tokenizer.cls_idx)
+        for row in out:
+            assert int((row == tokenizer.eos_idx).sum().item()) == 1
 
     def test_inverse_lookup_roundtrip(self, tokenizer: SelfiesTokenizer):
         for idx, tok in tokenizer.inverse_lookup.items():
