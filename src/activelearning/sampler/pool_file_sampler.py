@@ -7,6 +7,7 @@ import torch
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.sampler import Sampler
 from activelearning.utils.types import Candidate, Observation
+from activelearning.utils.warnings import warn_ignored_args
 
 
 class PoolFileSampler(Sampler):
@@ -103,11 +104,14 @@ class PoolFileSampler(Sampler):
         Parameters
         ----------
         acquisition : Optional[Acquisition]
-            Unused. Present for interface compatibility.
+            Unused. Present for interface compatibility. Passing a non-``None``
+            value raises a :class:`UserWarning`.
         observations : Optional[Iterable[Observation]]
-            Unused. Present for interface compatibility.
+            Unused. Present for interface compatibility. Passing a non-``None``
+            value raises a :class:`UserWarning`.
         cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
-            Unused. Present for interface compatibility.
+            Unused. Present for interface compatibility. Passing a non-``None``
+            value raises a :class:`UserWarning`.
 
         Returns
         -------
@@ -115,6 +119,9 @@ class PoolFileSampler(Sampler):
             Up to ``num_samples`` candidates with ``x`` set to the raw line
             value and ``fidelity`` drawn from the configured strategy.
         """
+        warn_ignored_args(
+            self, acquisition=acquisition, observations=observations, cost_fn=cost_fn
+        )
         pool = self._load_pool()
         k = min(self.num_samples, len(pool))
         chosen = random.sample(pool, k)

@@ -4,6 +4,7 @@ from typing import Callable, Iterable, Optional, Sequence
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.sampler import Sampler
 from activelearning.utils.types import Candidate, Observation
+from activelearning.utils.warnings import warn_ignored_args
 
 
 class PoolUniformSampler(Sampler):
@@ -32,17 +33,23 @@ class PoolUniformSampler(Sampler):
         Parameters
         ----------
         acquisition : Optional[Acquisition]
-            Unused. Present for interface compatibility.
+            Unused. Present for interface compatibility. Passing a non-``None``
+            value raises a :class:`UserWarning`.
         observations : Optional[Iterable[Observation]]
-            Unused. Present for interface compatibility.
+            Unused. Present for interface compatibility. Passing a non-``None``
+            value raises a :class:`UserWarning`.
         cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
-            Unused. Present for interface compatibility.
+            Unused. Present for interface compatibility. Passing a non-``None``
+            value raises a :class:`UserWarning`.
 
         Returns
         -------
         result : list[Candidate]
             List of randomly sampled candidates.
         """
+        warn_ignored_args(
+            self, acquisition=acquisition, observations=observations, cost_fn=cost_fn
+        )
         if self.num_samples >= len(self.candidate_pool):
             return list(self.candidate_pool)
         return random.sample(list(self.candidate_pool), self.num_samples)

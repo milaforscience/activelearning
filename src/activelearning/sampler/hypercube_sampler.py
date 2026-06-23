@@ -6,6 +6,7 @@ from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.sampler import Sampler
 from activelearning.utils.sampling import latin_hypercube
 from activelearning.utils.types import Candidate, Observation
+from activelearning.utils.warnings import warn_ignored_args
 
 
 class HypercubeSampler(Sampler):
@@ -160,11 +161,14 @@ class HypercubeSampler(Sampler):
         Parameters
         ----------
         acquisition : Optional[Acquisition]
-            Unused. Present for interface compatibility.
+            Unused. Present for interface compatibility. Passing a non-``None``
+            value raises a :class:`UserWarning`.
         observations : Optional[Iterable[Observation]]
-            Unused. Present for interface compatibility.
+            Unused. Present for interface compatibility. Passing a non-``None``
+            value raises a :class:`UserWarning`.
         cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
-            Unused. Present for interface compatibility.
+            Unused. Present for interface compatibility. Passing a non-``None``
+            value raises a :class:`UserWarning`.
 
         Returns
         -------
@@ -172,6 +176,9 @@ class HypercubeSampler(Sampler):
             ``num_samples`` candidates with ``x`` as a plain Python list of
             floats and ``fidelity`` drawn from the configured fidelity strategy.
         """
+        warn_ignored_args(
+            self, acquisition=acquisition, observations=observations, cost_fn=cost_fn
+        )
         # Generate points in [0,1]^d then scale to bounds
         lower, ranges = self._get_bounds_tensors()
         unit_points = self._generate_points()

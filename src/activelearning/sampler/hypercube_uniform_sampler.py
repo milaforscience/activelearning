@@ -5,6 +5,7 @@ from typing import Callable, Iterable, Optional, Sequence
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.sampler import Sampler
 from activelearning.utils.types import Candidate, Observation
+from activelearning.utils.warnings import warn_ignored_args
 
 
 class HypercubeUniformSampler(Sampler):
@@ -80,11 +81,14 @@ class HypercubeUniformSampler(Sampler):
         Parameters
         ----------
         acquisition : Optional[Acquisition]
-            Unused. Present for interface compatibility.
+            Unused. Present for interface compatibility. Passing a non-``None``
+            value raises a :class:`UserWarning`.
         observations : Optional[Iterable[Observation]]
-            Unused. Present for interface compatibility.
+            Unused. Present for interface compatibility. Passing a non-``None``
+            value raises a :class:`UserWarning`.
         cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
-            Unused. Present for interface compatibility.
+            Unused. Present for interface compatibility. Passing a non-``None``
+            value raises a :class:`UserWarning`.
 
         Returns
         -------
@@ -92,6 +96,9 @@ class HypercubeUniformSampler(Sampler):
             ``num_samples`` candidates with ``x`` as a plain Python list of
             floats and ``fidelity`` drawn uniformly from ``fidelities``.
         """
+        warn_ignored_args(
+            self, acquisition=acquisition, observations=observations, cost_fn=cost_fn
+        )
         # Shape: (num_samples, n_dims)
         lower = torch.tensor(self._lower_values, dtype=self.dtype)
         range_ = torch.tensor(self._range_values, dtype=self.dtype)
