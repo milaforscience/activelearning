@@ -84,10 +84,21 @@ if cost_fn is not None:
     scores = [s / c for s, c in zip(scores, costs)]
 ```
 
-This selector-side division is separate from any acquisition-level weighting
-already baked into `acquisition.score(candidates)`. In particular, BoTorch
-multi-fidelity `cost_aware_utility` is resolved during acquisition `update()`,
-so if you pair that with `CostAwareSelector` you apply two cost penalties.
+This selector-side division is a **separate** mechanism from any
+acquisition-level cost weighting that may already be built into the values
+returned by `acquisition.score(candidates)`. In particular, BoTorch
+multi-fidelity acquisitions configured with `cost_aware_utility` bake that
+weighting into the acquisition object during `update()` — so the scores
+returned by `score()` already penalize expensive candidates. If you then
+divide by cost again in the selector, **both penalties compound**. This is
+usually undesirable. To avoid double-counting, either:
+
+- Rely on the acquisition-level `cost_aware_utility` (which also influences
+  samplers that use acquisition scores), **or**
+- Use selector-side division (e.g., `CostAwareSelector`) and configure the
+  acquisition *without* `cost_aware_utility`.
+
+See the [Acquisition guide](acquisition.md#common-pitfalls) for more details.
 
 ## **Common pitfalls**
 

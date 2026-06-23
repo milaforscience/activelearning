@@ -99,11 +99,16 @@ def sample(self, acquisition=None, observations=None):
 Always guard with `acquisition is not None` — the sampler may be called before
 the surrogate has been fitted.
 
-For BoTorch multi-fidelity acquisitions, remember that any configured
-`cost_aware_utility` has already been baked into the acquisition object during
-`update()`. In the default active-learning loop the selector receives that same
-acquisition instance, so acquisition-level cost weighting affects both the
-sampler reward proxy and selector scoring.
+**Cost weighting in multi-fidelity acquisitions.** Some acquisition classes
+(notably BoTorch multi-fidelity acquisitions) accept a `cost_aware_utility`
+that is wired into the acquisition object at `update()` time. When this is
+configured, the scores returned by `acquisition.score()` already incorporate
+labeling-cost penalties — meaning the sampler's score-guided proposals will
+implicitly favour cheaper candidates. This is not something the sampler
+controls; it is a consequence of calling `score()` on a cost-weighted
+acquisition instance. See the
+[Acquisition guide](acquisition.md#common-pitfalls) for a full explanation of
+how this interacts with selector-side cost weighting.
 
 ## **Common pitfalls**
 
