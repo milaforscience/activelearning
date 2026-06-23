@@ -219,6 +219,16 @@ class TestSelfiesTransformerEncoder:
         assert mask.sum(dim=1).tolist() == expected_counts
         assert not mask[:, 0].any()
 
+        # Every masked position must be a regular content token: never CLS,
+        # EOS, or padding. This positively asserts the sampled positions are
+        # valid, rather than only checking individual special positions.
+        is_special = (
+            (token_batch == tokenizer.cls_idx)
+            | (token_batch == tokenizer.eos_idx)
+            | (token_batch == tokenizer.padding_idx)
+        )
+        assert not (mask & is_special).any()
+
         for row in range(token_batch.shape[0]):
             eos_positions = torch.where(token_batch[row] == tokenizer.eos_idx)[0]
             assert eos_positions.numel() == 1
