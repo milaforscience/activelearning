@@ -138,7 +138,13 @@ def _build_molecule_panel(
 ) -> tuple[Chem.Mol, str]:
     """Build a drawable RDKit molecule and legend for one query record."""
     raw_molecule = _extract_raw_molecule(candidate, observation)
-    smiles, invalid_reason = _decode_molecule(raw_molecule, mol_repr)
+    if mol_repr == "smiles":
+        smiles: str | None = raw_molecule
+        invalid_reason: str | None = None
+    elif mol_repr == "selfies":
+        smiles, invalid_reason = _decode_selfies(raw_molecule)
+    else:
+        smiles, invalid_reason = None, f"unsupported representation {mol_repr!r}"
     molecule = _mol_from_smiles(smiles) if smiles is not None else None
     if molecule is None:
         molecule = Chem.Mol()
@@ -168,13 +174,8 @@ def _extract_raw_molecule(candidate: Candidate, observation: Observation) -> str
     return str(candidate.x)
 
 
-def _decode_molecule(molecule: str, mol_repr: str) -> tuple[str | None, str | None]:
-    """Decode a molecule to SMILES, returning an invalid reason on failure."""
-    if mol_repr == "smiles":
-        return molecule, None
-    if mol_repr != "selfies":
-        return None, f"unsupported representation {mol_repr!r}"
-
+def _decode_selfies(molecule: str) -> tuple[str | None, str | None]:
+    """Decode a SELFIES string to SMILES, returning an invalid reason on failure."""
     try:
         smiles = sf.decoder(molecule)
     except sf.DecoderError as exc:
