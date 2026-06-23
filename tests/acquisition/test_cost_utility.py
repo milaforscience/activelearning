@@ -2,13 +2,13 @@ import pytest
 
 from activelearning.acquisition.cost_utility import (
     cost_weighting_from_cost_fn,
-    normalize_scores_by_cost,
+    scale_by_cost,
 )
 from activelearning.utils.types import Candidate
 
 
-def test_normalize_scores_by_cost_scales_scores() -> None:
-    scaled = normalize_scores_by_cost([4.0, 10.0, 6.0], [2.0, 5.0, 2.0], 0.25)
+def test_scale_by_cost_scales_scores() -> None:
+    scaled = scale_by_cost([4.0, 10.0, 6.0], [2.0, 5.0, 2.0], 0.25)
     assert scaled == [2.25, 2.25, 3.25]
 
 
@@ -22,16 +22,16 @@ def test_cost_weighting_from_cost_fn_uses_candidate_costs() -> None:
     def cost_fn(cands):
         return [2.0 if candidate.fidelity == 1 else 5.0 for candidate in cands]
 
-    weight_scores = cost_weighting_from_cost_fn(cost_fn, fixed_cost=0.25)
+    weight_scores = cost_weighting_from_cost_fn(cost_fn, additive_offset=0.25)
 
     scaled = weight_scores([4.0, 10.0, 6.0], candidates)
 
     assert scaled == [2.25, 2.25, 3.25]
 
 
-def test_non_positive_costs_raise_during_normalization() -> None:
+def test_non_positive_costs_raise_during_scaling() -> None:
     with pytest.raises(ValueError, match="strictly positive"):
-        normalize_scores_by_cost([1.0], [0.0])
+        scale_by_cost([1.0], [0.0])
 
 
 def test_cost_weighting_from_cost_fn_checks_lengths() -> None:
