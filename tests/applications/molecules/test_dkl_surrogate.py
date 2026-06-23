@@ -10,6 +10,7 @@ from activelearning.applications.molecules.config import (
 )
 from activelearning.applications.molecules.dkl_surrogate import (
     ExactSelfiesDKLSurrogate,
+    SelfiesDeepKernelSurrogate,
     VariationalSelfiesDKLSurrogate,
 )
 from activelearning.runtime import RuntimeContext
@@ -78,6 +79,19 @@ def exact_mf_surrogate() -> ExactSelfiesDKLSurrogate:
     )
     surrogate.set_fidelity_confidences(FIDELITY_CONFIDENCES)
     return surrogate
+
+
+@pytest.fixture(params=["exact", "variational"])
+def selfies_dkl_surrogate(
+    request: pytest.FixtureRequest,
+) -> SelfiesDeepKernelSurrogate:
+    """Parametrized fixture yielding both surrogate variants for shared correctness tests."""
+    encoder = ENCODER_CFG.build()
+    if request.param == "exact":
+        return ExactSelfiesDKLSurrogate(encoder=encoder, training_params=TRAINING)
+    return VariationalSelfiesDKLSurrogate(
+        encoder=encoder, training_params=TRAINING, num_inducing=8
+    )
 
 
 class TestExactSelfiesDKLSurrogate:
@@ -606,3 +620,104 @@ class TestDKLSurrogateConfigs:
         cfg = VariationalSelfiesDKLSurrogateConfig(encoder=ENCODER_CFG, num_inducing=8)
         surrogate = cfg.build()
         assert isinstance(surrogate, VariationalSelfiesDKLSurrogate)
+
+
+class TestSurrogatePredictionCorrectness:
+    """Correctness tests shared by both ExactSelfiesDKLSurrogate and VariationalSelfiesDKLSurrogate.
+
+    Each test is run twice: once with the exact GP surrogate and once with the
+    variational GP surrogate, via the ``selfies_dkl_surrogate`` parametrized fixture.
+    """
+
+    def test_predict_is_deterministic(
+        self, selfies_dkl_surrogate: SelfiesDeepKernelSurrogate
+    ) -> None:
+        """Repeated predictions on the same candidates should be identical."""
+        selfies_dkl_surrogate.fit(_make_observations([BENZENE, ALANINE], [1.0, -1.0]))
+
+        first_result = selfies_dkl_surrogate.predict(_make_candidates([ETHANOL]))
+        second_result = selfies_dkl_surrogate.predict(_make_candidates([ETHANOL]))
+
+        assert first_result["mean"] == second_result["mean"]
+        assert first_result["std"] == second_result["std"]
+
+    def test_identical_molecules_get_identical_predictions(
+        self, selfies_dkl_surrogate: SelfiesDeepKernelSurrogate
+    ) -> None:
+        """Identical molecules should receive identical predictive moments."""
+        selfies_dkl_surrogate.fit(_make_observations([BENZENE, ALANINE], [1.0, -1.0]))
+
+        result = selfies_dkl_surrogate.predict(_make_candidates([BENZENE, BENZENE]))
+
+        assert result["mean"][0] == result["mean"][1]
+        assert result["std"][0] == result["std"][1]
+
+    def test_predictions_are_permutation_equivariant(
+        self, selfies_dkl_surrogate: SelfiesDeepKernelSurrogate
+    ) -> None:
+        """Reordering candidates should only reorder the corresponding outputs.
+
+        The Transformer encoder processes each sequence independently (no
+        cross-sequence interactions), so the GP posterior for molecule A is
+        unaffected by whether molecule B appears before or after it.
+        """
+        selfies_dkl_surrogate.fit(_make_observations([BENZENE, ALANINE], [1.0, -1.0]))
+
+        forward_result = selfies_dkl_surrogate.predict(
+            _make_candidates([BENZENE, ETHANOL])
+        )
+        reverse_result = selfies_dkl_surrogate.predict(
+            _make_candidates([ETHANOL, BENZENE])
+        )
+
+        assert forward_result["mean"][0] == reverse_result["mean"][1]
+        assert forward_result["mean"][1] == reverse_result["mean"][0]
+        assert forward_result["std"][0] == reverse_result["std"][1]
+        assert forward_result["std"][1] == reverse_result["std"][0]
+
+    def test_predict_std_strictly_positive_on_training_molecules(
+        self, selfies_dkl_surrogate: SelfiesDeepKernelSurrogate
+    ) -> None:
+        """Predictive standard deviations should be strictly positive, not zero.
+
+        Both GP variants include observation noise so posterior variance at
+        training inputs remains above zero.
+        """
+        training_selfies = [BENZENE, ALANINE, ETHANOL]
+        selfies_dkl_surrogate.fit(_make_observations(training_selfies, [1.0, 2.0, 3.0]))
+
+        result = selfies_dkl_surrogate.predict(_make_candidates(training_selfies))
+
+        assert all(std > 0.0 for std in result["std"])
+
+
+class TestExactSurrogatePredictionCorrectness:
+    """Correctness tests specific to ExactSelfiesDKLSurrogate.
+
+    These tests rely on properties of the exact GP that do not hold reliably
+    for the variational surrogate with tiny training sets.
+    """
+
+    ORDERING_TRAINING = SelfiesTrainingConfig(
+        epochs=60, lr=5e-2, mask_ratio=0.15, pretrain_epochs=3
+    )
+
+    def test_recovers_training_target_ordering(self) -> None:
+        """With sufficient training, the exact GP should rank training molecules.
+
+        An exact GP with enough epochs learns a kernel where the predicted
+        posterior mean at each training molecule reflects the relative ordering
+        of the observed targets.  This is a fundamental correctness property:
+        the model should at minimum learn the sign of the differences between
+        training targets.
+        """
+        torch.manual_seed(0)
+        surrogate = ExactSelfiesDKLSurrogate(
+            encoder=ENCODER_CFG.build(), training_params=self.ORDERING_TRAINING
+        )
+        training_selfies = [BENZENE, ALANINE, ETHANOL]
+        surrogate.fit(_make_observations(training_selfies, [-5.0, 0.0, 5.0]))
+
+        result = surrogate.predict(_make_candidates(training_selfies))
+
+        assert result["mean"][0] < result["mean"][1] < result["mean"][2]
