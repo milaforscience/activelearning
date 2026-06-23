@@ -1,12 +1,18 @@
 # Molecule IP/EA optimisation with exact SELFIES DKL + MF-MES over three xTB fidelities.
 #
-# This extends the single-fidelity pool example by:
-# - keeping the exact SELFIES DKL surrogate,
-# - exposing xTB fidelities 1 / 2 / 3 in the pool sampler,
-# - using MF-MES to score candidates,
-# - and using cost-aware selection so cheap fidelities are preferred when informative.
-#   In this pool-based config, cost handling lives in the selector rather than
-#   the acquisition to avoid penalizing cost twice.
+# This extends the single-fidelity pool example (exact.yaml) by adding multi-fidelity
+# surrogate models and acquisition functions. The main differences are:
+# - ExactSelfiesDKLSurrogate is reused but with multi_fidelity enabled, so the GP also
+#   conditions on a fidelity confidence embedding alongside molecule features.
+# - PoolFileSampler proposes (molecule, fidelity) pairs from a fixed candidate file,
+#   covering all three xTB fidelity levels (1 = cheapest / fastest, 3 = most accurate).
+# - QMultiFidelityLowerBoundMaxValueEntropy (MF-MES) scores each (molecule, fidelity)
+#   pair by how much information it would provide about the optimum at target fidelity 3.
+# - CostAwareSelector picks which pairs to query by dividing MF-MES scores by oracle
+#   cost, so the optimizer naturally favours cheap fidelities when they are informative.
+#   Cost is discounted here in the selector rather than inside the acquisition function
+#   because the pool-based active-learning loop evaluates acquisition scores first and
+#   then selects separately; applying a cost penalty in both steps would discount it twice.
 #
 # Run with:
 #   uv run activelearning config/molecules/exact_multi_fidelity.yaml

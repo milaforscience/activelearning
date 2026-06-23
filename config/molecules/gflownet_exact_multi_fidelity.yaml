@@ -4,11 +4,15 @@
 #   uv run activelearning config/molecules/gflownet_exact_multi_fidelity.yaml
 #
 # This keeps the exact-GP variant intentionally smaller than the variational
-# multi-fidelity example:
-# - GFlowNet samples both a SELFIES molecule and a fidelity level.
-# - ExactSelfiesDKLSurrogate appends fidelity confidences to the molecule features.
-# - qMultiFidelityLowerBoundMaxValueEntropy provides the MF-MES reward proxy.
-# - FidelityCostUtility prefers cheaper fidelities when they are similarly informative.
+# multi-fidelity example (gflownet_variational_multi_fidelity.yaml):
+# - GFlowNetSampler trains a generative policy to propose (SELFIES, fidelity) pairs;
+#   fidelity_action: any lets the policy choose any of the three fidelity levels.
+# - ExactSelfiesDKLSurrogate fits an exact GP that conditions on both molecule features
+#   and a fidelity confidence embedding (multi_fidelity: true, target_fidelity: 3).
+# - QMultiFidelityLowerBoundMaxValueEntropy (MF-MES) scores each (molecule, fidelity)
+#   pair by expected information gain about the optimum at target fidelity 3. This score
+#   is used directly as the GFlowNet reward, so the policy trades off information gain
+#   against cost when deciding which (molecule, fidelity) pairs to propose.
 
 runtime:
   device: cpu

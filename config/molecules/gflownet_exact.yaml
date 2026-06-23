@@ -8,13 +8,17 @@
 #   uv run activelearning config/molecules/gflownet_exact.yaml
 #
 # This example keeps the setup intentionally small:
-# - GFlowNet samples SELFIES strings directly.
-# - The surrogate is an exact-DKL model over SELFIES strings.
-# - The oracle only uses fidelity 1 so the run stays cheap and easy to follow.
+# - GFlowNetSampler trains a generative policy (GFlowNet) to propose SELFIES strings
+#   in proportion to their acquisition scores, rather than drawing from a fixed pool.
+# - ExactSelfiesDKLSurrogate fits an exact GP with a deep-kernel-learning SELFIES
+#   transformer encoder to model electron affinity.
+# - UpperConfidenceBound scores candidate molecules by predicted mean plus uncertainty.
+# - Only fidelity 1 (the cheapest xTB approximation) is used so the run stays cheap
+#   and the GFlowNet training loop is easy to follow.
 #
-# GFlowNet component defaults are loaded from config/gflownet/ by
-# compose_gflownet_conf. The sampler.conf block below only overrides the parts
-# specific to the molecules use case.
+# GFlowNet hyperparameters (environment, policy architecture, training schedule) are
+# configured in the sampler.conf block below. Defaults for any unlisted keys are
+# loaded from config/gflownet/ at runtime by compose_gflownet_conf.
 
 runtime:
   device: cpu

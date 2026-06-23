@@ -1,13 +1,17 @@
 # GFlowNet-based molecule experiment: SELFIES + variational DKL + MF-MES across three xTB fidelities.
 #
-# This is the final molecule tutorial example:
-# - GFlowNet samples both a SELFIES molecule and a fidelity level.
-# - It keeps the same MF GFlowNet setup as the exact multi-fidelity example.
-# - VariationalSelfiesDKLSurrogate replaces the exact GP with a scalable GP head.
-# - qMultiFidelityLowerBoundMaxValueEntropy provides the MF-MES reward proxy.
-# - FidelityCostUtility steers the policy toward cheap fidelities when possible.
+# This is the most expressive molecule tutorial example; run after the exact
+# multi-fidelity variant (gflownet_exact_multi_fidelity.yaml):
+# - GFlowNetSampler trains a generative policy to propose (SELFIES, fidelity) pairs
+#   in proportion to their MF-MES acquisition scores, exploring all three fidelities.
+# - VariationalSelfiesDKLSurrogate replaces the exact GP with an inducing-point
+#   variational GP, which scales to larger datasets at the cost of more training epochs.
+# - QMultiFidelityLowerBoundMaxValueEntropy (MF-MES) scores each (molecule, fidelity)
+#   pair by expected information gain about the target-fidelity optimum. This score is
+#   used as the GFlowNet reward, so the policy trades off information gain against
+#   cost when deciding which (molecule, fidelity) pairs to propose.
 # - xTB fidelities use costs 1.0 / 3.5 / 7.0 and conformer counts 1 / 2 / 4.
-# - Acquisition batch size B=128 and GFlowNet sample count N=5*B=640.
+# - Acquisition batch size B=128, GFlowNet sample count N=5*B=640.
 #
 # Prerequisites:
 #   - The `xtb` binary on PATH for oracle evaluation
