@@ -94,21 +94,44 @@ def test_selection_with_varied_scores():
     assert selected[1].x == 1
 
 
-def test_top_k_selector_can_request_cost_normalized_scores():
+@pytest.mark.parametrize(
+    ("observations", "costs", "expected_xs"),
+    [
+        # Equal acquisition scores → ranked purely by 1/cost
+        # score/cost: x=1 → 1.0, x=3 → 0.5, x=2 → 0.1
+        (
+            [(1, 1.0), (2, 1.0), (3, 1.0)],
+            {1: 1.0, 2: 10.0, 3: 2.0},
+            [1, 3],
+        ),
+        # Both scores and costs vary → ranked by score/cost
+        # score/cost: x=1 → 20.0, x=2 → 15.0, x=3 → 6.0
+        (
+            [(1, 20.0), (2, 30.0), (3, 60.0)],
+            {1: 1.0, 2: 2.0, 3: 10.0},
+            [1, 2],
+        ),
+    ],
+)
+def test_cost_normalization_selects_correct_candidates(
+    observations: list[tuple[int, float]],
+    costs: dict[int, float],
+    expected_xs: list[int],
+) -> None:
+    """Selector with a cost_fn ranks candidates by acquisition score divided by cost."""
+    surrogate = DummyMeanSurrogate()
+    surrogate.fit([Observation(x=x, y=y) for x, y in observations])
+
     acquisition = DummyAcquisition(beta=0.0)
-    acquisition.score = lambda candidates, cost_weighting=None: (  # type: ignore[method-assign]
-        cost_weighting([1.0 for _ in candidates], list(candidates))
-        if cost_weighting is not None
-        else [0.0 for _ in candidates]
-    )
+    acquisition.update(surrogate)
 
     selector = TopKAcquisitionSelector(num_samples=2)
-    candidates = [Candidate(x=1), Candidate(x=2), Candidate(x=3)]
+    candidates = [Candidate(x=x) for x, _ in observations]
 
     selected = selector(
         candidates,
         acquisition=acquisition,
-        cost_fn=lambda cands: [1.0 for _ in cands],
+        cost_fn=lambda cands: [costs[c.x] for c in cands],
     )
 
-    assert len(selected) == 2
+    assert [c.x for c in selected] == expected_xs
