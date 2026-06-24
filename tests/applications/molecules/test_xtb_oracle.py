@@ -55,8 +55,33 @@ class TestHelpers:
         assert hartree_to_ev(-1.0) == pytest.approx(-27.2114)
 
     def test_decode_selfies_to_smiles(self):
+        """Decoding benzene SELFIES yields a SMILES that canonicalizes to benzene."""
+        from rdkit import Chem
+
         smiles = _decode_to_smiles(BENZENE_SELFIES, mol_repr="selfies")
-        assert isinstance(smiles, str) and len(smiles) > 0
+        assert Chem.MolToSmiles(Chem.MolFromSmiles(smiles)) == Chem.MolToSmiles(
+            Chem.MolFromSmiles(BENZENE_SMILES)
+        )
+
+    @pytest.mark.parametrize(
+        ("selfies_str", "expected_smiles"),
+        [
+            (BENZENE_SELFIES, BENZENE_SMILES),
+            ("[C][C][O]", "CCO"),  # ethanol
+            ("[C]", "C"),  # methane
+            ("[C][C][=Branch1][C][=O][O]", "CC(=O)O"),  # acetic acid
+        ],
+    )
+    def test_decode_selfies_canonical_smiles(
+        self, selfies_str: str, expected_smiles: str
+    ) -> None:
+        """Each SELFIES string must decode to the expected canonical SMILES."""
+        from rdkit import Chem
+
+        decoded = _decode_to_smiles(selfies_str, mol_repr="selfies")
+        assert Chem.MolToSmiles(Chem.MolFromSmiles(decoded)) == Chem.MolToSmiles(
+            Chem.MolFromSmiles(expected_smiles)
+        )
 
     def test_decode_smiles_passthrough(self):
         assert _decode_to_smiles(BENZENE_SMILES, mol_repr="smiles") == BENZENE_SMILES
@@ -121,6 +146,12 @@ class TestParsers:
     def test_parse_vertical_missing_raises(self):
         with pytest.raises(RuntimeError, match="Could not parse"):
             _parse_vertical_ipea("no match here", task="ea")
+
+    def test_parse_vertical_selects_correct_label(self) -> None:
+        """Parser returns the task-specific value when both EA and IP lines are present."""
+        combined = _FAKE_EA_OUTPUT + _FAKE_IP_OUTPUT
+        assert _parse_vertical_ipea(combined, task="ea") == pytest.approx(2.3456)
+        assert _parse_vertical_ipea(combined, task="ip") == pytest.approx(9.8765)
 
     def test_parse_total_energy_last_value(self):
         energy = _parse_total_energy(_FAKE_OPT_OUTPUT)
