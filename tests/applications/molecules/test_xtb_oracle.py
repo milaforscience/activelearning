@@ -258,14 +258,17 @@ class TestRunXTB:
 
 class TestXTBIPEAOracleConstructionValidation:
     def test_empty_fidelity_costs_raises(self):
+        """An empty fidelity_costs dict is rejected at construction time."""
         with pytest.raises(ValueError, match="fidelity_costs"):
             XTBIPEAOracle(task="ea", fidelity_costs={})
 
     def test_bad_task_raises(self):
+        """An unsupported task string raises a ValueError."""
         with pytest.raises(ValueError, match="task"):
             XTBIPEAOracle(task="free_energy", fidelity_costs={1: 1.0})
 
     def test_bad_visualization_limit_raises(self):
+        """molecule_visualization_limit must be >= 1; zero raises a ValueError."""
         with pytest.raises(ValueError, match="molecule_visualization_limit"):
             XTBIPEAOracle(
                 task="ea",
@@ -274,6 +277,7 @@ class TestXTBIPEAOracleConstructionValidation:
             )
 
     def test_config_build_passes_visualization_options(self):
+        """log_molecule_visualizations and molecule_visualization_limit are forwarded to the oracle."""
         config = XTBIPEAOracleConfig(
             task="ip",
             fidelity_costs={1: 1.0},
@@ -288,6 +292,7 @@ class TestXTBIPEAOracleConstructionValidation:
         assert oracle._molecule_visualization_limit == 7
 
     def test_config_build_passes_negate_score(self):
+        """negate_score=True set in config is propagated to the oracle's internal flag."""
         config = XTBIPEAOracleConfig(
             task="ip",
             fidelity_costs={1: 1.0},
@@ -300,6 +305,7 @@ class TestXTBIPEAOracleConstructionValidation:
         assert oracle._negate_score is True
 
     def test_config_build_defaults_ip_to_negated_objective(self):
+        """IP task defaults to negate_score=True because higher IP is better for the objective."""
         config = XTBIPEAOracleConfig(
             task="ip",
             fidelity_costs={1: 1.0},
@@ -311,6 +317,7 @@ class TestXTBIPEAOracleConstructionValidation:
         assert oracle._negate_score is True
 
     def test_config_build_passes_conformer_options(self):
+        """num_conformers and per_fidelity_num_conformers are forwarded from config to the oracle."""
         config = XTBIPEAOracleConfig(
             task="ea",
             fidelity_costs={1: 1.0, 2: 5.0, 3: 25.0},
@@ -325,6 +332,7 @@ class TestXTBIPEAOracleConstructionValidation:
         assert oracle._per_fidelity_num_conformers == {1: 1, 3: 4}
 
     def test_config_defaults_to_global_num_conformers(self):
+        """Without overrides, the default global num_conformers=2 and empty per-fidelity map are used."""
         config = XTBIPEAOracleConfig(task="ea", fidelity_costs={1: 1.0})
 
         oracle = config.build()
@@ -333,6 +341,7 @@ class TestXTBIPEAOracleConstructionValidation:
         assert oracle._per_fidelity_num_conformers == {}
 
     def test_config_rejects_non_positive_per_fidelity_num_conformers(self):
+        """per_fidelity_num_conformers values must be positive; zero raises ValidationError."""
         with pytest.raises(ValidationError, match="per_fidelity_num_conformers"):
             XTBIPEAOracleConfig(
                 task="ea",
@@ -341,6 +350,7 @@ class TestXTBIPEAOracleConstructionValidation:
             )
 
     def test_config_rejects_unknown_per_fidelity_num_conformers(self):
+        """Fidelity keys in per_fidelity_num_conformers must appear in fidelity_costs; unknown keys raise ValidationError."""
         with pytest.raises(ValidationError, match="unsupported fidelities"):
             XTBIPEAOracleConfig(
                 task="ea",
@@ -349,6 +359,7 @@ class TestXTBIPEAOracleConstructionValidation:
             )
 
     def test_config_rejects_extra_fields(self):
+        """XTBIPEAOracleConfig is strict and rejects unknown fields via Pydantic validation."""
         with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
             XTBIPEAOracleConfig(
                 task="ea",
@@ -357,18 +368,21 @@ class TestXTBIPEAOracleConstructionValidation:
             )
 
     def test_default_confidences_normalised(self):
+        """Default confidences are cost-normalised: the most expensive fidelity receives confidence 1.0."""
         oracle = XTBIPEAOracle(task="ip", fidelity_costs={1: 1.0, 2: 10.0})
         confidences = oracle.get_fidelity_confidences()
         assert confidences[2] == pytest.approx(1.0)
         assert confidences[1] == pytest.approx(0.1)
 
     def test_custom_confidences(self):
+        """A user-supplied fidelity_confidences dict overrides the default cost-based normalisation."""
         oracle = XTBIPEAOracle(
             task="ea", fidelity_costs={1: 1.0}, fidelity_confidences={1: 0.8}
         )
         assert oracle.get_fidelity_confidences()[1] == pytest.approx(0.8)
 
     def test_missing_custom_confidence_key_raises(self):
+        """fidelity_confidences must cover all fidelity keys; missing keys raise a ValueError."""
         with pytest.raises(ValueError, match="missing keys"):
             XTBIPEAOracle(
                 task="ea",
@@ -377,6 +391,7 @@ class TestXTBIPEAOracleConstructionValidation:
             )
 
     def test_extra_custom_confidence_key_raises(self):
+        """fidelity_confidences must not contain keys absent from fidelity_costs; extra keys raise ValueError."""
         with pytest.raises(ValueError, match="unexpected keys"):
             XTBIPEAOracle(
                 task="ea",
@@ -385,6 +400,7 @@ class TestXTBIPEAOracleConstructionValidation:
             )
 
     def test_get_costs(self):
+        """get_costs returns the fidelity cost for each candidate in order."""
         oracle = XTBIPEAOracle(task="ea", fidelity_costs={1: 1.0, 2: 5.0})
         candidates = [Candidate(x=BENZENE_SELFIES, fidelity=1)]
         assert oracle.get_costs(candidates) == [1.0]
@@ -406,6 +422,7 @@ class TestXTBIPEAOracleQuery:
         return XTBIPEAOracle(task="ea", fidelity_costs={1: 1.0, 2: 5.0, 3: 25.0})
 
     def test_query_returns_observations(self, oracle: XTBIPEAOracle):
+        """query returns a list of Observation objects with the score from _xtb_score."""
         with patch.object(oracle, "_xtb_score", return_value=2.5):
             obs = oracle.query([Candidate(x=BENZENE_SELFIES, fidelity=1)])
         assert len(obs) == 1
@@ -413,16 +430,19 @@ class TestXTBIPEAOracleQuery:
         assert obs[0].y == pytest.approx(2.5)
 
     def test_query_preserves_x(self, oracle: XTBIPEAOracle):
+        """The molecule string x is copied verbatim from Candidate to Observation."""
         with patch.object(oracle, "_xtb_score", return_value=1.0):
             obs = oracle.query([Candidate(x=BENZENE_SELFIES, fidelity=1)])
         assert obs[0].x == BENZENE_SELFIES
 
     def test_query_preserves_fidelity(self, oracle: XTBIPEAOracle):
+        """The fidelity level is preserved in the returned Observation."""
         with patch.object(oracle, "_xtb_score", return_value=1.0):
             obs = oracle.query([Candidate(x=BENZENE_SELFIES, fidelity=2)])
         assert obs[0].fidelity == 2
 
     def test_query_negates_score_when_configured(self):
+        """When negate_score=True the raw _xtb_score is multiplied by -1 in the observation."""
         oracle = XTBIPEAOracle(
             task="ip",
             fidelity_costs={1: 1.0},
@@ -435,6 +455,7 @@ class TestXTBIPEAOracleQuery:
         assert obs[0].y == pytest.approx(-9.0)
 
     def test_query_negates_ip_by_default(self):
+        """IP task automatically negates the score without requiring negate_score=True."""
         oracle = XTBIPEAOracle(task="ip", fidelity_costs={1: 1.0})
 
         with patch.object(oracle, "_xtb_score", return_value=9.0):
@@ -455,6 +476,7 @@ class TestXTBIPEAOracleQuery:
         assert obs[0].y == pytest.approx(3.0)
 
     def test_query_missing_string_raises(self, oracle: XTBIPEAOracle):
+        """A tensor candidate without metadata['raw'] raises ValueError (no molecule string)."""
         import torch
 
         candidates = [Candidate(x=torch.zeros(4), fidelity=1)]
@@ -462,6 +484,7 @@ class TestXTBIPEAOracleQuery:
             oracle.query(candidates)
 
     def test_query_multiple_candidates(self, oracle: XTBIPEAOracle):
+        """Querying multiple candidates returns independent observations in the same order."""
         with patch.object(oracle, "_xtb_score", side_effect=[1.0, 2.0]):
             obs = oracle.query(
                 [
@@ -486,6 +509,7 @@ class TestXTBIPEAOracleQuery:
         assert obs[1].y == pytest.approx(3.5)
 
     def test_query_does_not_log_visualization_by_default(self, oracle: XTBIPEAOracle):
+        """No figure is built or logged when log_molecule_visualizations is False (default)."""
         logger = MagicMock()
         oracle.bind_runtime_context(RuntimeContext(logger=logger))
 
@@ -502,6 +526,7 @@ class TestXTBIPEAOracleQuery:
         logger.log_figure.assert_not_called()
 
     def test_query_visualization_without_logger_is_noop(self):
+        """When visualizations are enabled but no logger is bound, no figure is built."""
         oracle = XTBIPEAOracle(
             task="ea",
             fidelity_costs={1: 1.0},
@@ -520,6 +545,7 @@ class TestXTBIPEAOracleQuery:
         build_figure.assert_not_called()
 
     def test_query_logs_visualization_when_enabled(self):
+        """When visualizations are enabled and a logger is bound, the figure is built and logged."""
         oracle = XTBIPEAOracle(
             task="ea",
             fidelity_costs={1: 1.0},
@@ -568,6 +594,7 @@ class TestXTBMoleculeVisualization:
             return image
 
     def test_query_grid_is_capped_and_score_ranked(self):
+        """When limit < total candidates, only the top-limit molecules by score are shown, ranked descending."""
         candidates = [
             Candidate(x="C", fidelity=1),
             Candidate(x="CC", fidelity=1),
@@ -611,6 +638,7 @@ class TestXTBMoleculeVisualization:
             plt.close(figure)
 
     def test_query_grid_is_score_ranked_without_capping(self):
+        """Without a limit all molecules appear in the grid, sorted by score descending."""
         candidates = [
             Candidate(x="C", fidelity=1),
             Candidate(x="CC", fidelity=1),
@@ -652,6 +680,7 @@ class TestXTBMoleculeVisualization:
             plt.close(figure)
 
     def test_query_grid_labels_invalid_molecules(self):
+        """Molecules that decode to an empty SMILES are rendered with 'invalid: empty molecule' label."""
         candidates = [Candidate(x="[Ring1]", fidelity=1)]
         observations = [Observation(x="[Ring1]", y=math.nan, fidelity=1)]
         captured: dict[str, object] = {}
@@ -721,6 +750,7 @@ class TestXTBScoreFidelityRouting:
         return rdkit_patch, opt_patch, vertical_patch, adiabatic_patch
 
     def test_fidelity1_calls_vertical_no_opt(self, oracle):
+        """Fidelity 1 runs a single vertical xTB call without any geometry optimisation."""
         rdkit_p, opt_p, vert_p, adiab_p = self._mock_xtb_helpers(oracle)
         with rdkit_p, opt_p as opt_mock, vert_p as vert_mock, adiab_p:
             result = oracle._xtb_score(BENZENE_SELFIES, fidelity=1)
@@ -729,6 +759,7 @@ class TestXTBScoreFidelityRouting:
         assert result == pytest.approx(2.0)
 
     def test_fidelity2_calls_opt_then_vertical(self, oracle):
+        """Fidelity 2 optimises the geometry first, then runs a vertical xTB call."""
         rdkit_p, opt_p, vert_p, adiab_p = self._mock_xtb_helpers(oracle)
         with rdkit_p, opt_p as opt_mock, vert_p as vert_mock, adiab_p:
             result = oracle._xtb_score(BENZENE_SELFIES, fidelity=2)
@@ -737,6 +768,7 @@ class TestXTBScoreFidelityRouting:
         assert result == pytest.approx(2.0)
 
     def test_per_fidelity_conformer_override_is_used(self):
+        """A per_fidelity_num_conformers entry overrides the global conformer count for that fidelity."""
         oracle = XTBIPEAOracle(
             task="ea",
             fidelity_costs={1: 1.0, 2: 5.0, 3: 25.0},
@@ -751,6 +783,7 @@ class TestXTBScoreFidelityRouting:
         assert conformer_cfg.num_conformers == 4
 
     def test_unlisted_fidelity_uses_global_num_conformers(self):
+        """A fidelity absent from per_fidelity_num_conformers falls back to the global num_conformers."""
         oracle = XTBIPEAOracle(
             task="ea",
             fidelity_costs={1: 1.0, 2: 5.0, 3: 25.0},
@@ -765,6 +798,7 @@ class TestXTBScoreFidelityRouting:
         assert conformer_cfg.num_conformers == 3
 
     def test_fidelity3_calls_two_opts_then_adiabatic(self, oracle):
+        """Fidelity 3 optimises both neutral and ionic geometries, then calls the adiabatic scorer."""
         rdkit_p, opt_p, vert_p, adiab_p = self._mock_xtb_helpers(oracle)
         with rdkit_p, opt_p as opt_mock, vert_p, adiab_p as adiab_mock:
             result = oracle._xtb_score(BENZENE_SELFIES, fidelity=3)
@@ -780,10 +814,12 @@ class TestXTBScoreFidelityRouting:
         vert_mock.assert_not_called()
 
     def test_bad_fidelity_raises(self, oracle):
+        """Requesting a fidelity not in fidelity_costs raises a ValueError."""
         with pytest.raises(ValueError, match="fidelity"):
             oracle._xtb_score(BENZENE_SELFIES, fidelity=99)
 
     def test_empty_decoded_molecule_returns_nan_without_xtb(self, oracle):
+        """A SELFIES that decodes to the empty molecule returns NaN without invoking any xTB call."""
         with (
             patch(
                 "activelearning.applications.molecules.xtb_oracle.sf.decoder",
@@ -805,6 +841,7 @@ class TestXTBScoreFidelityRouting:
         assert math.isnan(result)
 
     def test_rdkit_geometry_failure_returns_nan(self, oracle):
+        """An exception from _write_best_rdkit_xyz (e.g. MMFF failure) returns NaN without raising."""
         with patch(
             "activelearning.applications.molecules.xtb_oracle._write_best_rdkit_xyz",
             side_effect=AttributeError("mmff failure"),
@@ -814,6 +851,7 @@ class TestXTBScoreFidelityRouting:
         assert math.isnan(result)
 
     def test_rdkit_geometry_failure_logs_compact_warning(self, oracle, caplog):
+        """An RDKit geometry failure logs a compact warning without a traceback (exc_info is None)."""
         with (
             caplog.at_level("WARNING"),
             patch(
@@ -833,6 +871,7 @@ class TestXTBScoreFidelityRouting:
         assert warning_record.exc_info is None
 
     def test_xtb_subprocess_failure_returns_nan(self, tmp_path):
+        """A RuntimeError from the xTB subprocess (non-zero return code) returns NaN and does not propagate."""
         oracle = XTBIPEAOracle(task="ea", fidelity_costs={1: 1.0}, mol_repr="smiles")
         fake_xyz = tmp_path / "neutral.xyz"
 
