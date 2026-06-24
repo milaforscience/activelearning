@@ -12,7 +12,13 @@ from pathlib import Path
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _run_with_blocked_molecule_imports(source: str) -> subprocess.CompletedProcess[str]:
+def _run_python_snippet_in_subprocess(source: str) -> subprocess.CompletedProcess[str]:
+    """Run an arbitrary Python source string in a fresh subprocess.
+
+    The repository root is prepended to ``PYTHONPATH`` so that ``activelearning``
+    is importable. Any import blocking must be done inside ``source`` itself —
+    see :func:`_blocked_imports_prelude` for the pattern used in these tests.
+    """
     env = os.environ.copy()
     existing_pythonpath = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = (
@@ -63,7 +69,7 @@ def test_core_config_import_and_branin_parse_work_without_molecule_extras() -> N
         """
     )
 
-    result = _run_with_blocked_molecule_imports(script)
+    result = _run_python_snippet_in_subprocess(script)
 
     assert result.returncode == 0, result.stderr
 
@@ -84,6 +90,6 @@ def test_building_molecule_component_raises_helpful_error_without_extras() -> No
         """
     )
 
-    result = _run_with_blocked_molecule_imports(script)
+    result = _run_python_snippet_in_subprocess(script)
 
     assert result.returncode == 0, result.stderr
