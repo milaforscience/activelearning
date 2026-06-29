@@ -159,8 +159,7 @@ class SelfiesTransformerEncoder(nn.Module):
             embed_dim,
             padding_idx=tokenizer.padding_idx,
         )
-        # +1 extra position buffer for safety (long molecules close to max_seq_len)
-        self.positional = PositionalEncoding(embed_dim, self.max_seq_len + 1, dropout)
+        self.positional = PositionalEncoding(embed_dim, self.max_seq_len, dropout)
         self.encoder_layers = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                 d_model=embed_dim,
