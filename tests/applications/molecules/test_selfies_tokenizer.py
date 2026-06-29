@@ -42,7 +42,7 @@ class TestSelfiesTokenizer:
         assert tokenizer.mask_idx == tokenizer.lookup["[MASK]"]
 
     def test_encode_selfies_shape(self, tokenizer: SelfiesTokenizer):
-        ids = tokenizer.encode_selfies(BENZENE, max_length=32)
+        ids = tokenizer.encode_selfies(BENZENE, max_mol_tokens=32)
         assert ids.shape == (32,)
         assert ids.dtype == torch.long
 
@@ -51,12 +51,14 @@ class TestSelfiesTokenizer:
         self, tokenizer: SelfiesTokenizer, selfies_string: str
     ) -> None:
         """encode_selfies pads to exact length and encodes the right real-token count."""
-        max_length = 32
+        max_mol_tokens = 32
         real_count = sf.len_selfies(selfies_string)
-        ids = tokenizer.encode_selfies(selfies_string, max_length=max_length)
+        ids = tokenizer.encode_selfies(selfies_string, max_mol_tokens=max_mol_tokens)
 
         assert (ids != tokenizer.padding_idx).sum().item() == real_count
-        assert (ids == tokenizer.padding_idx).sum().item() == max_length - real_count
+        assert (
+            ids == tokenizer.padding_idx
+        ).sum().item() == max_mol_tokens - real_count
 
     @pytest.mark.parametrize(
         ("selfies_string", "expected_distinct_count"),
@@ -73,7 +75,7 @@ class TestSelfiesTokenizer:
         expected_distinct_count: int,
     ) -> None:
         """Encoded SELFIES retain the expected number of distinct token IDs."""
-        ids = tokenizer.encode_selfies(selfies_string, max_length=32)
+        ids = tokenizer.encode_selfies(selfies_string, max_mol_tokens=32)
         non_padding_ids = ids[ids != tokenizer.padding_idx].tolist()
 
         assert len(set(non_padding_ids)) == expected_distinct_count
@@ -81,7 +83,7 @@ class TestSelfiesTokenizer:
     def test_encode_selfies_truncates_long_sequence(
         self, tokenizer: SelfiesTokenizer
     ) -> None:
-        ids = tokenizer.encode_selfies(LONG_SELFIES, max_length=16)
+        ids = tokenizer.encode_selfies(LONG_SELFIES, max_mol_tokens=16)
         assert ids.shape == (16,)
         assert (ids == tokenizer.padding_idx).sum().item() == 0
 
@@ -119,14 +121,14 @@ class TestSelfiesTokenizer:
             tokenizer.transform_batch(torch.zeros(10, dtype=torch.long))
 
     def test_batch_from_selfies_shape(self, tokenizer: SelfiesTokenizer):
-        batch = tokenizer.batch_from_selfies([BENZENE, ALANINE], max_length=64)
+        batch = tokenizer.batch_from_selfies([BENZENE, ALANINE], max_mol_tokens=64)
         assert batch.shape == (2, 66)  # 64 + 2
         assert batch.dtype == torch.long
 
     def test_batch_from_selfies_mixed_short_and_long_sequences(
         self, tokenizer: SelfiesTokenizer
     ) -> None:
-        batch = tokenizer.batch_from_selfies([BENZENE, LONG_SELFIES], max_length=16)
+        batch = tokenizer.batch_from_selfies([BENZENE, LONG_SELFIES], max_mol_tokens=16)
         assert batch.shape == (2, 18)
         assert batch.dtype == torch.long
 
@@ -138,9 +140,11 @@ class TestSelfiesTokenizer:
         self, tokenizer: SelfiesTokenizer, selfies_string: str
     ) -> None:
         """Single-sequence batches place CLS, tokens, EOS, and padding exactly."""
-        max_length = 32
+        max_mol_tokens = 32
         real_token_count = sf.len_selfies(selfies_string)
-        batch = tokenizer.batch_from_selfies([selfies_string], max_length=max_length)
+        batch = tokenizer.batch_from_selfies(
+            [selfies_string], max_mol_tokens=max_mol_tokens
+        )
         row = batch[0]
         eos_index = real_token_count + 1
 
@@ -148,12 +152,14 @@ class TestSelfiesTokenizer:
         assert int(row[eos_index]) == tokenizer.eos_idx
         assert torch.all(row[eos_index + 1 :] == tokenizer.padding_idx)
         assert int((row == tokenizer.padding_idx).sum().item()) == (
-            max_length - real_token_count
+            max_mol_tokens - real_token_count
         )
 
     def test_batch_from_selfies_device(self, tokenizer: SelfiesTokenizer):
         device = torch.device("cpu")
-        batch = tokenizer.batch_from_selfies([BENZENE], max_length=32, device=device)
+        batch = tokenizer.batch_from_selfies(
+            [BENZENE], max_mol_tokens=32, device=device
+        )
         assert batch.device.type == "cpu"
 
     def test_transform_batch_cls_eos_for_all_rows(

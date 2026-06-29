@@ -273,9 +273,8 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         return float(self._fidelity_confidences[fidelity_level])
 
     def _tokenize_strings(self, strings: list[str]) -> torch.Tensor:
-        max_len = self._encoder.max_length - 2  # tokenizer adds [CLS] + [EOS]
         return self._encoder.tokenizer.batch_from_selfies(
-            strings, max_length=max_len, device=self.device
+            strings, max_mol_tokens=self._encoder.max_mol_tokens, device=self.device
         ).to(dtype=self.dtype)
 
     def _extract_molecule_string(self, item: Candidate | Observation) -> str:

@@ -32,7 +32,7 @@ def tokenizer() -> SelfiesTokenizer:
 def encoder(tokenizer: SelfiesTokenizer) -> SelfiesTransformerEncoder:
     return SelfiesTransformerEncoder(
         tokenizer=tokenizer,
-        max_length=32,
+        max_mol_tokens=32,
         embed_dim=16,
         ff_dim=32,
         num_heads=2,
@@ -43,13 +43,13 @@ def encoder(tokenizer: SelfiesTokenizer) -> SelfiesTransformerEncoder:
 
 @pytest.fixture
 def token_batch(tokenizer: SelfiesTokenizer) -> torch.Tensor:
-    return tokenizer.batch_from_selfies([BENZENE, ALANINE], max_length=32)
+    return tokenizer.batch_from_selfies([BENZENE, ALANINE], max_mol_tokens=32)
 
 
 @pytest.fixture
 def short_token_batch(tokenizer: SelfiesTokenizer) -> torch.Tensor:
     """A batch with very short sequences: ethanol (len 3) and methane (len 1)."""
-    return tokenizer.batch_from_selfies([ETHANOL, METHANE], max_length=16)
+    return tokenizer.batch_from_selfies([ETHANOL, METHANE], max_mol_tokens=16)
 
 
 class TestPositionalEncoding:
@@ -239,9 +239,10 @@ class TestSelfiesTransformerEncoder:
             padding_positions = token_batch[row] == tokenizer.padding_idx
             assert not mask[row, padding_positions].any()
 
-    def test_max_length_attribute(self, encoder: SelfiesTransformerEncoder):
-        # max_length stored as base + 2
-        assert encoder.max_length == 32 + 2
+    def test_max_seq_len_attribute(self, encoder: SelfiesTransformerEncoder):
+        # max_seq_len = max_mol_tokens + 2
+        assert encoder.max_seq_len == 32 + 2
+        assert encoder.max_mol_tokens == 32
 
     def test_latent_dim_attribute(self, encoder: SelfiesTransformerEncoder):
         assert encoder.latent_dim == 8
@@ -249,21 +250,21 @@ class TestSelfiesTransformerEncoder:
     def test_odd_embed_dim_encoder_forward(self, tokenizer: SelfiesTokenizer):
         odd_encoder = SelfiesTransformerEncoder(
             tokenizer=tokenizer,
-            max_length=16,
+            max_mol_tokens=16,
             embed_dim=9,
             ff_dim=16,
             num_heads=1,
             num_layers=1,
             latent_dim=5,
         )
-        batch = tokenizer.batch_from_selfies([BENZENE], max_length=16)
+        batch = tokenizer.batch_from_selfies([BENZENE], max_mol_tokens=16)
         out = odd_encoder(batch)
         assert out.shape == (1, 5)
 
     def test_encode_tokens_mask_excludes_only_padding(
         self, encoder: SelfiesTransformerEncoder, tokenizer: SelfiesTokenizer
     ) -> None:
-        token_batch = tokenizer.batch_from_selfies([BENZENE], max_length=16)
+        token_batch = tokenizer.batch_from_selfies([BENZENE], max_mol_tokens=16)
         _, mask = encoder.encode_tokens(token_batch)
         # CLS at position 0 must be included.
         assert mask[0, 0].item() is True
@@ -281,7 +282,7 @@ class TestSelfiesTransformerEncoder:
     ) -> None:
         """Empty SELFIES should encode finitely and never receive MLM masks."""
         token_batch = tokenizer.batch_from_selfies(
-            [EMPTY_SELFIES, BENZENE], max_length=8
+            [EMPTY_SELFIES, BENZENE], max_mol_tokens=8
         )
 
         out = encoder(token_batch)
@@ -331,7 +332,7 @@ class TestSelfiesTransformerEncoder:
 
         Special tokens (CLS, EOS, padding) must never be masked.
         """
-        batch = tokenizer.batch_from_selfies([selfies_str], max_length=16)
+        batch = tokenizer.batch_from_selfies([selfies_str], max_mol_tokens=16)
         mask = encoder.sample_mask_positions(batch, mask_ratio=0.15)
 
         n_masked = int(mask.sum())

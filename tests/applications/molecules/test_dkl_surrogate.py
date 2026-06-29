@@ -23,7 +23,7 @@ FIDELITY_CONFIDENCES = {1: 0.25, 2: 0.5, 3: 1.0}
 
 TRAINING = SelfiesTrainingConfig(epochs=2, lr=1e-3, mask_ratio=0.15, pretrain_epochs=1)
 ENCODER_CFG = SelfiesTransformerEncoderConfig(
-    max_length=32,
+    max_mol_tokens=32,
     embed_dim=8,
     ff_dim=16,
     num_heads=2,
@@ -174,7 +174,7 @@ class TestExactSelfiesDKLSurrogate:
         assert exact_mf_surrogate.is_fitted()
         # Token IDs + fidelity column
         X, _ = exact_mf_surrogate.get_train_data()
-        assert X.shape == (3, exact_mf_surrogate._encoder.max_length + 1)
+        assert X.shape == (3, exact_mf_surrogate._encoder.max_seq_len + 1)
 
     def test_multi_fidelity_encode_candidates(
         self, exact_mf_surrogate: ExactSelfiesDKLSurrogate
@@ -185,7 +185,7 @@ class TestExactSelfiesDKLSurrogate:
         candidates = _make_mf_candidates([BENZENE, ALANINE], [2, 3])
         tokens = exact_mf_surrogate.encode_candidates(candidates)
         # Shape: (2, seq_len + 1 for fidelity)
-        assert tokens.shape == (2, exact_mf_surrogate._encoder.max_length + 1)
+        assert tokens.shape == (2, exact_mf_surrogate._encoder.max_seq_len + 1)
         # Last column should contain encoded confidence values.
         assert tokens[:, -1].tolist() == pytest.approx([0.5, 1.0])
 
@@ -573,7 +573,7 @@ class TestSelfiesKernelBatchDims:
         base_kernel = gpytorch.kernels.RBFKernel()
         kernel = SelfiesKernel(encoder, base_kernel, include_fidelity=False)
 
-        seq_len = encoder.max_length
+        seq_len = encoder.max_seq_len
         # BoTorch-style: (batch=2, q=1, seq_len)
         x = torch.zeros(2, 1, seq_len, dtype=torch.float64)
         result = kernel(x, x).evaluate()
@@ -589,7 +589,7 @@ class TestSelfiesKernelBatchDims:
         base_kernel = gpytorch.kernels.RBFKernel(ard_num_dims=gp_input_dim)
         kernel = SelfiesKernel(encoder, base_kernel, include_fidelity=True)
 
-        seq_len = encoder.max_length
+        seq_len = encoder.max_seq_len
         # Last column = encoded fidelity value; shape (batch=2, q=1, seq_len+1)
         x = torch.zeros(2, 1, seq_len + 1, dtype=torch.float64)
         x[..., -1] = 1.0  # encoded target fidelity confidence

@@ -119,9 +119,9 @@ class SelfiesTransformerEncoder(nn.Module):
     ----------
     tokenizer : SelfiesTokenizer
         Tokenizer providing vocabulary and special-token indices.
-    max_length : int
-        Base sequence length (not counting ``[CLS]`` / ``[EOS]``).
-        Internally stored as ``max_length + 2`` to accommodate those tokens.
+    max_mol_tokens : int
+        Maximum number of molecular (SELFIES) tokens, not counting the
+        ``[CLS]`` and ``[EOS]`` specials.  Stored as ``max_seq_len = max_mol_tokens + 2``.
     embed_dim : int
         Embedding and Transformer hidden dimensionality.
     ff_dim : int
@@ -139,7 +139,7 @@ class SelfiesTransformerEncoder(nn.Module):
     def __init__(
         self,
         tokenizer: SelfiesTokenizer,
-        max_length: int = 64,
+        max_mol_tokens: int = 64,
         embed_dim: int = 64,
         ff_dim: int = 256,
         num_heads: int = 8,
@@ -149,7 +149,8 @@ class SelfiesTransformerEncoder(nn.Module):
     ) -> None:
         super().__init__()
         self.tokenizer = tokenizer
-        self.max_length = max_length + 2  # +2 for [CLS] and [EOS]
+        self.max_mol_tokens: int = max_mol_tokens
+        self.max_seq_len: int = max_mol_tokens + 2  # CLS + mol tokens + EOS
         self.embed_dim = embed_dim
         self.latent_dim = latent_dim
 
@@ -158,8 +159,8 @@ class SelfiesTransformerEncoder(nn.Module):
             embed_dim,
             padding_idx=tokenizer.padding_idx,
         )
-        # +1 extra position buffer for safety (long molecules close to max_length)
-        self.positional = PositionalEncoding(embed_dim, self.max_length + 1, dropout)
+        # +1 extra position buffer for safety (long molecules close to max_seq_len)
+        self.positional = PositionalEncoding(embed_dim, self.max_seq_len + 1, dropout)
         self.encoder_layers = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                 d_model=embed_dim,
@@ -196,8 +197,8 @@ class SelfiesTransformerEncoder(nn.Module):
             tokens (including ``[CLS]`` and ``[EOS]``) that contribute to
             the pooled vector.
         """
-        if token_batch.size(1) > self.max_length:
-            token_batch = token_batch[:, : self.max_length]
+        if token_batch.size(1) > self.max_seq_len:
+            token_batch = token_batch[:, : self.max_seq_len]
 
         x = self.embedding(token_batch) * math.sqrt(self.embed_dim)
         x = self.positional(x)
@@ -243,8 +244,8 @@ class SelfiesTransformerEncoder(nn.Module):
         Tensor
             Shape ``(B, seq_len, vocab_size)``.
         """
-        if token_batch.size(1) > self.max_length:
-            token_batch = token_batch[:, : self.max_length]
+        if token_batch.size(1) > self.max_seq_len:
+            token_batch = token_batch[:, : self.max_seq_len]
 
         x = self.embedding(token_batch) * math.sqrt(self.embed_dim)
         x = self.positional(x)

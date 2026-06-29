@@ -35,8 +35,9 @@ class SelfiesTransformerEncoderConfig(BaseModel):
     ----------
     vocab : list[str]
         SELFIES alphabet.  Defaults to :data:`~activelearning.applications.molecules.constants.SELFIES_VOCAB_SMALL`.
-    max_length : int
-        Base sequence length (special tokens added internally).
+    max_mol_tokens : int
+        Maximum number of molecular (SELFIES) tokens per sequence, not
+        counting the ``[CLS]`` and ``[EOS]`` specials added internally.
     embed_dim : int
         Token embedding and Transformer hidden dimensionality.
     ff_dim : int
@@ -53,7 +54,7 @@ class SelfiesTransformerEncoderConfig(BaseModel):
 
     type: Literal["SelfiesTransformerEncoder"] = "SelfiesTransformerEncoder"
     vocab: list[str] = Field(default_factory=lambda: list(SELFIES_VOCAB_SMALL))
-    max_length: int = 64
+    max_mol_tokens: int = 64
     embed_dim: int = 64
     ff_dim: int = 256
     num_heads: int = 8
@@ -73,7 +74,7 @@ class SelfiesTransformerEncoderConfig(BaseModel):
         tokenizer = SelfiesTokenizer(selfies_vocab=self.vocab)
         return SelfiesTransformerEncoder(
             tokenizer=tokenizer,
-            max_length=self.max_length,
+            max_mol_tokens=self.max_mol_tokens,
             embed_dim=self.embed_dim,
             ff_dim=self.ff_dim,
             num_heads=self.num_heads,

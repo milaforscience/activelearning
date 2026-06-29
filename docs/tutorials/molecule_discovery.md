@@ -272,7 +272,7 @@ The main molecule-specific fields are:
 
 | Field | Meaning |
 |-------|---------|
-| `surrogate.encoder.max_length` | Maximum SELFIES token length before special tokens. |
+| `surrogate.encoder.max_mol_tokens` | Maximum number of molecular (SELFIES) tokens before special tokens. |
 | `surrogate.encoder.latent_dim` | Size of the learned molecule embedding passed to the GP. |
 | `surrogate.multi_fidelity` | Whether to append fidelity to the surrogate features. |
 | `surrogate.target_fidelity` | Fidelity level used when MF acquisitions project candidates to the target objective. |
@@ -291,7 +291,7 @@ The main molecule-specific fields are:
 | `oracle.molecule_visualization_limit` | Maximum number of molecules shown per logged grid. |
 
 !!! warning "Sequence length and oracle cost"
-    Increasing `sampler.conf.env.max_length` or `surrogate.encoder.max_length` expands the molecular search space quickly. Start with the provided default values, verify that xTB runs successfully, and only then increase sequence length or per-round budget.
+    Increasing `sampler.conf.env.max_length` or `surrogate.encoder.max_mol_tokens` expands the molecular search space quickly. Start with the provided default values, verify that xTB runs successfully, and only then increase sequence length or per-round budget.
 
 ## **What comes next**
 

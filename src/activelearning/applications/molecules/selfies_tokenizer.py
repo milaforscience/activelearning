@@ -68,29 +68,30 @@ class SelfiesTokenizer:
         """Total vocabulary size including special tokens."""
         return len(self.full_vocab)
 
-    def encode_selfies(self, selfies_string: str, max_length: int) -> Tensor:
+    def encode_selfies(self, selfies_string: str, max_mol_tokens: int) -> Tensor:
         """Convert a SELFIES string into a fixed-length tensor of base token IDs.
 
         Parameters
         ----------
         selfies_string : str
             A valid SELFIES string, e.g. ``"[C][=C][C]"``.
-        max_length : int
-            Pad or truncate to this many tokens (not counting special tokens
-            added later by :meth:`transform_batch`).
+        max_mol_tokens : int
+            Pad or truncate to this many molecular tokens.  Does *not* include
+            the ``[CLS]`` / ``[EOS]`` special tokens added later by
+            :meth:`transform_batch`.
 
         Returns
         -------
         Tensor
-            Shape ``(max_length,)`` of dtype ``torch.long``.
+            Shape ``(max_mol_tokens,)`` of dtype ``torch.long``.
         """
         raw_ids = sf.selfies_to_encoding(
             selfies=selfies_string,
             vocab_stoi=self.base_lookup,
-            pad_to_len=max_length,
+            pad_to_len=max_mol_tokens,
             enc_type="label",
         )
-        return torch.tensor(raw_ids[:max_length], dtype=torch.long)
+        return torch.tensor(raw_ids[:max_mol_tokens], dtype=torch.long)
 
     def transform_batch(self, raw_batch: Tensor) -> Tensor:
         """Augment a batch of raw padded sequences to encoder input format.
@@ -103,12 +104,12 @@ class SelfiesTokenizer:
         Parameters
         ----------
         raw_batch : Tensor
-            Shape ``(B, max_length)`` of dtype ``torch.long``.
+            Shape ``(B, max_mol_tokens)`` of dtype ``torch.long``.
 
         Returns
         -------
         Tensor
-            Shape ``(B, max_length + 2)`` of dtype ``torch.long``.
+            Shape ``(B, max_mol_tokens + 2)`` of dtype ``torch.long``.
 
         Raises
         ------
@@ -153,7 +154,7 @@ class SelfiesTokenizer:
     def batch_from_selfies(
         self,
         selfies_list: Sequence[str],
-        max_length: int,
+        max_mol_tokens: int,
         device: Optional[torch.device] = None,
     ) -> Tensor:
         """Tokenize and transform a list of SELFIES strings into a batched tensor.
@@ -162,18 +163,20 @@ class SelfiesTokenizer:
         ----------
         selfies_list : Sequence[str]
             SELFIES strings to tokenize.
-        max_length : int
-            Base sequence length before special tokens.
+        max_mol_tokens : int
+            Maximum number of molecular tokens per sequence, not counting the
+            ``[CLS]`` and ``[EOS]`` special tokens added by
+            :meth:`transform_batch`.
         device : torch.device, optional
             Target device for the output tensor.
 
         Returns
         -------
         Tensor
-            Shape ``(len(selfies_list), max_length + 2)`` of dtype ``torch.long``.
+            Shape ``(len(selfies_list), max_mol_tokens + 2)`` of dtype ``torch.long``.
         """
         raw = torch.stack(
-            [self.encode_selfies(s, max_length) for s in selfies_list], dim=0
+            [self.encode_selfies(s, max_mol_tokens) for s in selfies_list], dim=0
         )
         batch = self.transform_batch(raw)
         if device is not None:
