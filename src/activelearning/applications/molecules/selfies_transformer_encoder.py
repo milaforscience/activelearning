@@ -263,7 +263,9 @@ class SelfiesTransformerEncoder(nn.Module):
         token_batch : Tensor
             Shape ``(B, seq_len)`` of dtype ``torch.long``.
         mask_ratio : float
-            Fraction of valid tokens to mask per sequence.
+            Fraction of valid tokens to mask per sequence.  Sequences where
+            ``int(n_valid * mask_ratio) == 0`` are left unmasked and will
+            contribute zero MLM loss.
 
         Returns
         -------
@@ -279,8 +281,10 @@ class SelfiesTransformerEncoder(nn.Module):
         mask = torch.zeros_like(token_batch, dtype=torch.bool)
         for row in range(token_batch.size(0)):
             valid_positions = torch.where(valid[row])[0]
-            n_mask = max(1, int(len(valid_positions) * mask_ratio))
             if len(valid_positions) == 0:
+                continue
+            n_mask = int(len(valid_positions) * mask_ratio)
+            if n_mask == 0:
                 continue
             perm = valid_positions[
                 torch.randperm(len(valid_positions), device=token_batch.device)

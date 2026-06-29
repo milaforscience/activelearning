@@ -196,10 +196,9 @@ class TestSelfiesTransformerEncoder:
     def test_mlm_loss_zero_mask_ratio_handled(
         self, encoder: SelfiesTransformerEncoder, token_batch: torch.Tensor
     ) -> None:
-        """Zero mask ratio should still mask one token and yield positive loss."""
-        # mask_ratio=0 → n_mask = max(1, 0) = 1; should still succeed
+        """Zero mask ratio → no tokens masked → zero loss (graceful skip)."""
         loss = encoder.mlm_loss(token_batch, mask_ratio=0.0)
-        assert float(loss) > 0.0
+        assert float(loss) == 0.0
 
     def test_sample_mask_positions_ratio(
         self,
@@ -328,7 +327,7 @@ class TestSelfiesTransformerEncoder:
         selfies_str: str,
         expected_valid_tokens: int,
     ) -> None:
-        """max(1, …) floor ensures at least 1 mask even on minimal sequences.
+        """Strict proportional masking: short sequences where int(n * ratio) == 0 are skipped.
 
         Special tokens (CLS, EOS, padding) must never be masked.
         """
@@ -336,7 +335,7 @@ class TestSelfiesTransformerEncoder:
         mask = encoder.sample_mask_positions(batch, mask_ratio=0.15)
 
         n_masked = int(mask.sum())
-        expected_n = max(1, int(expected_valid_tokens * 0.15))
+        expected_n = int(expected_valid_tokens * 0.15)
         assert n_masked == expected_n
 
         # CLS at position 0 must never be masked
