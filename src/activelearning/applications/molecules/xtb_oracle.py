@@ -50,7 +50,10 @@ from activelearning.applications.molecules.plotting import (
     build_xtb_query_molecule_figure,
 )
 
-# CODATA 2018 Hartree → eV
+# xTB reports energies in atomic units (Hartree), but ionization potential and
+# electron affinity are conventionally expressed in eV. This factor is the
+# CODATA 2018 internationally recommended value of one Hartree in eV
+# (27.211386245… eV), truncated to six significant figures.
 _HARTREE_TO_EV: float = 27.2114
 
 logger = logging.getLogger(__name__)
