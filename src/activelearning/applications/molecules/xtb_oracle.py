@@ -145,6 +145,17 @@ def _write_best_rdkit_xyz(
     -------
     Path
         The written XYZ file path (same as ``xyz_path``).
+
+    Raises
+    ------
+    ValueError
+        If ``smiles`` cannot be parsed by RDKit, or if ``ff`` is neither
+        ``"mmff"`` nor ``"uff"``.
+    RuntimeError
+        If RDKit's distance-geometry embedder produces zero conformers (see
+        inline comment below for known causes), if the requested force-field
+        lacks parameters for the molecule, or if force-field construction fails
+        after optimization.
     """
     # RDKit emits atom-typing and sanitization diagnostics directly to stderr.
     # Suppress those here and surface compact Python exceptions instead.
@@ -163,6 +174,11 @@ def _write_best_rdkit_xyz(
         )
 
     num_conformers_generated = mol_h.GetNumConformers()
+    # This can happen even for valid SMILES: the embedder solves a constraint
+    # satisfaction problem over 3-D atom positions and may find no feasible
+    # solution within `max_attempts` restarts (over-constrained geometry), have
+    # no lookup entry for an unusual atom type, or produce candidates that are
+    # all pruned by `prune_rms_thresh`. The error is propagated to the caller.
     if num_conformers_generated == 0:
         raise RuntimeError(f"RDKit failed to generate conformers for {smiles!r}")
 
