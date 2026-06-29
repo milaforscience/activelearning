@@ -234,7 +234,37 @@ def _run_xtb(
     output_path: Path,
     cwd: Optional[Path] = None,
 ) -> subprocess.CompletedProcess:
-    """Run ``xtb <xyz_path> <args...>`` and capture output to a file."""
+    """Run ``xtb <xyz_path> <args...>`` and capture output to a file.
+
+    Both stdout and stderr are redirected to ``output_path`` so that the full
+    xTB log is preserved for inspection on failure.
+
+    Parameters
+    ----------
+    xyz_path : Path
+        XYZ geometry file passed as the first positional argument to xTB.
+    args : Sequence[str]
+        Additional CLI arguments forwarded verbatim (e.g. ``["--gfn", "2",
+        "--vip"]``).
+    output_path : Path
+        File to which combined stdout/stderr is written.
+    cwd : Path, optional
+        Working directory for the subprocess.  xTB writes auxiliary output
+        files (``xtbopt.xyz``, ``charges``, etc.) relative to this path.
+        Defaults to the current working directory when ``None``.
+
+    Returns
+    -------
+    subprocess.CompletedProcess
+        The completed process object (return code is always 0 on success).
+
+    Raises
+    ------
+    RuntimeError
+        If the ``xtb`` executable cannot be found on ``PATH``, or if xTB
+        exits with a non-zero return code (the last 500 characters of the
+        log are included in the error message).
+    """
     command = ["xtb", str(xyz_path), *args]
     try:
         with open(output_path, "w") as fh:
