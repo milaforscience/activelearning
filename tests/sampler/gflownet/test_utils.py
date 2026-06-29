@@ -39,7 +39,7 @@ class _StubMFEnv(MultiFidelityGFlowNetEnvWrapperBase):
 
 def _make_mf_proxy(
     coords: list[list[float]],
-    fidelities: list[int],
+    fidelity_indices: list[int],
     idx_base: int = 0,
     idx_fid: int = 1,
 ) -> list[dict]:
@@ -49,7 +49,7 @@ def _make_mf_proxy(
             idx_base: torch.tensor(c, dtype=torch.float32),
             idx_fid: torch.tensor([f], dtype=torch.float32),
         }
-        for c, f in zip(coords, fidelities)
+        for c, f in zip(coords, fidelity_indices)
     ]
 
 
@@ -130,7 +130,7 @@ class TestProxyStatesToCandidatesSingleFidelity:
 class TestProxyStatesToCandidatesMultiFidelity:
     def test_extracts_coords_and_fidelity(self):
         # Raw fidelities from real Choice env are 1-based (1..N).
-        proxy = _make_mf_proxy([[0.1, 0.2], [0.3, 0.4]], fidelities=[1, 2])
+        proxy = _make_mf_proxy([[0.1, 0.2], [0.3, 0.4]], fidelity_indices=[1, 2])
         env = _StubMFEnv(proxy_return=proxy, idx_base_env=0, idx_fidelity=1)
         result = proxy_states_to_candidates(proxy, env)
         assert len(result) == 2
@@ -141,7 +141,9 @@ class TestProxyStatesToCandidatesMultiFidelity:
 
     def test_fidelity_first_layout(self):
         """Works when idx_fidelity=0 and idx_base_env=1 (FidFirst wrapper)."""
-        proxy = _make_mf_proxy([[0.5, 0.6]], fidelities=[2], idx_base=1, idx_fid=0)
+        proxy = _make_mf_proxy(
+            [[0.5, 0.6]], fidelity_indices=[2], idx_base=1, idx_fid=0
+        )
         env = _StubMFEnv(proxy_return=proxy, idx_base_env=1, idx_fidelity=0)
         result = proxy_states_to_candidates(proxy, env)
         assert result[0].x == pytest.approx((0.5, 0.6), abs=1e-6)
@@ -155,13 +157,13 @@ class TestProxyStatesToCandidatesMultiFidelity:
         assert result[0].fidelity == 3
 
     def test_returns_candidate_objects(self):
-        proxy = _make_mf_proxy([[0.0, 1.0]], fidelities=[1])
+        proxy = _make_mf_proxy([[0.0, 1.0]], fidelity_indices=[1])
         env = _StubMFEnv(proxy_return=proxy)
         result = proxy_states_to_candidates(proxy, env)
         assert all(isinstance(c, Candidate) for c in result)
 
     def test_coordinates_are_python_floats(self):
-        proxy = _make_mf_proxy([[1.0, 2.0]], fidelities=[1])
+        proxy = _make_mf_proxy([[1.0, 2.0]], fidelity_indices=[1])
         env = _StubMFEnv(proxy_return=proxy)
         result = proxy_states_to_candidates(proxy, env)
         assert all(isinstance(v, float) for v in result[0].x)
@@ -182,7 +184,7 @@ class TestProxyStatesToCandidatesMultiFidelity:
         """
         # Raw fidelities [1, 2, 3] simulate real Choice env output.
         proxy = _make_mf_proxy(
-            [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]], fidelities=[1, 2, 3]
+            [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]], fidelity_indices=[1, 2, 3]
         )
         env = _StubMFEnv(proxy_return=proxy, idx_base_env=0, idx_fidelity=1)
         result = proxy_states_to_candidates(proxy, env, fidelity_map=[1, 2, 3])
@@ -195,7 +197,7 @@ class TestProxyStatesToCandidatesMultiFidelity:
 
         Raw indices 1, 2 (Choice env) are mapped to fidelity_map[0], fidelity_map[1].
         """
-        proxy = _make_mf_proxy([[0.1, 0.2], [0.3, 0.4]], fidelities=[1, 2])
+        proxy = _make_mf_proxy([[0.1, 0.2], [0.3, 0.4]], fidelity_indices=[1, 2])
         env = _StubMFEnv(proxy_return=proxy, idx_base_env=0, idx_fidelity=1)
         result = proxy_states_to_candidates(proxy, env, fidelity_map=[5, 10])
         assert result[0].fidelity == 5
@@ -207,7 +209,7 @@ class TestProxyStatesToCandidatesMultiFidelity:
         Raw 1-based indices from Choice env are remapped via fidelity_map.
         """
         proxy = _make_mf_proxy(
-            [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]], fidelities=[1, 2, 3]
+            [[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]], fidelity_indices=[1, 2, 3]
         )
         env = _StubMFEnv(proxy_return=proxy, idx_base_env=0, idx_fidelity=1)
         fidelity_map = [7, 42, 100]
@@ -218,7 +220,7 @@ class TestProxyStatesToCandidatesMultiFidelity:
 
     def test_fidelity_map_none_returns_raw_index(self):
         """When fidelity_map=None, the raw 1-based index is returned unchanged."""
-        proxy = _make_mf_proxy([[0.1, 0.2], [0.3, 0.4]], fidelities=[1, 2])
+        proxy = _make_mf_proxy([[0.1, 0.2], [0.3, 0.4]], fidelity_indices=[1, 2])
         env = _StubMFEnv(proxy_return=proxy, idx_base_env=0, idx_fidelity=1)
         result = proxy_states_to_candidates(proxy, env, fidelity_map=None)
         assert result[0].fidelity == 1

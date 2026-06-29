@@ -44,7 +44,7 @@ class MultiFidelityGFlowNetEnvWrapperBase(CompositeBase, ABC):
     def get_states_base_and_fidelities(
         self, states: Sequence
     ) -> Tuple[List[Any], List[int]]:
-        """Retrieves the states of the base env and the fidelities of a batch of
+        """Retrieves the states of the base env and the fidelity indices of a batch of
         states.
 
         Parameters
@@ -56,21 +56,21 @@ class MultiFidelityGFlowNetEnvWrapperBase(CompositeBase, ABC):
         -------
         states_base : List[Any]
             The states of the base environment in the batch.
-        fidelities : List[int]
+        fidelity_indices : List[int]
             The raw fidelity index from the ``Choice`` sub-environment for each
             state. Values are **1-based** (``1..n_fidelities``); ``0`` indicates
             the uncommitted source state, which should not appear in terminating
             states.
         """
         states_base = []
-        fidelities = []
+        fidelity_indices = []
         for state in states:
             states_base.append(self._get_substate(state, self.idx_base_env))
-            fidelities.append(self._get_substate(state, self.idx_fidelity)[0])
-        return states_base, fidelities
+            fidelity_indices.append(self._get_substate(state, self.idx_fidelity)[0])
+        return states_base, fidelity_indices
 
     def get_state_base_and_fidelity(self, state: Any = None) -> Tuple[Any, int]:
-        """Retrieves the state of the base env and the fidelity of a state.
+        """Retrieves the state of the base env and the fidelity index of a state.
 
         This method constructs a dummy batch with the input state and calls
         ``get_states_base_and_fidelities()``; then returns the first element of the
@@ -85,13 +85,13 @@ class MultiFidelityGFlowNetEnvWrapperBase(CompositeBase, ABC):
         -------
         state_base : Any
             The state of the base environment.
-        fidelity : int
+        fidelity_index : int
             The raw fidelity index from the ``Choice`` sub-environment.
             **1-based**: values are in ``1..n_fidelities`` for committed states.
         """
         state = self._get_state(state)
-        states_base, fidelities = self.get_states_base_and_fidelities([state])
-        return states_base[0], fidelities[0]
+        states_base, fidelity_indices = self.get_states_base_and_fidelities([state])
+        return states_base[0], fidelity_indices[0]
 
 
 class MultiFidelityGFlowNetEnvWrapper(SetFix, MultiFidelityGFlowNetEnvWrapperBase):

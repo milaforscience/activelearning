@@ -191,22 +191,22 @@ def test__get_states_base_and_fidelities_returns_expected(
     n_states = 10
     states = []
     states_base_expected = []
-    fidelities_expected = []
+    fidelity_indices_expected = []
     for _ in range(n_states):
         env.get_random_states(n_states=1)
         states.append(env.state)
         states_base_expected.append(env.env_base.state)
         fidelity = env.env_fidelity.state[0]
         assert fidelity in range(n_fidelities + 1)
-        fidelities_expected.append(fidelity)
+        fidelity_indices_expected.append(fidelity)
 
     # Retrieve base states and fidelities using env wrapper method
-    states_base, fidelities = env.get_states_base_and_fidelities(states)
+    states_base, fidelity_indices = env.get_states_base_and_fidelities(states)
 
     # Check equality
     for state, state_exp in zip(states_base, states_base_expected):
         assert env.env_base.equal(state, state_exp)
-    assert fidelities == fidelities_expected
+    assert fidelity_indices == fidelity_indices_expected
 
 
 @pytest.mark.parametrize(
@@ -242,11 +242,11 @@ def test__get_state_base_and_fidelity_returns_expected(
     for _ in range(n_states):
         env.get_random_states(n_states=1)
         state_base_expected = env.env_base.state
-        fidelity_expected = env.env_fidelity.state[0]
-        assert fidelity_expected in range(n_fidelities + 1)
-        state_base, fidelity = env.get_state_base_and_fidelity(env.state)
+        fidelity_index_expected = env.env_fidelity.state[0]
+        assert fidelity_index_expected in range(n_fidelities + 1)
+        state_base, fidelity_index = env.get_state_base_and_fidelity(env.state)
         assert env.env_base.equal(state_base, state_base_expected)
-        assert fidelity == fidelity_expected
+        assert fidelity_index == fidelity_index_expected
 
 
 @pytest.mark.parametrize(
