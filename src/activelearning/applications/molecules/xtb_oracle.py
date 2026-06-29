@@ -516,6 +516,12 @@ class XTBIPEAOracle(MultiFidelityOracle):
             raise ValueError(f"task must be 'ea' or 'ip', got {task!r}")
         if not fidelity_costs:
             raise ValueError("fidelity_costs must define at least one fidelity.")
+        invalid_fidelities = sorted(set(fidelity_costs) - {1, 2, 3})
+        if invalid_fidelities:
+            raise ValueError(
+                f"fidelity_costs keys must be a subset of {{1, 2, 3}}, "
+                f"got unsupported fidelities: {invalid_fidelities}."
+            )
         if molecule_visualization_limit < 1:
             raise ValueError("molecule_visualization_limit must be at least 1.")
 
