@@ -111,6 +111,11 @@ def _decode_to_smiles(molecule: str, mol_repr: str = "selfies") -> str:
     str
         SMILES string. May be empty when a syntactically valid SELFIES string
         collapses to the empty molecule during decoding.
+
+    Raises
+    ------
+    ValueError
+        If ``mol_repr`` is not ``"selfies"`` or ``"smiles"``.
     """
     if mol_repr == "selfies":
         smiles = sf.decoder(molecule)
@@ -127,7 +132,7 @@ def _write_best_rdkit_xyz(
     conformer_cfg: ConformerConfig,
     ff: str = "mmff",
 ) -> Path:
-    """Generate RDKit conformers, optimise with a force field, and write the
+    """Generate RDKit conformers, optimize with a force field, and write the
     lowest-energy conformer to an XYZ file.
 
     Parameters
@@ -298,15 +303,32 @@ def _run_xtb_optimize(
     """Run ``xtb --opt`` geometry optimisation in ``xyz_path.parent``.
 
     xtb writes ``xtbopt.xyz`` (converged) or ``xtblast.xyz`` (not converged)
-    to the working directory.  This function renames whichever exists to a
-    stable name and returns ``(optimised_xyz, log_path)``.
+    to the working directory. This function renames whichever exists to a
+    stable name and returns ``(optimized_xyz, log_path)``.
+
+    Parameters
+    ----------
+    xyz_path : Path
+        XYZ geometry file to optimize.  The working directory is set to
+        ``xyz_path.parent`` so that xtb output files land alongside it.
+    gfn_version : int
+        GFN-xTB parametrisation passed to ``--gfn``.
+    charge : int, optional
+        Formal molecular charge passed via ``--chrg``. Omitted when ``None``.
 
     Returns
     -------
-    optimised_xyz : Path
-        Path to the optimised XYZ geometry.
+    optimized_xyz : Path
+        Path to the optimized XYZ geometry. Falls back to ``xyz_path``
+        unchanged if xtb produced neither ``xtbopt.xyz`` nor ``xtblast.xyz``.
     log_path : Path
         Path to the xtb output log.
+
+    Raises
+    ------
+    RuntimeError
+        Propagated from :func:`_run_xtb` if the ``xtb`` executable is not
+        found or exits with a non-zero return code.
     """
     workdir = xyz_path.parent
     log_path = workdir / f"{xyz_path.stem}_opt.out"
@@ -352,6 +374,13 @@ def _parse_vertical_ipea(output_text: str, task: str) -> float:
     -------
     float
         The parsed value in eV.
+
+    Raises
+    ------
+    ValueError
+        If ``task`` is not ``"ea"`` or ``"ip"``.
+    RuntimeError
+        If the expected pattern is not found in ``output_text``.
     """
     numeric_pattern = r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)"
     if task == "ea":
@@ -385,6 +414,11 @@ def _parse_total_energy(output_text: str) -> float:
     -------
     float
         Energy in Hartree.
+
+    Raises
+    ------
+    RuntimeError
+        If no ``TOTAL ENERGY`` line is found in ``output_text``.
     """
     matches = re.findall(
         r"TOTAL ENERGY\s+([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)",
@@ -429,7 +463,7 @@ class XTBIPEAOracle(MultiFidelityOracle):
     fidelity_costs : dict[int, float]
         Computational cost per sample for each fidelity level.
     fidelity_confidences : dict[int, float], optional
-        Confidence value in ``[0, 1]``.  Defaults to costs normalised by max.
+        Confidence value in ``[0, 1]``.  Defaults to costs normalized by max.
     gfn_version : int
         GFN-xTB parametrisation passed to ``--gfn`` (default: 2).
     ff : str
@@ -520,7 +554,22 @@ class XTBIPEAOracle(MultiFidelityOracle):
     # ------------------------------------------------------------------
 
     def query(self, candidates: Sequence[Candidate]) -> list[Observation]:
-        """Evaluate candidates with xtb at the fidelity specified per-candidate."""
+        """Evaluate candidates with xtb at the fidelity specified per-candidate.
+
+        Parameters
+        ----------
+        candidates : Sequence[Candidate]
+            Candidates to evaluate.  Each must carry a ``fidelity`` field and
+            a molecule string in either ``candidate.x`` or
+            ``candidate.metadata["raw"]``.
+
+        Returns
+        -------
+        list[Observation]
+            One :class:`~activelearning.utils.types.Observation` per candidate,
+            preserving input order.  Scores are ``NaN`` for molecules that fail
+            during geometry construction or xtb evaluation.
+        """
         observations: list[Observation] = []
         for candidate in candidates:
             fidelity = self._validate_candidate_fidelity(
@@ -545,7 +594,27 @@ class XTBIPEAOracle(MultiFidelityOracle):
     # ------------------------------------------------------------------
 
     def _extract_molecule_string(self, candidate: Candidate) -> str:
-        """Return the molecules string from a candidate."""
+        """Return the molecule string from a candidate.
+
+        Checks ``candidate.x`` first; if it is not a string, falls back to
+        ``candidate.metadata["raw"]``.
+
+        Parameters
+        ----------
+        candidate : Candidate
+            The candidate whose molecule string is to be extracted.
+
+        Returns
+        -------
+        str
+            The molecule string in ``self._mol_repr`` format.
+
+        Raises
+        ------
+        ValueError
+            If ``candidate.x`` is not a string and ``candidate.metadata``
+            does not contain a ``"raw"`` key.
+        """
         if isinstance(candidate.x, str):
             return candidate.x
         if candidate.metadata is not None and "raw" in candidate.metadata:
@@ -560,7 +629,16 @@ class XTBIPEAOracle(MultiFidelityOracle):
         candidates: Sequence[Candidate],
         observations: Sequence[Observation],
     ) -> None:
-        """Log a capped RDKit grid of queried molecules, if a logger is bound."""
+        """Log a capped RDKit grid of queried molecules, if a logger is bound.
+
+        Parameters
+        ----------
+        candidates : Sequence[Candidate]
+            Candidates passed to the most recent :meth:`query` call.
+        observations : Sequence[Observation]
+            Corresponding observations, used to rank molecules by score before
+            applying the visualisation cap.
+        """
         if self.logger is None:
             return
 
@@ -581,7 +659,7 @@ class XTBIPEAOracle(MultiFidelityOracle):
 
         Follows the MF-GFN paper fidelity ladder:
         1 → vertical score on MMFF geometry
-        2 → vertical score on xtb-optimised neutral geometry
+        2 → vertical score on xtb-optimized neutral geometry
         3 → adiabatic score (neutral opt + ionic opt)
 
         Parameters
@@ -595,6 +673,11 @@ class XTBIPEAOracle(MultiFidelityOracle):
         -------
         float
             IP or EA score in eV.
+
+        Raises
+        ------
+        ValueError
+            If ``fidelity`` is not 1, 2, or 3.
         """
         if fidelity not in {1, 2, 3}:
             raise ValueError(f"fidelity must be 1, 2, or 3, got {fidelity!r}")
@@ -623,14 +706,14 @@ class XTBIPEAOracle(MultiFidelityOracle):
                 if fidelity == 1:
                     return self._vertical_score(neutral_xyz)
 
-                # Fidelity 2+: optimise the neutral geometry with xtb
+                # Fidelity 2+: optimize the neutral geometry with xtb
                 neutral_xtb_xyz, neutral_log = _run_xtb_optimize(
                     neutral_xyz, gfn_version=self._gfn_version
                 )
                 if fidelity == 2:
                     return self._vertical_score(neutral_xtb_xyz)
 
-                # Fidelity 3: also optimise the ionic geometry
+                # Fidelity 3: also optimize the ionic geometry
                 ionic_charge = -1 if self._task == "ea" else 1
                 ionic_xtb_xyz, ionic_log = _run_xtb_optimize(
                     neutral_xtb_xyz,
@@ -654,7 +737,23 @@ class XTBIPEAOracle(MultiFidelityOracle):
             return float("nan")
 
     def _objective_score(self, molecule: str, fidelity: int) -> float:
-        """Return the active-learning objective value for one molecule query."""
+        """Return the active-learning objective value for one molecule query.
+
+        Applies negation when ``self._negate_score`` is ``True`` (e.g. for IP,
+        where the acquisition loop maximizes but lower IP is preferred).
+
+        Parameters
+        ----------
+        molecule : str
+            Molecule in ``self._mol_repr`` format.
+        fidelity : int
+            Fidelity level passed to :meth:`_xtb_score`.
+
+        Returns
+        -------
+        float
+            Raw or negated IP/EA score in eV, or ``NaN`` on evaluation failure.
+        """
 
         raw_score = self._xtb_score(molecule, fidelity)
         return -raw_score if self._negate_score else raw_score
@@ -664,6 +763,28 @@ class XTBIPEAOracle(MultiFidelityOracle):
         per_fidelity_num_conformers: Optional[dict[int, int]],
         fidelity_costs: dict[int, float],
     ) -> dict[int, int]:
+        """Validate and normalize the per-fidelity conformer count overrides.
+
+        Parameters
+        ----------
+        per_fidelity_num_conformers : dict[int, int] or None
+            Mapping from fidelity level to conformer count, or ``None`` to
+            use the global :class:`ConformerConfig` for all fidelities.
+        fidelity_costs : dict[int, float]
+            The fidelity keys that the oracle was configured with, used to
+            detect unknown fidelity keys in ``per_fidelity_num_conformers``.
+
+        Returns
+        -------
+        dict[int, int]
+            A validated copy of the input, or an empty dict when ``None``.
+
+        Raises
+        ------
+        ValueError
+            If any key in ``per_fidelity_num_conformers`` is not present in
+            ``fidelity_costs``, or if any conformer count is less than 1.
+        """
         if per_fidelity_num_conformers is None:
             return {}
         unknown_fidelities = sorted(
@@ -691,6 +812,27 @@ class XTBIPEAOracle(MultiFidelityOracle):
         fidelity_costs: dict[int, float],
         fidelity_confidences: Optional[dict[int, float]],
     ) -> dict[int, float]:
+        """Resolve fidelity confidence values, defaulting to cost-normalized fractions.
+
+        Parameters
+        ----------
+        fidelity_costs : dict[int, float]
+            Cost per sample for each fidelity level.
+        fidelity_confidences : dict[int, float] or None
+            Explicit confidence values in ``[0, 1]``.  When ``None``, each
+            fidelity's confidence is set to ``cost / max_cost``.
+
+        Returns
+        -------
+        dict[int, float]
+            Confidence value for every fidelity key in ``fidelity_costs``.
+
+        Raises
+        ------
+        ValueError
+            If ``fidelity_confidences`` is provided but its keys do not match
+            those of ``fidelity_costs`` exactly.
+        """
         if fidelity_confidences is None:
             max_cost = max(fidelity_costs.values())
             return {fid: cost / max_cost for fid, cost in fidelity_costs.items()}
@@ -710,6 +852,22 @@ class XTBIPEAOracle(MultiFidelityOracle):
         return dict(fidelity_confidences)
 
     def _conformer_cfg_for_fidelity(self, fidelity: int) -> ConformerConfig:
+        """Return the :class:`ConformerConfig` to use for a given fidelity level.
+
+        If ``per_fidelity_num_conformers`` provides an override for this
+        fidelity, returns a copy of the global config with ``num_conformers``
+        replaced; otherwise returns the global config unchanged.
+
+        Parameters
+        ----------
+        fidelity : int
+            Fidelity level for which to retrieve the config.
+
+        Returns
+        -------
+        ConformerConfig
+            Conformer generation settings for the requested fidelity.
+        """
         num_conformers = self._per_fidelity_num_conformers.get(fidelity)
         if num_conformers is None:
             return self._conformer_cfg
@@ -727,6 +885,12 @@ class XTBIPEAOracle(MultiFidelityOracle):
         -------
         float
             Vertical IP or EA in eV.
+
+        Raises
+        ------
+        RuntimeError
+            Propagated from :func:`_run_xtb` (executable missing or non-zero
+            exit) or :func:`_parse_vertical_ipea` (pattern not found in log).
         """
         output_path = xyz_path.parent / f"{xyz_path.stem}_ipea.out"
         flag = "--vea" if self._task == "ea" else "--vip"
@@ -755,6 +919,12 @@ class XTBIPEAOracle(MultiFidelityOracle):
         -------
         float
             Adiabatic IP or EA in eV, after correction.
+
+        Raises
+        ------
+        RuntimeError
+            Propagated from :func:`_parse_total_energy` if a ``TOTAL ENERGY``
+            line is absent from either log file.
         """
         neutral_energy = _parse_total_energy(neutral_log.read_text())
         ionic_energy = _parse_total_energy(ionic_log.read_text())
