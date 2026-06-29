@@ -162,15 +162,14 @@ def _build_molecule_panel(
 
 
 def _extract_raw_molecule(candidate: Candidate, observation: Observation) -> str:
-    """Extract the raw molecule string carried by a candidate/observation pair."""
+    """Extract the molecule string from a candidate/observation pair.
+
+    Reads ``candidate.x`` first; falls back to ``observation.x``.
+    """
     if isinstance(candidate.x, str):
         return candidate.x
-    if candidate.metadata is not None and "raw" in candidate.metadata:
-        return str(candidate.metadata["raw"])
     if isinstance(observation.x, str):
         return observation.x
-    if observation.metadata is not None and "raw" in observation.metadata:
-        return str(observation.metadata["raw"])
     return str(candidate.x)
 
 

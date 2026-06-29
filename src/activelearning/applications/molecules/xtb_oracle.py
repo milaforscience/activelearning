@@ -452,9 +452,8 @@ class XTBIPEAOracle(MultiFidelityOracle):
         ``TOTAL ENERGY`` differences in the optimisation logs, minus
         the empirical ``correction_factor``.
 
-    Handles both the *DKL path* (``candidate.x`` is a SELFIES string) and the
-    *pre-embed path* (``candidate.x`` is a tensor, original string in
-    ``candidate.metadata["raw"]``).
+    Each ``candidate.x`` must be a SELFIES (or SMILES) string representing the
+    molecule to evaluate.
 
     Parameters
     ----------
@@ -560,8 +559,7 @@ class XTBIPEAOracle(MultiFidelityOracle):
         ----------
         candidates : Sequence[Candidate]
             Candidates to evaluate.  Each must carry a ``fidelity`` field and
-            a molecule string in either ``candidate.x`` or
-            ``candidate.metadata["raw"]``.
+            a molecule string in ``candidate.x``.
 
         Returns
         -------
@@ -594,15 +592,13 @@ class XTBIPEAOracle(MultiFidelityOracle):
     # ------------------------------------------------------------------
 
     def _extract_molecule_string(self, candidate: Candidate) -> str:
-        """Return the molecule string from a candidate.
-
-        Checks ``candidate.x`` first; if it is not a string, falls back to
-        ``candidate.metadata["raw"]``.
+        """Return the molecule string from ``candidate.x``.
 
         Parameters
         ----------
         candidate : Candidate
             The candidate whose molecule string is to be extracted.
+            ``candidate.x`` must be a SELFIES (or SMILES) string.
 
         Returns
         -------
@@ -612,16 +608,13 @@ class XTBIPEAOracle(MultiFidelityOracle):
         Raises
         ------
         ValueError
-            If ``candidate.x`` is not a string and ``candidate.metadata``
-            does not contain a ``"raw"`` key.
+            If ``candidate.x`` is not a string.
         """
         if isinstance(candidate.x, str):
             return candidate.x
-        if candidate.metadata is not None and "raw" in candidate.metadata:
-            return str(candidate.metadata["raw"])
         raise ValueError(
-            "Cannot extract molecules string: candidate.x is not a string and "
-            "candidate.metadata does not contain a 'raw' key."
+            f"Expected candidate.x to be a SELFIES string, "
+            f"got {type(candidate.x).__name__}."
         )
 
     def _log_query_molecule_visualizations(

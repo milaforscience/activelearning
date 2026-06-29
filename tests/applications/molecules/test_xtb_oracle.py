@@ -463,24 +463,12 @@ class TestXTBIPEAOracleQuery:
 
         assert obs[0].y == pytest.approx(-9.0)
 
-    def test_query_from_metadata_raw(self, oracle: XTBIPEAOracle):
-        """Pre-embed path: original string in metadata['raw']."""
-        import torch
-
-        candidates = [
-            Candidate(x=torch.zeros(4), fidelity=1, metadata={"raw": BENZENE_SELFIES})
-        ]
-        with patch.object(oracle, "_xtb_score", return_value=3.0) as mock_score:
-            obs = oracle.query(candidates)
-        mock_score.assert_called_once_with(BENZENE_SELFIES, 1)
-        assert obs[0].y == pytest.approx(3.0)
-
     def test_query_missing_string_raises(self, oracle: XTBIPEAOracle):
-        """A tensor candidate without metadata['raw'] raises ValueError (no molecule string)."""
+        """A tensor candidate raises ValueError (x must be a string)."""
         import torch
 
         candidates = [Candidate(x=torch.zeros(4), fidelity=1)]
-        with pytest.raises(ValueError, match="molecules string"):
+        with pytest.raises(ValueError, match="SELFIES string"):
             oracle.query(candidates)
 
     def test_query_multiple_candidates(self, oracle: XTBIPEAOracle):

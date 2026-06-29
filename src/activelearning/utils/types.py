@@ -21,8 +21,8 @@ class Candidate:
     metadata : Optional[dict[str, Any]]
         Domain-specific auxiliary data carried alongside the candidate.
         Not consumed by the core AL loop but available to user components
-        (e.g., an oracle that needs the original raw string stored under
-        ``metadata["raw"]`` while ``x`` holds the embedding tensor).
+        (e.g., provenance tracking, auxiliary scores, or domain-specific
+        annotations).
     """
 
     x: Any
