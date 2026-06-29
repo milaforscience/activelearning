@@ -68,10 +68,7 @@ class PositionalEncoding(nn.Module):
 
 
 class MaskedMeanPool(nn.Module):
-    """Pool token features into one vector per molecules via masked mean + projection.
-
-    The mask excludes padding and ``[EOS]`` so the pooled vector represents the
-    full encoded sequence content, including the leading ``[CLS]`` token.
+    """Pool token features into one vector per sequence via masked mean + projection.
 
     Parameters
     ----------
@@ -195,8 +192,9 @@ class SelfiesTransformerEncoder(nn.Module):
         token_features : Tensor
             Shape ``(B, seq_len, latent_dim)``.
         keep_mask : Tensor
-            Boolean tensor ``(B, seq_len)``.  ``True`` for non-padding,
-            non-EOS tokens that contribute to pooling, including ``[CLS]``.
+            Boolean tensor ``(B, seq_len)``.  ``True`` for all non-padding
+            tokens (including ``[CLS]`` and ``[EOS]``) that contribute to
+            the pooled vector.
         """
         if token_batch.size(1) > self.max_length:
             token_batch = token_batch[:, : self.max_length]
@@ -207,8 +205,8 @@ class SelfiesTransformerEncoder(nn.Module):
         x = self.encoder_layers(x, src_key_padding_mask=key_padding_mask)
         x = self.embed_to_latent(x)
 
-        # Pool over [CLS] and molecular tokens, excluding [EOS] and padding.
-        keep_mask = (~key_padding_mask) & token_batch.ne(self.tokenizer.eos_idx)
+        # Pool over all non-padding tokens (CLS, molecular tokens, and EOS).
+        keep_mask = ~key_padding_mask
         return x, keep_mask
 
     def forward(self, token_batch: Tensor) -> Tensor:

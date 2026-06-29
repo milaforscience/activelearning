@@ -260,16 +260,19 @@ class TestSelfiesTransformerEncoder:
         out = odd_encoder(batch)
         assert out.shape == (1, 5)
 
-    def test_encode_tokens_mask_includes_cls_and_excludes_eos_and_padding(
+    def test_encode_tokens_mask_excludes_only_padding(
         self, encoder: SelfiesTransformerEncoder, tokenizer: SelfiesTokenizer
     ) -> None:
         token_batch = tokenizer.batch_from_selfies([BENZENE], max_length=16)
         _, mask = encoder.encode_tokens(token_batch)
+        # CLS at position 0 must be included.
         assert mask[0, 0].item() is True
+        # EOS must also be included (only padding is excluded).
         eos_positions = torch.where(token_batch[0] == tokenizer.eos_idx)[0]
         assert eos_positions.numel() == 1
         eos_position = int(eos_positions[0])
-        assert mask[0, eos_position].item() is False
+        assert mask[0, eos_position].item() is True
+        # Padding positions after EOS must be excluded.
         if eos_position + 1 < token_batch.shape[1]:
             assert mask[0, eos_position + 1 :].any().item() is False
 
