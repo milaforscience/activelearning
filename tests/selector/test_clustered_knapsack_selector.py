@@ -237,7 +237,7 @@ def test_kmeans_cluster_constraint_limits_selections_per_cluster():
         cost_fn=_cost_fn([1.0, 1.0, 1.0, 1.0]),
         round_budget=100.0,
     )
-    assert len(selected) <= 2
+    assert len(selected) == 2
 
 
 def test_kmeans_non_binding_constraint_matches_budget_limit():
