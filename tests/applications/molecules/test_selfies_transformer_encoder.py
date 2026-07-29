@@ -212,8 +212,8 @@ class TestSelfiesTransformerEncoder:
         assert mask.shape == token_batch.shape
 
         expected_counts = [
-            max(1, int(sf.len_selfies(BENZENE) * 0.5)),
-            max(1, int(sf.len_selfies(ALANINE) * 0.5)),
+            int(sf.len_selfies(BENZENE) * 0.5),
+            int(sf.len_selfies(ALANINE) * 0.5),
         ]
         assert mask.sum(dim=1).tolist() == expected_counts
         assert not mask[:, 0].any()
@@ -349,12 +349,12 @@ class TestSelfiesTransformerEncoder:
         if eos_pos + 1 < batch.shape[1]:
             assert not mask[0, eos_pos + 1 :].any().item()
 
-    def test_mlm_loss_short_sequence_positive(
+    def test_mlm_loss_short_sequence_zero_when_no_tokens_masked(
         self,
         encoder: SelfiesTransformerEncoder,
         short_token_batch: torch.Tensor,
     ) -> None:
-        """MLM loss on very short sequences should be a finite positive scalar."""
-        loss = encoder.mlm_loss(short_token_batch, mask_ratio=0.5)
+        """MLM loss should be zero when strict proportional masking selects no tokens."""
+        loss = encoder.mlm_loss(short_token_batch, mask_ratio=0.15)
         assert loss.ndim == 0
-        assert float(loss) > 0.0
+        assert float(loss) == 0.0
