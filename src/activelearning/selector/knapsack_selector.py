@@ -12,11 +12,11 @@ class KnapsackSelector(Selector):
     Parameters
     ----------
     time_limit : float, optional
-        Optional CBC time limit in seconds.
+        Optional MILP solver time limit in seconds.
     verbose : bool, default=False
         Whether to emit solver logs.
     warm_start : bool, default=False
-        Whether to seed CBC with the greedy knapsack solution before solving the
+        Whether to seed the MILP solver with the greedy knapsack solution before solving the
         exact mixed-integer program.
     """
 
@@ -39,7 +39,7 @@ class KnapsackSelector(Selector):
     ) -> list[Candidate]:
         """Select the maximum-utility feasible candidate subset.
 
-        Uses PuLP with CBC to solve the exact 0/1 knapsack problem. When
+        Uses PuLP with the CBC solver to solve the exact 0/1 knapsack problem. When
         ``warm_start`` is enabled, the greedy value-to-cost solution is used as
         the solver's initial assignment.
 
@@ -110,7 +110,7 @@ class KnapsackSelector(Selector):
         # Allow subclasses to add extra constraints
         self._add_extra_constraints(prob, x, candidates)
 
-        # Solve using the default CBC solver (included with PuLP)
+        # Solve using the default CBC MILP solver (included with PuLP)
         solver = self._build_solver()
         status = prob.solve(solver)
         variable_values = self._extract_solution_values(x, status)
