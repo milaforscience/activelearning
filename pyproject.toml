@@ -15,6 +15,8 @@ dependencies = [
     "omegaconf>=2.3.0",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",
+    "pulp>=3.3.0",
+    "scikit-learn>=1.0",
     "torch>=2.5.1",
 ]
 

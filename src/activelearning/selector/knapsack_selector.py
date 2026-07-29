@@ -1,0 +1,314 @@
+import pulp
+from typing import Callable, Optional, Sequence
+
+from activelearning.acquisition.acquisition import Acquisition
+from activelearning.selector.selector import Selector
+from activelearning.utils.types import Candidate
+
+
+class KnapsackSelector(Selector):
+    """Selector that solves a 0/1 knapsack problem over candidate utilities.
+
+    This selector requires acquisition scores to be non-negative, additive
+    utilities with a meaningful zero. In particular, it assumes that the
+    utility of a selected subset can be approximated by summing its candidates'
+    scores. Acquisitions whose scores are only ordinal, or whose transformed
+    scale is not additive (for example, log-probability scores), are not
+    compatible with this selector. Negative scores are rejected rather than
+    clipped or shifted because either transformation can change the optimal
+    subset.
+
+    Parameters
+    ----------
+    time_limit : float, optional
+        Optional solver time limit in seconds.
+    verbose : bool, default=False
+        Whether to emit solver logs.
+    warm_start : bool, default=False
+        Whether to provide CBC with a feasible greedy MIP start before the exact
+        search. This can speed up large instances with highly variable costs,
+        but adds overhead for small or easy instances; therefore, the default is
+        ``False``. Consider enabling it only with ``time_limit`` when CBC
+        consistently reaches the limit before finding a satisfactory solution.
+        A warm start is not universally beneficial: an initial incumbent changes
+        CBC's branch-and-bound search and can slow some problem instances.
+    """
+
+    def __init__(
+        self,
+        time_limit: float | None = None,
+        verbose: bool = False,
+        warm_start: bool = False,
+    ) -> None:
+        self.time_limit = time_limit
+        self.verbose = verbose
+        self.warm_start = warm_start
+
+    def __call__(
+        self,
+        candidates: Sequence[Candidate],
+        acquisition: Optional[Acquisition] = None,
+        cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
+        round_budget: Optional[float] = None,
+    ) -> list[Candidate]:
+        """Select the maximum-utility feasible candidate subset.
+
+        Uses PuLP with the CBC solver to solve the exact 0/1 knapsack problem.
+        When ``warm_start`` is enabled, a feasible greedy value-to-cost-ratio
+        assignment is supplied as a MIP start.
+
+        Parameters
+        ----------
+        candidates : Sequence[Candidate]
+            Pool of candidates to select from.
+        acquisition : Optional[Acquisition]
+            Acquisition function that scores the candidates.
+        cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
+            Function returning per-candidate costs.
+        round_budget : Optional[float]
+            Budget limit for this round.
+
+        Returns
+        -------
+        result : list[Candidate]
+            Selected subset of candidates in original candidate order.
+
+        Raises
+        ------
+        ValueError
+            If acquisition, cost_fn, or round_budget is not provided, or if the
+            acquisition returns a negative score, or if the solver fails to
+            find any feasible solution.
+        """
+        if acquisition is None:
+            raise ValueError(
+                f"Acquisition function is required for {type(self).__name__}."
+            )
+        if cost_fn is None:
+            raise ValueError(f"Cost function is required for {type(self).__name__}.")
+        if round_budget is None:
+            raise ValueError(f"Budget is required for {type(self).__name__}.")
+        if not candidates:
+            return []
+
+        acq_values = acquisition.score(candidates)
+        if any(value < 0 for value in acq_values):
+            raise ValueError(
+                f"{type(self).__name__} requires non-negative, additive acquisition "
+                "scores with a meaningful zero; negative scores cannot be safely "
+                "clipped or shifted."
+            )
+
+        costs = cost_fn(candidates)
+        if any(cost < 0 for cost in costs):
+            raise ValueError("Cost function returned a negative cost.")
+
+        # If acquisition scores are all zero, set constant score to pick cheapest items
+        if all(v == 0 for v in acq_values):
+            acq_values = [1.0] * len(candidates)
+
+        # Initialize the Maximization problem
+        prob = pulp.LpProblem("Knapsack", pulp.LpMaximize)
+
+        # Define Decision Variables (0 or 1 for each item)
+        n = len(costs)
+        x = [pulp.LpVariable(f"item_{i}", cat="Binary") for i in range(n)]
+
+        # Optionally provide CBC with a feasible greedy MIP start. This is most
+        # useful with time_limit because it can give CBC an incumbent early in
+        # the search. Without a time limit, the exact solver normally reaches
+        # optimality, so computing the greedy assignment only adds overhead.
+        if self.warm_start and self.time_limit is None:
+            import warnings
+
+            warnings.warn(
+                "warm_start=True has no benefit without a time_limit and adds "
+                "overhead. Consider setting time_limit or disabling warm_start.",
+                UserWarning,
+                stacklevel=2,
+            )
+        if self.warm_start:
+            warm_start_indices = set(
+                greedy_knapsack_indices(acq_values, costs, round_budget)
+            )
+            for idx, variable in enumerate(x):
+                variable.setInitialValue(1 if idx in warm_start_indices else 0)
+
+        # Objective Function: Maximize total acquisition value
+        prob += pulp.lpSum([(acq_values[i]) * x[i] for i in range(n)])
+
+        # Constraint: Total cost must be <= budget
+        prob += pulp.lpSum([costs[i] * x[i] for i in range(n)]) <= round_budget
+
+        # Allow subclasses to add extra constraints
+        self._add_extra_constraints(prob, x, candidates)
+
+        # Solve using the default CBC solver (included with PuLP)
+        solver = self._build_solver()
+        status = prob.solve(solver)
+        variable_values = self._extract_solution_values(x, status, prob.sol_status)
+
+        # The solver may return binary variable values as floats slightly off 0/1
+        # (e.g. 0.9999998) due to floating-point tolerances, so threshold at
+        # 0.5 rather than comparing for exact equality.
+        selected_candidates = [
+            candidate
+            for candidate, variable_value in zip(candidates, variable_values)
+            if variable_value > 0.5
+        ]
+        return selected_candidates
+
+    def _add_extra_constraints(
+        self,
+        prob: pulp.LpProblem,
+        x: list[pulp.LpVariable],
+        candidates: Sequence[Candidate],
+    ) -> None:
+        """Hook for subclasses to inject extra constraints into the knapsack problem.
+
+        Called after the budget constraint is added and before the solver
+        runs.  The default implementation is a no-op.
+
+        Parameters
+        ----------
+        prob : pulp.LpProblem
+            The in-progress maximisation problem.
+        x : list[pulp.LpVariable]
+            Binary decision variables aligned with *candidates*.
+        candidates : Sequence[Candidate]
+            The same candidate pool passed to ``__call__``.
+
+        Examples
+        --------
+        ``ClusteredKnapsackSelector`` overrides this hook to add per-cluster
+        cardinality constraints on top of the budget constraint::
+
+            def _add_extra_constraints(self, prob, x, candidates):
+                for cluster_indices in self._cluster_groups(candidates):
+                    prob += pulp.lpSum(x[i] for i in cluster_indices) <= self.max_per_cluster
+
+        See ``activelearning.selector.clustered_knapsack_selector`` for the
+        full implementation.
+        """
+        pass
+
+    def _build_solver(self) -> pulp.PULP_CBC_CMD:
+        """Create a CBC solver instance and verify it is executable."""
+        solver = pulp.PULP_CBC_CMD(
+            timeLimit=self.time_limit,
+            msg=self.verbose,
+            warmStart=self.warm_start,
+        )
+        if not solver.available():
+            raise ValueError(
+                "PuLP CBC solver is not available. Install or enable a working CBC "
+                "binary so PULP_CBC_CMD can run."
+            )
+
+        return solver
+
+    @staticmethod
+    def _extract_solution_values(
+        variables: Sequence[pulp.LpVariable],
+        status: int,
+        solution_status: int,
+    ) -> list[float]:
+        """Validate solver status and return usable decision variable values."""
+        status_name = pulp.LpStatus.get(status, f"Unknown ({status})")
+        if status not in {pulp.LpStatusOptimal, pulp.LpStatusNotSolved}:
+            raise ValueError(
+                f"Knapsack solver returned unusable status '{status_name}'."
+            )
+
+        variable_values = [pulp.value(variable) for variable in variables]
+        if any(value is None for value in variable_values):
+            raise ValueError(
+                f"Knapsack solver ended with status '{status_name}' without a usable "
+                "incumbent solution."
+            )
+
+        is_proven_optimal = (
+            status == pulp.LpStatusOptimal and solution_status == pulp.LpSolutionOptimal
+        )
+        if not is_proven_optimal:
+            print(
+                f"Warning: Optimization ended with status '{status_name}'. "
+                "Using the best available solution found so far."
+            )
+
+        return variable_values
+
+
+def greedy_knapsack_indices(
+    values: Sequence[float],
+    costs: Sequence[float],
+    budget: float,
+) -> list[int]:
+    """Return greedy knapsack indices ranked by value-to-cost ratio.
+
+    The helper sorts items by decreasing value-to-cost ratio, breaking ties by
+    higher value, then lower cost, then original index. Zero-cost items are
+    treated as having infinite ratio and are therefore considered first.
+
+    Parameters
+    ----------
+    values : Sequence[float]
+        Per-item objective values to maximize.
+    costs : Sequence[float]
+        Per-item costs constrained by the round budget.
+    budget : float
+        Maximum total cost allowed for the selected items.
+
+    Returns
+    -------
+    result : list[int]
+        Indices selected by the greedy heuristic, in the order they were added.
+
+    Raises
+    ------
+    ValueError
+        If ``values`` and ``costs`` do not have the same length.
+    """
+    if len(values) != len(costs):
+        raise ValueError("Values and costs must have the same length.")
+
+    ranked_items = [
+        (index, value, cost) for index, (value, cost) in enumerate(zip(values, costs))
+    ]
+    ranked_items.sort(key=_greedy_knapsack_sort_key)
+
+    selected_indices: list[int] = []
+    remaining_budget = budget
+    for index, _, cost in ranked_items:
+        if cost > remaining_budget:
+            continue
+
+        selected_indices.append(index)
+        remaining_budget -= cost
+
+    return selected_indices
+
+
+def _greedy_knapsack_sort_key(
+    item: tuple[int, float, float],
+) -> tuple[int, float, float, float, int]:
+    """Return the greedy ranking key for an indexed knapsack item.
+
+    Python sorts tuples in ascending lexicographic order, so this key encodes
+    the greedy preference as:
+    1. zero-cost items first;
+    2. higher value-to-cost ratio first;
+    3. higher absolute value first;
+    4. lower cost first;
+    5. lower original index first for deterministic ties.
+
+    Descending criteria use negated values because ``list.sort()`` sorts
+    smallest-to-largest.
+    """
+    index, value, cost = item
+    if cost == 0:
+        # Leading 0 sorts ahead of the non-zero case below, and the remaining
+        # fields preserve the documented tie-break order among zero-cost items.
+        return (0, 0.0, -value, cost, index)
+
+    return (1, -(value / cost), -value, cost, index)
