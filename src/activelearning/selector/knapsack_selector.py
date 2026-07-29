@@ -134,6 +134,9 @@ class KnapsackSelector(Selector):
         status = prob.solve(solver)
         variable_values = self._extract_solution_values(x, status)
 
+        # The solver may return binary variable values as floats slightly off 0/1
+        # (e.g. 0.9999998) due to floating-point tolerances, so threshold at
+        # 0.5 rather than comparing for exact equality.
         selected_candidates = [
             candidate
             for candidate, variable_value in zip(candidates, variable_values)
