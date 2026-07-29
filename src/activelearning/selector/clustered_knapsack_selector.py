@@ -14,7 +14,7 @@ class ClusteredKnapsackSelector(KnapsackSelector):
     """Knapsack selector with per-cluster cardinality constraints.
 
     Extends ``KnapsackSelector`` by first clustering the candidate
-    features and then adding a MIP constraint that limits the number of
+    features and then adding a constraint that limits the number of
     selected candidates to ``max_per_cluster`` within each cluster.
     As with ``KnapsackSelector``, acquisition scores must be non-negative,
     additive utilities with a meaningful zero. Negative scores are rejected.
@@ -27,7 +27,7 @@ class ClusteredKnapsackSelector(KnapsackSelector):
     ----------
     max_per_cluster : int
         Maximum number of candidates that may be selected from any single
-        cluster (``K`` in the MIP constraint).
+        cluster (``K`` in the per-cluster constraint).
     clustering : {"kmeans", "dbscan"}
         Clustering algorithm to use.  Defaults to ``"kmeans"``.
     n_clusters : int or None
@@ -44,7 +44,7 @@ class ClusteredKnapsackSelector(KnapsackSelector):
         Whether to emit solver logs (inherited).
     warm_start : bool
         Whether to seed the solver with a greedy knapsack solution
-        before solving the exact MIP (inherited).
+        before solving the exact knapsack problem (inherited).
 
     Raises
     ------
@@ -110,7 +110,7 @@ class ClusteredKnapsackSelector(KnapsackSelector):
         x: list[pulp.LpVariable],
         candidates: Sequence[Candidate],
     ) -> None:
-        """Add per-cluster cardinality constraints to the MIP.
+        """Add per-cluster cardinality constraints to the knapsack problem.
 
         For each cluster, at most ``max_per_cluster`` candidates may be
         selected.

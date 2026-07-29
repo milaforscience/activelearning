@@ -21,7 +21,7 @@ class KnapsackSelector(Selector):
     Parameters
     ----------
     time_limit : float, optional
-        Optional MILP solver time limit in seconds.
+        Optional solver time limit in seconds.
     verbose : bool, default=False
         Whether to emit solver logs.
     warm_start : bool, default=False
@@ -129,7 +129,7 @@ class KnapsackSelector(Selector):
         # Allow subclasses to add extra constraints
         self._add_extra_constraints(prob, x, candidates)
 
-        # Solve using the default CBC MILP solver (included with PuLP)
+        # Solve using the default CBC solver (included with PuLP)
         solver = self._build_solver()
         status = prob.solve(solver)
         variable_values = self._extract_solution_values(x, status)
@@ -150,7 +150,7 @@ class KnapsackSelector(Selector):
         x: list[pulp.LpVariable],
         candidates: Sequence[Candidate],
     ) -> None:
-        """Hook for subclasses to inject extra constraints into the MIP.
+        """Hook for subclasses to inject extra constraints into the knapsack problem.
 
         Called after the budget constraint is added and before the solver
         runs.  The default implementation is a no-op.
