@@ -16,8 +16,11 @@ class KnapsackSelector(Selector):
     verbose : bool, default=False
         Whether to emit solver logs.
     warm_start : bool, default=False
-        Whether to seed the MILP solver with the greedy knapsack solution before solving the
-        exact mixed-integer program.
+        Whether to initialise the solver with a fast greedy solution before running the exact
+        search. This can speed up solving for large candidate pools with highly variable costs,
+        but adds overhead for small or easy instances — hence the ``False`` default. Only worth
+        enabling when you are also using ``time_limit`` and the solver is consistently hitting
+        it before finding a good solution.
     """
 
     def __init__(
