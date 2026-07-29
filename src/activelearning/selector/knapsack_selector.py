@@ -146,7 +146,7 @@ class KnapsackSelector(Selector):
         # Solve using the default CBC solver (included with PuLP)
         solver = self._build_solver()
         status = prob.solve(solver)
-        variable_values = self._extract_solution_values(x, status)
+        variable_values = self._extract_solution_values(x, status, prob.sol_status)
 
         # The solver may return binary variable values as floats slightly off 0/1
         # (e.g. 0.9999998) due to floating-point tolerances, so threshold at
@@ -211,6 +211,7 @@ class KnapsackSelector(Selector):
     def _extract_solution_values(
         variables: Sequence[pulp.LpVariable],
         status: int,
+        solution_status: int,
     ) -> list[float]:
         """Validate solver status and return usable decision variable values."""
         status_name = pulp.LpStatus.get(status, f"Unknown ({status})")
@@ -226,7 +227,10 @@ class KnapsackSelector(Selector):
                 "incumbent solution."
             )
 
-        if status != pulp.LpStatusOptimal:
+        is_proven_optimal = (
+            status == pulp.LpStatusOptimal and solution_status == pulp.LpSolutionOptimal
+        )
+        if not is_proven_optimal:
             print(
                 f"Warning: Optimization ended with status '{status_name}'. "
                 "Using the best available solution found so far."

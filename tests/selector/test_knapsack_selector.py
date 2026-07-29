@@ -1,3 +1,5 @@
+import random
+import warnings
 from unittest.mock import Mock
 
 import pulp
@@ -282,6 +284,63 @@ def test_knapsack_selector_uses_incumbent_when_not_solved(monkeypatch, capsys):
     )
 
     assert [candidate.x for candidate in selected] == [0]
+    assert "Using the best available solution found so far" in capsys.readouterr().out
+
+
+def test_knapsack_selector_early_stops_on_solver_time_limit(monkeypatch, capsys):
+    """Test CBC returns a feasible incumbent when its time limit is reached."""
+    time_limit = 0.001
+    item_count = 500
+    candidates = [Candidate(x=index) for index in range(item_count)]
+    random_generator = random.Random(0)
+    costs = [random_generator.randint(1, 1_000) for _ in range(item_count)]
+    values = [random_generator.randint(1, 1_000) for _ in range(item_count)]
+    budget = sum(costs) // 2
+    selector = KnapsackSelector(time_limit=time_limit, warm_start=True)
+    acquisition = Mock()
+    acquisition.score.return_value = values
+
+    recorded_time_limits = []
+    recorded_statuses = []
+    original_solve = knapsack_selector_module.pulp.LpProblem.solve
+
+    def recording_solve(self, solver, **kwargs):
+        """Run CBC and retain its actual status values for assertions."""
+        recorded_time_limits.append(solver.timeLimit)
+        status = original_solve(self, solver, **kwargs)
+        recorded_statuses.append((status, self.sol_status))
+        return status
+
+    monkeypatch.setattr(
+        knapsack_selector_module.pulp.LpProblem,
+        "solve",
+        recording_solve,
+    )
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Constructing LpVariable",
+            category=DeprecationWarning,
+        )
+        warnings.filterwarnings(
+            "ignore",
+            message="PULP_CBC_CMD is deprecated",
+            category=DeprecationWarning,
+        )
+        selected = selector(
+            candidates,
+            acquisition=acquisition,
+            cost_fn=lambda _candidates: costs,
+            round_budget=budget,
+        )
+
+    assert recorded_time_limits == [time_limit]
+    # PuLP records a CBC time-limited incumbent as a feasible, non-optimal
+    # solution even though its coarse problem status is ``LpStatusOptimal``.
+    assert recorded_statuses == [(pulp.LpStatusOptimal, pulp.LpSolutionIntegerFeasible)]
+    assert selected
+    assert sum(costs[candidate.x] for candidate in selected) <= budget
     assert "Using the best available solution found so far" in capsys.readouterr().out
 
 
