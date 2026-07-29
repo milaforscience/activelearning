@@ -848,6 +848,23 @@ class TestAnalyticAcquisitionIntegration:
         acq.update(sf_surrogate, sf_obs)
         self._scores_valid(acq.score(cands))
 
+    def test_ei_clamps_negative_numerical_artifacts(self) -> None:
+        """EI projects numerically negative expected improvement to zero."""
+        from activelearning.acquisition.botorch.botorch_analytic import (
+            ExpectedImprovement,
+        )
+
+        acq = ExpectedImprovement(best_f=0.0)
+        acq._botorch_acqf = lambda X: torch.tensor(
+            [-1.0e-12, 0.25],
+            dtype=X.dtype,
+            device=X.device,
+        )
+
+        scores = acq._score_encoded(torch.zeros(2, 1, 1, dtype=torch.float64))
+
+        assert scores == [0.0, 0.25]
+
     def test_log_ei_scores(
         self,
         sf_surrogate: BoTorchGPSurrogate,
@@ -984,6 +1001,26 @@ class TestMultiFidelityAcquisitionIntegration:
         assert len(scores) == n
         assert all(isinstance(s, float) for s in scores)
         assert all(math.isfinite(s) for s in scores)
+
+    def test_qmfmes_clamps_negative_information_gain_estimates(
+        self,
+        train_data_spec: TrainDataCandidateSetSpec,
+    ) -> None:
+        """MF-MES projects numerically negative information gain to zero."""
+        from activelearning.acquisition.botorch.botorch_multifidelity import (
+            QMultiFidelityMaxValueEntropy,
+        )
+
+        acq = QMultiFidelityMaxValueEntropy(candidate_set_spec=train_data_spec)
+        acq._botorch_acqf = lambda X: torch.tensor(
+            [-1.0e-12, 0.25],
+            dtype=X.dtype,
+            device=X.device,
+        )
+
+        scores = acq._score_encoded(torch.zeros(2, 1, 1, dtype=torch.float64))
+
+        assert scores == [0.0, 0.25]
 
     def test_qmfmes_scores(
         self,

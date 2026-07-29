@@ -36,6 +36,9 @@ class _QMultiFidelityEntropyBase(QBatchBoTorchAcquisition):
     :class:`QMultiFidelityMaxValueEntropy` and
     :class:`QMultiFidelityLowerBoundMaxValueEntropy`. Subclasses set
     ``_botorch_acqf_class`` to select the underlying BoTorch implementation.
+    Estimated information gains are clamped to zero because mutual information
+    is theoretically non-negative, while finite-sample and floating-point error
+    can produce small negative estimates.
 
     This class is not intended to be instantiated directly.
 
@@ -140,6 +143,11 @@ class _QMultiFidelityEntropyBase(QBatchBoTorchAcquisition):
             build_kwargs["expand"] = self._expand
 
         return self._botorch_acqf_class(**build_kwargs)
+
+    def _score_encoded(self, X: torch.Tensor) -> list[float]:
+        """Evaluate MF-MES and project negative information-gain estimates to zero."""
+        scores = super()._score_encoded(X)
+        return [max(0.0, score) for score in scores]
 
 
 class QMultiFidelityMaxValueEntropy(_QMultiFidelityEntropyBase):
