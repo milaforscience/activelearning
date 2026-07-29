@@ -163,6 +163,18 @@ class KnapsackSelector(Selector):
             Binary decision variables aligned with *candidates*.
         candidates : Sequence[Candidate]
             The same candidate pool passed to ``__call__``.
+
+        Examples
+        --------
+        ``ClusteredKnapsackSelector`` overrides this hook to add per-cluster
+        cardinality constraints on top of the budget constraint::
+
+            def _add_extra_constraints(self, prob, x, candidates):
+                for cluster_indices in self._cluster_groups(candidates):
+                    prob += pulp.lpSum(x[i] for i in cluster_indices) <= self.max_per_cluster
+
+        See ``activelearning.selector.clustered_knapsack_selector`` for the
+        full implementation.
         """
         pass
 
