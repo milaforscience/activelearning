@@ -123,6 +123,24 @@ def test_knapsack_selector_rejects_negative_costs():
         )
 
 
+def test_knapsack_selector_rejects_negative_acquisition_scores():
+    """Test selector rejects scores that do not satisfy its utility contract."""
+    selector = KnapsackSelector()
+    acquisition = Mock()
+    acquisition.score.return_value = [3.0, -0.5]
+
+    with pytest.raises(
+        ValueError,
+        match="requires non-negative, additive acquisition scores",
+    ):
+        selector(
+            [Candidate(x=0), Candidate(x=1)],
+            acquisition=acquisition,
+            cost_fn=lambda _candidates: [1.0, 1.0],
+            round_budget=2.0,
+        )
+
+
 def test_knapsack_selector_uses_acquisition_callable_interface():
     """Test selector works with a real Acquisition implementation."""
     selector = KnapsackSelector()

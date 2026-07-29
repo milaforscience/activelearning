@@ -16,6 +16,8 @@ class ClusteredKnapsackSelector(KnapsackSelector):
     Extends ``KnapsackSelector`` by first clustering the candidate
     features and then adding a MIP constraint that limits the number of
     selected candidates to ``max_per_cluster`` within each cluster.
+    As with ``KnapsackSelector``, acquisition scores must be non-negative,
+    additive utilities with a meaningful zero. Negative scores are rejected.
 
     The clustering is computed on ``Candidate.x``, which must be a flat
     numeric array or a ``torch.Tensor`` that can be converted to a

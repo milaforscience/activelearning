@@ -180,6 +180,23 @@ def test_raises_for_negative_costs():
         )
 
 
+def test_raises_for_negative_acquisition_scores():
+    """Clustered selector inherits the non-negative utility contract."""
+    selector = ClusteredKnapsackSelector(max_per_cluster=2, n_clusters=1)
+    candidates = [Candidate(x=np.array([float(i)])) for i in range(2)]
+
+    with pytest.raises(
+        ValueError,
+        match="requires non-negative, additive acquisition scores",
+    ):
+        selector(
+            candidates,
+            acquisition=_mock_acquisition([1.0, -1.0]),
+            cost_fn=_cost_fn([1.0, 1.0]),
+            round_budget=2.0,
+        )
+
+
 def test_returns_empty_for_empty_candidates():
     """Selector returns an empty list when the candidate pool is empty."""
     selector = ClusteredKnapsackSelector(max_per_cluster=2, n_clusters=2)

@@ -9,6 +9,15 @@ from activelearning.utils.types import Candidate
 class KnapsackSelector(Selector):
     """Selector that solves a 0/1 knapsack problem over candidate utilities.
 
+    This selector requires acquisition scores to be non-negative, additive
+    utilities with a meaningful zero. In particular, it assumes that the
+    utility of a selected subset can be approximated by summing its candidates'
+    scores. Acquisitions whose scores are only ordinal, or whose transformed
+    scale is not additive (for example, log-probability scores), are not
+    compatible with this selector. Negative scores are rejected rather than
+    clipped or shifted because either transformation can change the optimal
+    subset.
+
     Parameters
     ----------
     time_limit : float, optional
@@ -66,7 +75,8 @@ class KnapsackSelector(Selector):
         ------
         ValueError
             If acquisition, cost_fn, or round_budget is not provided, or if the
-            solver fails to find any feasible solution.
+            acquisition returns a negative score, or if the solver fails to
+            find any feasible solution.
         """
         if acquisition is None:
             raise ValueError(
@@ -79,8 +89,14 @@ class KnapsackSelector(Selector):
         if not candidates:
             return []
 
-        # Acquisition scores should be non-negative
-        acq_values = [max(0, v) for v in acquisition.score(candidates)]
+        acq_values = acquisition.score(candidates)
+        if any(value < 0 for value in acq_values):
+            raise ValueError(
+                f"{type(self).__name__} requires non-negative, additive acquisition "
+                "scores with a meaningful zero; negative scores cannot be safely "
+                "clipped or shifted."
+            )
+
         costs = cost_fn(candidates)
         if any(cost < 0 for cost in costs):
             raise ValueError("Cost function returned a negative cost.")
