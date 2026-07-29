@@ -314,7 +314,7 @@ def test_dbscan_cluster_constraint_limits_selections_per_cluster():
         cost_fn=_cost_fn([1.0, 1.0, 1.0, 1.0]),
         round_budget=100.0,
     )
-    assert len(selected) <= 2
+    assert len(selected) == 2
 
 
 def test_dbscan_noise_points_are_treated_as_singleton_clusters():
