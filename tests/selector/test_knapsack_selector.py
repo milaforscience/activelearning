@@ -82,7 +82,7 @@ def test_greedy_knapsack_indices_breaks_ratio_ties_by_value_then_index():
 
 @pytest.mark.parametrize("warm_start", [False, True])
 def test_knapsack_selector_finds_exact_solution_when_greedy_misses(warm_start):
-    """Test exact knapsack solve beats the greedy warm-start heuristic."""
+    """Test exact solving finds the optimum when the greedy MIP start does not."""
     candidates = [Candidate(x=0), Candidate(x=1)]
     acquisition = Mock()
     acquisition.score.return_value = [10.0, 9.0]
@@ -91,12 +91,16 @@ def test_knapsack_selector_finds_exact_solution_when_greedy_misses(warm_start):
         return [6.0, 5.0]
 
     selector = KnapsackSelector(warm_start=warm_start)
-    selected = selector(
-        candidates,
-        acquisition=acquisition,
-        cost_fn=cost_fn,
-        round_budget=10.0,
-    )
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        selected = selector(
+            candidates,
+            acquisition=acquisition,
+            cost_fn=cost_fn,
+            round_budget=10.0,
+        )
 
     assert [candidate.x for candidate in selected] == [0]
     acquisition.score.assert_called_once_with(candidates)
@@ -106,7 +110,7 @@ def test_knapsack_selector_finds_exact_solution_when_greedy_misses(warm_start):
 def test_knapsack_selector_uses_greedy_helper_only_for_warm_start(
     monkeypatch, warm_start, expected_calls
 ):
-    """Test greedy helper is consulted only when warm-starting is enabled."""
+    """Test the greedy MIP-start helper runs only when warm-starting is enabled."""
     helper_calls = []
     original_helper = knapsack_selector_module.greedy_knapsack_indices
 
@@ -124,14 +128,33 @@ def test_knapsack_selector_uses_greedy_helper_only_for_warm_start(
     acquisition.score.return_value = [8.0, 5.0]
 
     selector = KnapsackSelector(warm_start=warm_start)
-    selector(
-        [Candidate(x=0), Candidate(x=1)],
-        acquisition=acquisition,
-        cost_fn=lambda _candidates: [4.0, 3.0],
-        round_budget=4.0,
-    )
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        selector(
+            [Candidate(x=0), Candidate(x=1)],
+            acquisition=acquisition,
+            cost_fn=lambda _candidates: [4.0, 3.0],
+            round_budget=4.0,
+        )
 
     assert len(helper_calls) == expected_calls
+
+
+def test_knapsack_selector_warns_when_warm_start_used_without_time_limit():
+    """Test warm-starting without a time limit emits a UserWarning."""
+    selector = KnapsackSelector(warm_start=True)
+    acquisition = Mock()
+    acquisition.score.return_value = [3.0, 2.0]
+
+    with pytest.warns(UserWarning, match="no benefit without a time_limit"):
+        selector(
+            [Candidate(x=0), Candidate(x=1)],
+            acquisition=acquisition,
+            cost_fn=lambda _candidates: [1.0, 1.0],
+            round_budget=2.0,
+        )
 
 
 def test_knapsack_selector_returns_empty_for_empty_candidates():

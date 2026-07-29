@@ -25,11 +25,13 @@ class KnapsackSelector(Selector):
     verbose : bool, default=False
         Whether to emit solver logs.
     warm_start : bool, default=False
-        Whether to initialise the solver with a fast greedy solution before running the exact
-        search. This can speed up solving for large candidate pools with highly variable costs,
-        but adds overhead for small or easy instances — hence the ``False`` default. Only worth
-        enabling when you are also using ``time_limit`` and the solver is consistently hitting
-        it before finding a good solution.
+        Whether to provide CBC with a feasible greedy MIP start before the exact
+        search. This can speed up large instances with highly variable costs,
+        but adds overhead for small or easy instances; therefore, the default is
+        ``False``. Consider enabling it only with ``time_limit`` when CBC
+        consistently reaches the limit before finding a satisfactory solution.
+        A warm start is not universally beneficial: an initial incumbent changes
+        CBC's branch-and-bound search and can slow some problem instances.
     """
 
     def __init__(
@@ -51,9 +53,9 @@ class KnapsackSelector(Selector):
     ) -> list[Candidate]:
         """Select the maximum-utility feasible candidate subset.
 
-        Uses PuLP with the CBC solver to solve the exact 0/1 knapsack problem. When
-        ``warm_start`` is enabled, the greedy value-to-cost solution is used as
-        the solver's initial assignment.
+        Uses PuLP with the CBC solver to solve the exact 0/1 knapsack problem.
+        When ``warm_start`` is enabled, a feasible greedy value-to-cost-ratio
+        assignment is supplied as a MIP start.
 
         Parameters
         ----------
@@ -112,7 +114,19 @@ class KnapsackSelector(Selector):
         n = len(costs)
         x = [pulp.LpVariable(f"item_{i}", cat="Binary") for i in range(n)]
 
-        # Optional warm start with greedy solution
+        # Optionally provide CBC with a feasible greedy MIP start. This is most
+        # useful with time_limit because it can give CBC an incumbent early in
+        # the search. Without a time limit, the exact solver normally reaches
+        # optimality, so computing the greedy assignment only adds overhead.
+        if self.warm_start and self.time_limit is None:
+            import warnings
+
+            warnings.warn(
+                "warm_start=True has no benefit without a time_limit and adds "
+                "overhead. Consider setting time_limit or disabling warm_start.",
+                UserWarning,
+                stacklevel=2,
+            )
         if self.warm_start:
             warm_start_indices = set(
                 greedy_knapsack_indices(acq_values, costs, round_budget)
