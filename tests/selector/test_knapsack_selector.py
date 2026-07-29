@@ -289,8 +289,8 @@ def test_knapsack_selector_uses_incumbent_when_not_solved(monkeypatch, capsys):
 
 def test_knapsack_selector_early_stops_on_solver_time_limit(monkeypatch, capsys):
     """Test CBC returns a feasible incumbent when its time limit is reached."""
-    time_limit = 0.001
-    item_count = 500
+    time_limit = 0.05
+    item_count = 5_000
     candidates = [Candidate(x=index) for index in range(item_count)]
     random_generator = random.Random(0)
     costs = [random_generator.randint(1, 1_000) for _ in range(item_count)]
