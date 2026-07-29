@@ -1,8 +1,17 @@
 ---
-description: "Every Monday, review PRs merged to main in the last week and open a documentation update PR if needed."
+description: "When a pull request becomes ready for review, update relevant documentation on the same branch."
 
 on:
-  schedule: weekly on monday around 9am
+  pull_request:
+    types: [opened, ready_for_review]
+    draft: false
+    forks: []
+    paths:
+      - "src/activelearning/**"
+      - "pyproject.toml"
+      - "zensical.toml"
+      - "Makefile"
+      - "config/**"
 
 permissions:
   contents: read
@@ -15,55 +24,41 @@ tools:
   bash: ["gh:*"]
 
 safe-outputs:
-  create-pull-request:
-    title-prefix: "[ai] "
-    labels: [documentation]
-    draft: true
-    fallback-as-issue: false
-    auto-close-issue: false
+  push-to-pull-request-branch:
+    target: triggering
+    max: 1
+    if-no-changes: "ignore"
+    allowed-files:
+      - "docs/**"
+    protected-files: blocked
+  noop:
+    report-as-issue: false
 ---
 
-# Weekly Documentation Updater
+# Pull Request Documentation Updater
 
 You are a documentation maintainer for the **Multi-Fidelity Active Learning with GFlowNets**
 framework — a modular, config-driven Python ML framework for budget-constrained active
-learning experiments. Your task is to keep the documentation accurate and in sync with
-recent code changes.
+learning experiments. Review the triggering pull request and keep its documentation changes
+in the same pull request as the code changes.
 
-## Step 1 — Find uncovered PRs merged to main
+## Step 1 — Inspect the triggering pull request
 
-Find the newest pull request in this repository with the label `documentation` and a title
-starting with `[ai] ` (check both open and merged PRs). Use its **creation time** as the
-coverage checkpoint — this is the moment up to which code PRs have already been analyzed.
-If no such PR exists, fall back to the current time minus 7 days.
+Retrieve the pull request metadata and diff against its base branch. Focus only on changes to
+`src/activelearning/` and project config files (`pyproject.toml`, `zensical.toml`, `Makefile`,
+and `config/`).
 
-List all pull requests merged into `main` after the coverage checkpoint. Then exclude any PRs
-already listed as analyzed in the newest docs-update PR's description (if one exists).
+If the pull request has no changes in those paths, output a **noop** and stop.
 
-If no uncovered merged PRs remain, output a **noop** and stop.
+## Step 2 — Read the current documentation
 
-## Step 2 — If a docs-update PR is already open, prepare to update it
+Read the Markdown files under `docs/`, including documentation changes already present in the
+pull request. Pay attention to component interfaces, configuration options, and examples.
+Preserve correct documentation the author has already added.
 
-If the newest docs-update PR is still open, you will update its branch later in Step 6 rather
-than opening a new PR. Do **not** stop — an open docs-update PR does not mean newer merged PRs
-are already covered.
+## Step 3 — Decide whether an update is needed
 
-## Step 3 — Collect and filter the diffs
-
-For each merged PR, retrieve its diff. **Ignore** changes to `docs/`, `tests/`, `site/`,
-and `.github/` — focus only on changes to `src/activelearning/` and project config files
-(`pyproject.toml`, `zensical.toml`, `Makefile`, `config/`).
-
-If no such changes exist across all PRs, output a **noop** and stop.
-
-## Step 4 — Read the current documentation
-
-Read the Markdown files under `docs/` to understand what is currently documented. Pay
-attention to component interfaces, configuration options, and any examples.
-
-## Step 5 — Decide whether an update is needed
-
-Update the documentation **only** if the merged changes affect one or more of:
+Update the documentation **only** if the pull request changes one or more of:
 
 - Public APIs or component interfaces (e.g. a new method, changed signature, new class)
 - YAML configuration options (new keys, changed types, renamed fields, new defaults)
@@ -78,22 +73,22 @@ Update the documentation **only** if the merged changes affect one or more of:
 - Minor bug fixes that don't affect documented behavior
 - Style, formatting, or comment-only changes
 
-If no update is needed, output a **noop** explaining why and stop.
+If the existing documentation, including changes already made in the pull request, fully covers
+the relevant code changes, output a **noop** explaining why and stop.
 
-## Step 6 — Make the changes and open a PR
+## Step 4 — Update the pull request branch
 
-Edit the relevant files under `docs/` to reflect the code changes. If an open docs-update PR
-already exists, update that PR branch; otherwise create a new pull request with those changes.
+Edit only the relevant files under `docs/` to reflect the pull request's code changes. Keep the
+edits limited to behavior introduced or changed by this pull request.
 
-**PR description must include:**
-
-- A list of the merged PRs that were analyzed (number and title)
-- A concise explanation of what was changed in the docs and why
-- A note that the changes were AI-generated and should be reviewed carefully before merging
+Commit the documentation changes to the checked-out pull request branch, then use
+`push-to-pull-request-branch` to add the commit to the triggering pull request. Do not create a
+separate pull request.
 
 **Guidelines for editing:**
 
 - Preserve the existing writing style, tone, and structure.
 - Do not invent or speculate about features not present in the code.
-- Only modify files under `docs/`. Never touch source code, tests, or config files.
+- Do not overwrite, revert, or duplicate documentation changes already made by the author.
+- Only modify files under `docs/`. Never touch source code, tests, config files, or workflow files.
 - When in doubt about whether a change is needed, be conservative and skip it.
