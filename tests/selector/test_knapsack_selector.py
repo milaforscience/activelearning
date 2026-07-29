@@ -28,6 +28,48 @@ def test_greedy_knapsack_indices_raises_on_length_mismatch():
         greedy_knapsack_indices([1.0], [1.0, 2.0], budget=3.0)
 
 
+def test_greedy_knapsack_indices_misses_optimal_solution():
+    """Test greedy helper is suboptimal when a lower-ratio item dominates.
+
+    Greedy sorts by value/cost ratio and picks:
+      - item 1 (value=6, cost=5, ratio=1.20) first,
+      - then item 0 (value=7, cost=6, ratio=1.17) is too expensive,
+      - then item 2 (value=10, cost=9, ratio=1.11) is too expensive,
+    yielding total value 6. The true optimum is item 2 alone (value=10).
+    """
+    values = [7.0, 6.0, 10.0]
+    costs = [6.0, 5.0, 9.0]
+
+    selected_indices = greedy_knapsack_indices(values, costs, budget=10.0)
+
+    # Greedy picks only item 1 (best ratio), missing the better single-item solution
+    assert selected_indices == [1]
+    assert sum(values[i] for i in selected_indices) < values[2]
+
+
+def test_greedy_knapsack_indices_misses_optimal_multi_item_solution():
+    """Test greedy helper is suboptimal when filling with high-ratio cheap items
+    blocks a higher-value combination that includes a lower-ratio expensive item.
+
+    Greedy sorts by value/cost ratio and picks:
+      - items 0, 1, 2 (each value=3, cost=2, ratio=1.50) — exhausting 6 units of budget,
+      - item 3 (value=8, cost=6, ratio=1.33) is then too expensive for the remaining 4,
+    yielding total value 9.
+
+    The optimal solution is items 0 + 1 + 3 (cost=10, value=14).
+    """
+    values = [3.0, 3.0, 3.0, 8.0]
+    costs = [2.0, 2.0, 2.0, 6.0]
+
+    selected_indices = greedy_knapsack_indices(values, costs, budget=10.0)
+
+    # Greedy fills with three cheap items and misses the optimal three-item set
+    assert selected_indices == [0, 1, 2]
+    greedy_value = sum(values[i] for i in selected_indices)
+    optimal_value = values[0] + values[1] + values[3]  # items 0, 1, 3
+    assert greedy_value < optimal_value
+
+
 def test_greedy_knapsack_indices_breaks_ratio_ties_by_value_then_index():
     """Test greedy helper preserves the documented tie-break order."""
     values = [10.0, 8.0, 10.0]
