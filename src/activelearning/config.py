@@ -21,7 +21,10 @@ from activelearning.oracle.config import OracleConfig
 from activelearning.runtime import RuntimeContextConfig
 from activelearning.sampler.config import SamplerConfig
 from activelearning.selector.config import SelectorConfig
-from activelearning.surrogate.config import SurrogateConfig
+from activelearning.surrogate.config import (
+    FidelityAwareSurrogateConfig,
+    SurrogateConfig,
+)
 
 
 class ActiveLearningConfig(BaseModel):
@@ -41,8 +44,8 @@ class ActiveLearningConfig(BaseModel):
 
         The oracle defines the authoritative fidelity levels and their
         confidences. Missing sampler levels are filled from that set, explicit
-        sampler levels are validated against it, and compatible surrogate
-        fields are derived from the resulting fidelity metadata.
+        sampler levels are validated against it, and fidelity-aware surrogate
+        configs resolve their settings from the resulting metadata.
 
         Returns
         -------
@@ -64,7 +67,7 @@ class ActiveLearningConfig(BaseModel):
             self.sampler,
             set(fidelity_confidences),
         )
-        self.surrogate = _configure_surrogate_fidelities(
+        self.surrogate = _resolve_surrogate_fidelities(
             self.surrogate,
             fidelity_confidences,
         )
@@ -262,56 +265,11 @@ def _resolve_sampler_fidelities(
     return sampler
 
 
-def _resolve_target_fidelity(
-    target_fidelity: int | None,
-    fidelity_confidences: dict[int, float],
-) -> int | None:
-    """Resolve a surrogate target fidelity from oracle metadata.
-
-    Single-fidelity runs do not require a target and therefore resolve to
-    ``None``. For multi-fidelity runs, an omitted target resolves to the level
-    with the greatest confidence.
-
-    Parameters
-    ----------
-    target_fidelity : int or None
-        Explicit surrogate target, if configured.
-    fidelity_confidences : dict[int, float]
-        Non-empty oracle confidence mapping.
-
-    Returns
-    -------
-    int or None
-        ``None`` for a single-fidelity run, otherwise the explicit or derived
-        target fidelity.
-
-    Raises
-    ------
-    ValueError
-        If an explicit target is not declared by the oracle.
-    """
-    if len(fidelity_confidences) == 1:
-        return None
-    if target_fidelity is None:
-        return max(fidelity_confidences, key=fidelity_confidences.__getitem__)
-    if target_fidelity not in fidelity_confidences:
-        raise ValueError(
-            f"Surrogate target_fidelity {target_fidelity} is not declared by "
-            f"the oracle. Oracle declares: {sorted(fidelity_confidences)}."
-        )
-    return target_fidelity
-
-
-def _configure_surrogate_fidelities(
+def _resolve_surrogate_fidelities(
     surrogate: BaseModel,
     fidelity_confidences: dict[int, float],
 ) -> BaseModel:
-    """Apply oracle fidelity metadata to fields supported by a surrogate.
-
-    The helper updates fields by capability rather than concrete surrogate
-    type. It sets ``is_multi_fidelity`` and/or ``multi_fidelity`` when present,
-    and resolves ``target_fidelity`` when supported. Surrogates without these
-    fields are returned unchanged.
+    """Resolve surrogate fidelity settings through its declared contract.
 
     Parameters
     ----------
@@ -323,30 +281,20 @@ def _configure_surrogate_fidelities(
     Returns
     -------
     BaseModel
-        Revalidated surrogate config containing the derived fidelity settings,
-        or the original config when it has no fidelity-related fields.
+        Revalidated config with resolved fidelity settings.
 
     Raises
     ------
     ValueError
-        If an explicit target fidelity is not declared by the oracle.
+        If the surrogate does not support a multi-fidelity oracle or rejects
+        the provided fidelity metadata.
     """
-    fields = type(surrogate).model_fields
-    is_multi_fidelity = len(fidelity_confidences) > 1
-    updates: dict[str, object] = {
-        field: is_multi_fidelity
-        for field in ("is_multi_fidelity", "multi_fidelity")
-        if field in fields
-    }
-    if "target_fidelity" in fields:
-        updates["target_fidelity"] = _resolve_target_fidelity(
-            surrogate.target_fidelity,
-            fidelity_confidences,
+    if isinstance(surrogate, FidelityAwareSurrogateConfig):
+        return surrogate.resolve_fidelity_confidences(fidelity_confidences)
+
+    if len(fidelity_confidences) > 1:
+        raise ValueError(
+            f"{type(surrogate).__name__} does not support multi-fidelity "
+            "oracles. Implement FidelityAwareSurrogateConfig to opt in."
         )
-
-    if not updates:
-        return surrogate
-
-    data = surrogate.model_dump()
-    data.update(updates)
-    return type(surrogate).model_validate(data)
+    return surrogate

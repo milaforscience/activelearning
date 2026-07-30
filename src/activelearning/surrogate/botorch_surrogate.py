@@ -9,7 +9,7 @@ from botorch.models.transforms.outcome import Standardize
 from gpytorch.mlls import ExactMarginalLogLikelihood
 from gpytorch.module import Module
 
-from activelearning.surrogate.surrogate import Surrogate
+from activelearning.surrogate.surrogate import MultiFidelitySurrogate
 from activelearning.utils.types import (
     Candidate,
     Observation,
@@ -18,7 +18,7 @@ from activelearning.utils.types import (
 )
 
 
-class BoTorchGPSurrogate(Surrogate):
+class BoTorchGPSurrogate(MultiFidelitySurrogate):
     """A highly flexible Gaussian Process surrogate using BoTorch.
 
     Automatically handles single-fidelity and multi-fidelity configurations,

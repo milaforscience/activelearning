@@ -5,7 +5,16 @@ configuration. New surrogates should define their corresponding pydantic model h
 be added to ``SurrogateConfig``.
 """
 
-from typing import Annotated, Any, Callable, Literal, Union, cast
+from typing import (
+    Annotated,
+    Any,
+    Callable,
+    Literal,
+    Protocol,
+    Union,
+    cast,
+    runtime_checkable,
+)
 
 from pydantic import BaseModel, Field, ImportString, field_validator, model_validator
 from gpytorch.module import Module
@@ -17,6 +26,17 @@ from activelearning.applications.molecules.config import (
     ExactSelfiesDKLSurrogateConfig,
     VariationalSelfiesDKLSurrogateConfig,
 )
+
+
+@runtime_checkable
+class FidelityAwareSurrogateConfig(Protocol):
+    """Configuration contract for surrogates that support multiple fidelities."""
+
+    def resolve_fidelity_confidences(
+        self,
+        confidences: dict[int, float],
+    ) -> BaseModel:
+        """Return this config with oracle-derived fidelity settings resolved."""
 
 
 class DummyMeanSurrogateConfig(BaseModel):
@@ -40,6 +60,26 @@ class BoTorchGPSurrogateConfig(BaseModel):
     # validator when using the config system.  Can also be set directly when
     # constructing the surrogate outside of the config system.
     is_multi_fidelity: bool = False
+
+    def resolve_fidelity_confidences(
+        self,
+        confidences: dict[int, float],
+    ) -> "BoTorchGPSurrogateConfig":
+        """Derive multi-fidelity mode from oracle confidence metadata.
+
+        Parameters
+        ----------
+        confidences : dict[int, float]
+            Oracle fidelity confidence mapping.
+
+        Returns
+        -------
+        BoTorchGPSurrogateConfig
+            Revalidated config with the derived ``is_multi_fidelity`` value.
+        """
+        data = self.model_dump()
+        data["is_multi_fidelity"] = len(confidences) > 1
+        return type(self).model_validate(data)
 
     @field_validator("custom_fit_function")
     @classmethod

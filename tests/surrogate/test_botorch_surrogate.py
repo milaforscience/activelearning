@@ -6,6 +6,10 @@ from botorch.models import SingleTaskGP
 from botorch.models.gp_regression_fidelity import SingleTaskMultiFidelityGP
 
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
+from activelearning.surrogate.surrogate import (
+    MultiFidelitySurrogate,
+    TargetFidelityProjector,
+)
 from activelearning.utils.types import Observation, Candidate
 from activelearning.dataset.list_dataset import ListDataset
 
@@ -817,3 +821,10 @@ def test_scale_inputs_excludes_fidelity_column(multi_fidelity_observations):
     assert transform_indices.tolist() == expected_indices, (
         "Normalize should only cover feature columns, not the fidelity column"
     )
+
+
+def test_botorch_surrogate_declares_multi_fidelity_contract():
+    """BoTorch GP explicitly supports oracle confidence metadata."""
+    surrogate = BoTorchGPSurrogate()
+    assert isinstance(surrogate, MultiFidelitySurrogate)
+    assert isinstance(surrogate, TargetFidelityProjector)

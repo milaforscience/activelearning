@@ -49,6 +49,16 @@ def test_single_fidelity_config_derives_sampler_level_and_surrogate_mode() -> No
     assert config.surrogate.is_multi_fidelity is False
 
 
+def test_multi_fidelity_config_rejects_fidelity_agnostic_surrogate() -> None:
+    """A multi-level oracle requires a fidelity-aware surrogate config."""
+    config_path = REPOSITORY_ROOT / "config" / "branin" / "multi_fidelity.yaml"
+    raw_config = load_config(config_path)
+    raw_config.surrogate = {"type": "DummyMeanSurrogate"}
+
+    with pytest.raises(ValidationError, match="does not support multi-fidelity"):
+        parse_config(raw_config, ActiveLearningConfig)
+
+
 def test_single_fidelity_dkl_config_clears_target_level() -> None:
     """A target level is irrelevant and unsafe when DKL fidelity input is disabled."""
     config_path = REPOSITORY_ROOT / "config" / "molecules" / "exact.yaml"

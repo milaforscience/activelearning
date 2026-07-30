@@ -127,6 +127,34 @@ class SelfiesTrainingConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _resolve_dkl_fidelity_confidences(
+    config: BaseModel,
+    confidences: dict[int, float],
+) -> BaseModel:
+    """Resolve shared DKL fidelity settings from oracle metadata."""
+    multi_fidelity = len(confidences) > 1
+    target_fidelity = config.target_fidelity
+
+    if not multi_fidelity:
+        target_fidelity = None
+    elif target_fidelity is None:
+        target_fidelity = max(confidences, key=confidences.__getitem__)
+    elif target_fidelity not in confidences:
+        raise ValueError(
+            f"Surrogate target_fidelity {target_fidelity} is not declared by "
+            f"the oracle. Oracle declares: {sorted(confidences)}."
+        )
+
+    data = config.model_dump()
+    data.update(
+        {
+            "multi_fidelity": multi_fidelity,
+            "target_fidelity": target_fidelity,
+        }
+    )
+    return type(config).model_validate(data)
+
+
 class ExactSelfiesDKLSurrogateConfig(BaseModel):
     """Configuration for :class:`~activelearning.applications.molecules.dkl_surrogate.ExactSelfiesDKLSurrogate`.
 
@@ -157,6 +185,29 @@ class ExactSelfiesDKLSurrogateConfig(BaseModel):
     multi_fidelity: bool = False
     target_fidelity: Optional[int] = None
     standardize_outputs: bool = True
+
+    def resolve_fidelity_confidences(
+        self,
+        confidences: dict[int, float],
+    ) -> "ExactSelfiesDKLSurrogateConfig":
+        """Resolve DKL fidelity mode and target from oracle confidences.
+
+        Parameters
+        ----------
+        confidences : dict[int, float]
+            Oracle fidelity confidence mapping.
+
+        Returns
+        -------
+        ExactSelfiesDKLSurrogateConfig
+            Revalidated config with resolved fidelity settings.
+
+        Raises
+        ------
+        ValueError
+            If the explicit target fidelity is not declared by the oracle.
+        """
+        return _resolve_dkl_fidelity_confidences(self, confidences)
 
     def build(self) -> object:
         from activelearning.applications.molecules.dkl_surrogate import (
@@ -206,6 +257,29 @@ class VariationalSelfiesDKLSurrogateConfig(BaseModel):
     target_fidelity: Optional[int] = None
     num_inducing: int = 64
     standardize_outputs: bool = True
+
+    def resolve_fidelity_confidences(
+        self,
+        confidences: dict[int, float],
+    ) -> "VariationalSelfiesDKLSurrogateConfig":
+        """Resolve DKL fidelity mode and target from oracle confidences.
+
+        Parameters
+        ----------
+        confidences : dict[int, float]
+            Oracle fidelity confidence mapping.
+
+        Returns
+        -------
+        VariationalSelfiesDKLSurrogateConfig
+            Revalidated config with resolved fidelity settings.
+
+        Raises
+        ------
+        ValueError
+            If the explicit target fidelity is not declared by the oracle.
+        """
+        return _resolve_dkl_fidelity_confidences(self, confidences)
 
     def build(self) -> object:
         from activelearning.applications.molecules.dkl_surrogate import (

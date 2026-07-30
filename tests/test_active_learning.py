@@ -8,15 +8,16 @@ from activelearning.dataset.list_dataset import ListDataset
 from activelearning.oracle.multi_fidelity_oracle import MultiFidelityOracle
 from activelearning.sampler.pool_score_sampler import PoolScoreSampler
 from activelearning.selector.score_selector import TopKAcquisitionSelector
-from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
+from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
+from activelearning.surrogate.surrogate import MultiFidelitySurrogate
 from activelearning.active_learning import active_learning
 from activelearning.utils.types import Candidate, Observation
 from activelearning.logger.logger import ConsoleLogger
 from activelearning.runtime import RuntimeContext
 
 
-class ConfidenceAwareDummyMeanSurrogate(DummyMeanSurrogate):
+class ConfidenceAwareDummyMeanSurrogate(DummyMeanSurrogate, MultiFidelitySurrogate):
     """Dummy surrogate variant that records fidelity confidences."""
 
     def __init__(self) -> None:
@@ -164,6 +165,22 @@ def test_active_learning_passes_fidelity_confidences_to_surrogate(
     assert surrogate.fidelity_confidences == oracle.get_fidelity_confidences()
 
 
+def test_active_learning_rejects_unsupported_multi_fidelity_surrogate(
+    dataset, acquisition, sampler, selector, oracle, budget
+):
+    """A fidelity-agnostic surrogate cannot run against a multi-level oracle."""
+    with pytest.raises(ValueError, match="does not support multi-fidelity"):
+        active_learning(
+            dataset=dataset,
+            surrogate=DummyMeanSurrogate(),
+            acquisition=acquisition,
+            sampler=sampler,
+            selector=selector,
+            oracle=oracle,
+            budget=budget,
+        )
+
+
 def test_active_learning_stops_when_selector_returns_empty(
     dataset, surrogate, acquisition, sampler, oracle, budget
 ):
@@ -238,8 +255,11 @@ class RuntimeLoggingDataset(ListDataset):
             self.logger.log_metric("dataset_records", len(self._records))
 
 
-class RuntimeLoggingSurrogate(DummyMeanSurrogate):
+class RuntimeLoggingSurrogate(DummyMeanSurrogate, MultiFidelitySurrogate):
     """Surrogate test double that emits metrics through the bound runtime logger."""
+
+    def set_fidelity_confidences(self, confidences: dict[int, float]) -> None:
+        """Accept fidelity metadata without using it."""
 
     def fit(self, observations: Iterable[Observation]) -> None:
         super().fit(observations)

@@ -1,6 +1,7 @@
 import pytest
 
 from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
+from activelearning.surrogate.surrogate import MultiFidelitySurrogate
 from activelearning.utils.types import Candidate, Observation
 
 
@@ -128,8 +129,6 @@ def test_predict_with_fidelity(surrogate, fidelity):
         assert predictions["std"] == [1.0]
 
 
-def test_set_fidelity_confidences_is_noop(surrogate):
-    """Test default surrogate confidence hook is a no-op."""
-    surrogate.set_fidelity_confidences({0: 0.8, 1: 0.4})
-    assert surrogate._model == {}
-    assert surrogate._mean_score == 0.0
+def test_dummy_mean_surrogate_is_not_multi_fidelity(surrogate):
+    """Dummy mean surrogate does not opt into the multi-fidelity contract."""
+    assert not isinstance(surrogate, MultiFidelitySurrogate)
