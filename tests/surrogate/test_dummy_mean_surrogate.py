@@ -18,7 +18,7 @@ def observations():
     ]
 
 
-@pytest.fixture(params=[None, 0, 1])
+@pytest.fixture(params=[0, 1, 2])
 def fidelity(request):
     return request.param
 
@@ -122,7 +122,7 @@ def test_predict_with_fidelity(surrogate, fidelity):
     elif fidelity == 1:
         assert predictions["mean"] == [55.0]
         assert predictions["std"] == [0.1]
-    else:  # None - unknown fidelity
+    else:  # Unknown fidelity
         expected_mean = (50.0 + 55.0) / 2
         assert predictions["mean"] == [expected_mean]
         assert predictions["std"] == [1.0]

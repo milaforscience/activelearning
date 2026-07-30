@@ -8,7 +8,7 @@ import torch
 from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
     MultiFidelityGFlowNetEnvWrapperBase,
 )
-from activelearning.utils.types import Candidate
+from activelearning.utils.types import Candidate, DEFAULT_FIDELITY
 
 # Accepted input shapes for states_proxy: 2-D tensor, list of tensors,
 # list of plain sequences (single-fidelity), or list of dicts (multi-fidelity).
@@ -70,7 +70,7 @@ def _single_fidelity_proxy_values(proxy_states: Any) -> list[Any]:
 def proxy_states_to_candidates(
     states_proxy: _StatesProxy,
     env: Any,
-    fidelity_map: list[int] | None = None,
+    fidelity_map: Sequence[int] = (DEFAULT_FIDELITY,),
 ) -> list[Candidate]:
     """Convert proxy-format states to :class:`~activelearning.utils.types.Candidate` objects.
 
@@ -110,17 +110,18 @@ multi_fidelity_env_wrapper.MultiFidelityGFlowNetEnvWrapperBase`),
         multi-fidelity when it is a
         :class:`~activelearning.sampler.gflownet.multi_fidelity_env_wrapper.MultiFidelityGFlowNetEnvWrapperBase`
         instance; otherwise treated as single-fidelity.
-    fidelity_map : list[int] or None
+    fidelity_map : Sequence[int]
         Maps 1-based ``Choice`` env states to domain fidelity values. Raw
         index ``i`` (``1..N``) is translated to ``fidelity_map[i - 1]``.
-        When ``None``, the raw index is stamped directly. Ignored for
-        single-fidelity envs.
+        The first value is stamped on candidates from single-fidelity
+        environments.
 
     Returns
     -------
     list[Candidate]
         One :class:`~activelearning.utils.types.Candidate` per state.
-        Multi-fidelity candidates carry a non-``None`` ``fidelity`` field.
+        Multi-fidelity candidates carry a fidelity from ``fidelity_map``;
+        single-fidelity candidates carry its first value.
 
     Raises
     ------
@@ -148,18 +149,15 @@ multi_fidelity_env_wrapper.MultiFidelityGFlowNetEnvWrapperBase`),
                 fid_raw[0].item() if torch.is_tensor(fid_raw) else fid_raw[0]
             )
             # Choice env: raw_index is 1-based (1..N); convert to 0-based for fidelity_map.
-            fidelity = (
-                fidelity_map[raw_index - 1] if fidelity_map is not None else raw_index
-            )
             candidates.append(
                 Candidate(
                     x=_normalize_proxy_value(state_proxy[idx_base]),
-                    fidelity=fidelity,
+                    fidelity=fidelity_map[raw_index - 1],
                 )
             )
         return candidates
 
     return [
-        Candidate(x=_normalize_proxy_value(proxy_value))
+        Candidate(x=_normalize_proxy_value(proxy_value), fidelity=fidelity_map[0])
         for proxy_value in _single_fidelity_proxy_values(states_proxy)
     ]

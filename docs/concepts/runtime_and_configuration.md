@@ -98,16 +98,18 @@ Every non-null component block uses a `type` discriminator. The matching config 
 
 The included configurations use `cpu` and `precision: 64`. Local sampler-level overrides (`sampler.device`, `sampler.float_precision`) inherit from `runtime` when omitted and take precedence when set explicitly. Local overrides are appropriate only when the sampler requires a different execution environment from the rest of the study.
 
-## **Study-Defining Multi-Fidelity Fields**
+## **Study-Defining Fidelity Fields**
 
-For multi-fidelity experiments, the fields that materially define the study are:
+The fidelity structure is determined at config parse time from the oracle's declared levels.
+A study is *single-fidelity* when `oracle.fidelity_costs` has exactly one entry, and
+*multi-fidelity* when it has two or more.
 
-- `oracle.fidelity_costs`: valid fidelity levels $m \in \mathcal{M}$ and per-query costs $c(x, m)$.
+The fields that materially define the study are:
+
+- `oracle.fidelity_costs`: valid fidelity levels $m \in \mathcal{M}$ and per-query costs $c(x, m)$.  **This is the authoritative source of the fidelity set.** All other components are validated against it.
 - `oracle.fidelity_confidences`: optional confidence map $\kappa(m)$; the built-in augmented-function oracles derive it from relative cost when omitted.
-- `sampler.fidelities`: candidate-fidelity support for the sampler; accepts a simple list for uniform fidelity sampling, or a cost map that biases sampling inversely proportional to fidelity cost.
+- `sampler.fidelities`: fidelity levels the sampler will stamp on candidates.  Accepts a simple list for uniform fidelity sampling, or a cost map that biases sampling inversely proportional to fidelity cost.  **When omitted, the validator auto-fills this from the oracle's fidelity set.**  An error is raised if the sampler declares levels that are not in the oracle's set.
 - `budget.available_budget` and `budget.schedule`: total expenditure limit and per-round spending policy (`constant` or `sigmoid_iterations` in the current schema).
-
-Not every sampler emits explicit fidelity labels. That distinction is material when working with cost-aware, multi-fidelity acquisition functions.
 
 ## **Configuration Overrides**
 

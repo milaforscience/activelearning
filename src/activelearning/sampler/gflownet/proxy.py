@@ -5,7 +5,7 @@ from gflownet.proxy.base import Proxy
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.acquisition.cost_utility import cost_weighting_from_cost_fn
 from activelearning.sampler.gflownet.utils import proxy_states_to_candidates
-from activelearning.utils.types import Candidate
+from activelearning.utils.types import Candidate, DEFAULT_FIDELITY
 
 
 class AcquisitionProxy(Proxy):
@@ -49,24 +49,52 @@ class AcquisitionProxy(Proxy):
         self.acquisition = acquisition
         self.cost_fn = cost_fn
         self._env: Optional[Any] = None
-        self._fidelity_map: Optional[list[int]] = None
+        self._fidelity_map: list[int] = [DEFAULT_FIDELITY]
 
     def setup(self, env: Any = None) -> None:
-        """Store the environment for multi-fidelity index resolution."""
+        """Store the environment for multi-fidelity index resolution.
+
+        Parameters
+        ----------
+        env : Any, optional
+            GFlowNet environment instance.  In multi-fidelity mode this must be
+            a :class:`~activelearning.sampler.gflownet.multi_fidelity_env_wrapper.MultiFidelityGFlowNetEnvWrapperBase`
+            so that ``idx_base_env`` and ``idx_fidelity`` are available.
+        """
         self._env = env
 
     def set_acquisition(self, acquisition: Acquisition) -> None:
-        """Replace the wrapped acquisition function."""
+        """Replace the wrapped acquisition function.
+
+        Parameters
+        ----------
+        acquisition : Acquisition
+            The new acquisition function to use when scoring proxy states.
+        """
         self.acquisition = acquisition
 
     def set_cost_fn(
         self, cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]]
     ) -> None:
-        """Replace the optional candidate cost function."""
+        """Replace the optional candidate cost function.
+
+        Parameters
+        ----------
+        cost_fn : callable or None
+            A function that maps a sequence of :class:`~activelearning.utils.types.Candidate`
+            objects to a list of costs.  When ``None``, proxy scores are
+            returned without cost reweighting.
+        """
         self.cost_fn = cost_fn
 
-    def set_fidelity_map(self, fidelity_map: Optional[list[int]]) -> None:
-        """Set the fidelity map for translating raw Choice env indices to domain values."""
+    def set_fidelity_map(self, fidelity_map: list[int]) -> None:
+        """Set the fidelity map for translating raw Choice env indices to domain values.
+
+        Parameters
+        ----------
+        fidelity_map : list[int]
+            Maps 1-based ``Choice`` env states to domain fidelity values.
+        """
         self._fidelity_map = fidelity_map
 
     def __call__(self, states: Union[torch.Tensor, List, npt.NDArray]) -> torch.Tensor:
@@ -106,7 +134,9 @@ class AcquisitionProxy(Proxy):
             )
 
         candidates = proxy_states_to_candidates(
-            states, self._env, fidelity_map=self._fidelity_map
+            states,
+            self._env,
+            fidelity_map=self._fidelity_map,
         )
         if self.cost_fn is None:
             acq_values = self.acquisition.score(candidates)

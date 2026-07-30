@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from activelearning.applications.molecules.constants import SELFIES_VOCAB_SMALL
 
@@ -142,9 +142,9 @@ class ExactSelfiesDKLSurrogateConfig(BaseModel):
     multi_fidelity : bool
         Append the encoded fidelity confidence to feature tensors.
     target_fidelity : int, optional
-        Required when ``multi_fidelity=True``; typically the highest fidelity
-        level. It is mapped to its configured confidence before BoTorch uses it
-        as the target-fidelity value.
+        Target level for multi-fidelity acquisition. The top-level active
+        learning config derives it from oracle confidence metadata when
+        omitted. Standalone multi-fidelity builds must provide it explicitly.
     standardize_outputs : bool
         Normalise GP outputs to mean 0 / variance 1.
     """
@@ -157,12 +157,6 @@ class ExactSelfiesDKLSurrogateConfig(BaseModel):
     multi_fidelity: bool = False
     target_fidelity: Optional[int] = None
     standardize_outputs: bool = True
-
-    @model_validator(mode="after")
-    def _check_target_fidelity(self) -> "ExactSelfiesDKLSurrogateConfig":
-        if self.multi_fidelity and self.target_fidelity is None:
-            raise ValueError("target_fidelity is required when multi_fidelity=True")
-        return self
 
     def build(self) -> object:
         from activelearning.applications.molecules.dkl_surrogate import (
@@ -194,9 +188,9 @@ class VariationalSelfiesDKLSurrogateConfig(BaseModel):
     multi_fidelity : bool
         Append the encoded fidelity confidence to latent feature vectors.
     target_fidelity : int, optional
-        Required when ``multi_fidelity=True``; typically the highest fidelity
-        level. It is mapped to its configured confidence before BoTorch uses it
-        as the target-fidelity value.
+        Target level for multi-fidelity acquisition. The top-level active
+        learning config derives it from oracle confidence metadata when
+        omitted. Standalone multi-fidelity builds must provide it explicitly.
     num_inducing : int
         Number of variational inducing points.
     standardize_outputs : bool
@@ -212,12 +206,6 @@ class VariationalSelfiesDKLSurrogateConfig(BaseModel):
     target_fidelity: Optional[int] = None
     num_inducing: int = 64
     standardize_outputs: bool = True
-
-    @model_validator(mode="after")
-    def _check_target_fidelity(self) -> "VariationalSelfiesDKLSurrogateConfig":
-        if self.multi_fidelity and self.target_fidelity is None:
-            raise ValueError("target_fidelity is required when multi_fidelity=True")
-        return self
 
     def build(self) -> object:
         from activelearning.applications.molecules.dkl_surrogate import (

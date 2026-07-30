@@ -46,15 +46,19 @@ Lower-fidelity queries support cost-effective allocation: they can fit within th
 
 Multi-fidelity behaviour is activated by specifying a fidelity cost map (with an associated confidence map) consistently across the YAML blocks for the relevant concrete components, e.g., [`AugmentedFunctionOracle`](../reference/activelearning/oracle/augmented_function_oracle/#activelearning.oracle.augmented_function_oracle.AugmentedFunctionOracle), [`HypercubeSampler`](../reference/activelearning/sampler/hypercube_sampler/#activelearning.sampler.hypercube_sampler.HypercubeSampler), or [`CostAwareSelector`](../reference/activelearning/selector/cost_aware_selector/#activelearning.selector.cost_aware_selector.CostAwareSelector). A sampler may use the cost map to weight its fidelity proposals; an acquisition function may use it to normalize utility scores; and the oracle uses it to compute query costs and derive default confidences from costs.
 
+Single-fidelity is a special case of multi-fidelity with exactly one declared level (e.g. `fidelity_costs: {1: 1.0}`). The top-level config validator determines the mode at parse time from the oracle's fidelity set — no runtime inference is needed. If `sampler.fidelities` is omitted, it is auto-filled with the oracle's declared level(s). Explicit sampler levels must be non-empty and belong to the oracle's fidelity set.
+
 For concrete configuration examples, see [Runtime and Configuration](runtime_and_configuration.md) and the [Quickstart](../getting-started/quickstart.md).
 
 ## **Single-Fidelity vs. Multi-Fidelity**
 
-| Dimension | Single-Fidelity            | Multi-Fidelity                                                       |
-| --- |----------------------------|----------------------------------------------------------------------|
-| Query action | Select $x \in \mathcal{X}$ | Select pair $(x, m)$                                                 |
-| Query cost | Uniform                    | $c(x, m)$ varies by fidelity $m \in \mathcal{M}$                     |
-| Surrogate scope | One observation regime     | Objective across fidelity levels                                     |
-| Budget role | Constrains query costs     | Constrains query costs considering allocation across fidelity levels |
+| Dimension | Single-Fidelity                              | Multi-Fidelity                                                       |
+| --- |----------------------------------------------|----------------------------------------------------------------------|
+| Fidelity set $\mathcal{M}$ | One level (e.g. $\mathcal{M} = \{1\}$)       | Two or more levels                                                   |
+| Query action | Select $x \in \mathcal{X}$ at the sole level | Select pair $(x, m)$                                                 |
+| Query cost | Uniform                                      | $c(x, m)$ varies by fidelity $m \in \mathcal{M}$                     |
+| Surrogate scope | One observation regime                       | Objective across fidelity levels                                     |
+| Budget role | Constrains query costs                       | Constrains query costs considering allocation across fidelity levels |
+| `Candidate.fidelity` | Integer fidelity id (e.g. `1`)               | Integer fidelity id (e.g. `1`, `2`, or `3`)                         |
 
 For concrete configuration examples, see the [Synthetic Function Examples](../tutorials/synthetic_function_experiment.md) tutorial, which walks through both settings side by side.

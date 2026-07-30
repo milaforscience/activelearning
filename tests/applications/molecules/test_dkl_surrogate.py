@@ -621,6 +621,20 @@ class TestDKLSurrogateConfigs:
         surrogate = cfg.build()
         assert isinstance(surrogate, VariationalSelfiesDKLSurrogate)
 
+    def test_standalone_multi_fidelity_config_requires_target_on_build(self):
+        """Top-level derivation is unavailable when a DKL config is built alone."""
+        from activelearning.applications.molecules.config import (
+            ExactSelfiesDKLSurrogateConfig,
+        )
+
+        cfg = ExactSelfiesDKLSurrogateConfig(
+            encoder=ENCODER_CFG,
+            multi_fidelity=True,
+        )
+
+        with pytest.raises(ValueError, match="target_fidelity must be set"):
+            cfg.build()
+
 
 class TestSurrogatePredictionCorrectness:
     """Correctness tests shared by both ExactSelfiesDKLSurrogate and VariationalSelfiesDKLSurrogate.

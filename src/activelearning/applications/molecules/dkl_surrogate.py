@@ -104,7 +104,7 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         self._training = training_params
         self._include_fidelity: bool = multi_fidelity
 
-        self._target_fidelity_level = target_fidelity
+        self._target_fidelity_level = target_fidelity if multi_fidelity else None
         botorch_kwargs.setdefault("optimize_hyperparameters", False)
         super().__init__(**botorch_kwargs)
         # Override the base-class default (False) so is_multi_fidelity() returns
@@ -154,7 +154,7 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         configured target fidelity level is converted through the active
         confidence mapping before BoTorch uses it.
         """
-        if self._target_fidelity_level is None:
+        if not self._include_fidelity or self._target_fidelity_level is None:
             return None
         return self._encode_fidelity_level(self._target_fidelity_level)
 

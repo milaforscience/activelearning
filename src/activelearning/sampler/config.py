@@ -7,7 +7,9 @@ be added to ``SamplerConfig``.
 
 from pathlib import Path
 from typing import Annotated, Any, Literal, Union
-from pydantic import BaseModel, Field
+
+from pydantic import BaseModel, Field, PositiveFloat, StrictInt
+
 from activelearning.sampler.hypercube_sampler import HypercubeSampler
 from activelearning.sampler.sampler import Sampler
 from activelearning.sampler.pool_file_sampler import PoolFileSampler
@@ -16,13 +18,19 @@ from activelearning.sampler.gflownet.grid_sampler import GFlowNetGridSampler
 from activelearning.sampler.gflownet.gflownet_sampler import GFlowNetSampler
 
 _FidelityAction = Literal["any", "first", "last"]
+_FidelityLevels = Annotated[list[StrictInt], Field(min_length=1)]
+_FidelityCosts = Annotated[
+    dict[StrictInt, PositiveFloat],
+    Field(min_length=1),
+]
+_Fidelities = _FidelityCosts | _FidelityLevels | None
 
 
 class HypercubeSamplerConfig(BaseModel):
     type: Literal["HypercubeSampler"] = "HypercubeSampler"
     bounds: list[tuple[float, float]]
     num_samples: int = Field(gt=0)
-    fidelities: dict[int, float] | list[int] | None = None
+    fidelities: _Fidelities = None
     point_strategy: Literal["uniform", "lhs"] = "uniform"
 
     def build(self) -> Sampler:
@@ -45,13 +53,15 @@ class PoolFileSamplerConfig(BaseModel):
         Maximum number of candidates to return per call.
     fidelities : list[int] or dict[int, float] or None
         Fidelity assignment strategy.  ``list[int]`` → uniform random;
-        ``dict[int, float]`` → cost-inverse weighted; ``None`` → no fidelity.
+        ``dict[int, float]`` → cost-inverse weighted; ``None`` →
+        :data:`~activelearning.utils.types.DEFAULT_FIDELITY` is used as the
+        sole level (single-fidelity mode).
     """
 
     type: Literal["PoolFileSampler"] = "PoolFileSampler"
     candidate_pool_file: Path
     num_samples: int = Field(gt=0)
-    fidelities: dict[int, float] | list[int] | None = None
+    fidelities: _Fidelities = None
 
     def build(self, runtime=None) -> Sampler:
         return PoolFileSampler(
@@ -77,11 +87,13 @@ class GFlowNetSamplerConfig(BaseModel):
     n_samples : int
         Number of candidates to generate per :meth:`~activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler.sample` call.
     fidelities : list[int] or None
-        Fidelity levels to generate. ``None`` means single-fidelity (no
-        fidelity is stamped on candidates). A list enables multi-fidelity
-        mode: each sampled candidate is assigned one of these values as its
-        ``fidelity``. Values must match the oracle's ``fidelity_costs`` keys
-        (e.g. ``[1, 2, 3]`` for a three-level oracle).
+        Fidelity levels to generate.  When ``None``, the top-level config validator
+        fills this from the oracle's fidelity set; the sampler then operates in
+        single-fidelity mode (one level, stamped on every candidate).  A list with
+        more than one entry enables multi-fidelity mode: each sampled candidate is
+        assigned one of the listed values as its ``fidelity``.  Values must match
+        the oracle's ``fidelity_costs`` keys (e.g. ``[1, 2, 3]`` for a three-level
+        oracle).
     log_dir : str or None
         Root directory for GFlowNet logs.  A temporary directory is created
         automatically when ``None``.
@@ -94,7 +106,7 @@ class GFlowNetSamplerConfig(BaseModel):
 
     type: Literal["GFlowNetSampler"] = "GFlowNetSampler"
     n_samples: int = Field(gt=0)
-    fidelities: list[int] | None = None
+    fidelities: _FidelityLevels | None = None
     fidelity_action: _FidelityAction = "any"
     log_dir: str | None = None
     conf: dict[str, Any] | None = None
