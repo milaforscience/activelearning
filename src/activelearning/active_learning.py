@@ -11,7 +11,7 @@ from activelearning.runtime import (
 )
 from activelearning.sampler.sampler import Sampler
 from activelearning.selector.selector import Selector
-from activelearning.surrogate.surrogate import MultiFidelitySurrogate, Surrogate
+from activelearning.surrogate.surrogate import Surrogate
 from activelearning.utils.types import filter_finite_target_observations
 
 _logger = logging.getLogger(__name__)
@@ -83,15 +83,6 @@ def active_learning(
     # Catches misconfigured schedules (e.g. sigmoid with too-slow start) that
     # would silently terminate the experiment.
     budget.validate_schedule(min_query_cost=oracle.get_min_query_cost())
-
-    fidelity_confidences = oracle.get_fidelity_confidences()
-    if len(fidelity_confidences) > 1:
-        if not isinstance(surrogate, MultiFidelitySurrogate):
-            raise ValueError(
-                f"{type(surrogate).__name__} does not support multi-fidelity "
-                "oracles. Use a MultiFidelitySurrogate implementation."
-            )
-        surrogate.set_fidelity_confidences(fidelity_confidences)
 
     while budget.available_budget > 0:
         # Call once per round so all consumers share the same consistent epoch view.

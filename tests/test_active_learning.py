@@ -17,17 +17,6 @@ from activelearning.logger.logger import ConsoleLogger
 from activelearning.runtime import RuntimeContext
 
 
-class ConfidenceAwareDummyMeanSurrogate(DummyMeanSurrogate, MultiFidelitySurrogate):
-    """Dummy surrogate variant that records fidelity confidences."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.fidelity_confidences: dict[int, float] | None = None
-
-    def set_fidelity_confidences(self, confidences: dict[int, float]) -> None:
-        self.fidelity_confidences = dict(confidences)
-
-
 @pytest.fixture
 def dataset():
     """Create a dummy dataset for testing."""
@@ -35,9 +24,11 @@ def dataset():
 
 
 @pytest.fixture
-def surrogate():
+def surrogate(oracle):
     """Create a BoTorch surrogate for testing the full AL loop end-to-end."""
-    return BoTorchGPSurrogate()
+    surrogate = BoTorchGPSurrogate(is_multi_fidelity=True)
+    surrogate.set_fidelity_confidences(oracle.get_fidelity_confidences())
+    return surrogate
 
 
 @pytest.fixture
@@ -146,39 +137,6 @@ def test_active_learning_logs_metrics_with_console_logger(
     assert "total_cost=" in out
     assert "budget_remaining=" in out
     assert "[Logger] Run 'console_test_run' finished." in out
-
-
-def test_active_learning_passes_fidelity_confidences_to_surrogate(
-    dataset, acquisition, sampler, selector, oracle, budget
-):
-    """Test the active learning loop passes oracle confidences to surrogate."""
-    surrogate = ConfidenceAwareDummyMeanSurrogate()
-    active_learning(
-        dataset=dataset,
-        surrogate=surrogate,
-        acquisition=acquisition,
-        sampler=sampler,
-        selector=selector,
-        oracle=oracle,
-        budget=budget,
-    )
-    assert surrogate.fidelity_confidences == oracle.get_fidelity_confidences()
-
-
-def test_active_learning_rejects_unsupported_multi_fidelity_surrogate(
-    dataset, acquisition, sampler, selector, oracle, budget
-):
-    """A fidelity-agnostic surrogate cannot run against a multi-level oracle."""
-    with pytest.raises(ValueError, match="does not support multi-fidelity"):
-        active_learning(
-            dataset=dataset,
-            surrogate=DummyMeanSurrogate(),
-            acquisition=acquisition,
-            sampler=sampler,
-            selector=selector,
-            oracle=oracle,
-            budget=budget,
-        )
 
 
 def test_active_learning_stops_when_selector_returns_empty(

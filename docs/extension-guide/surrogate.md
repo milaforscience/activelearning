@@ -95,8 +95,8 @@ If `True` is returned without implementing `update()`, the base class raises
 
 A regular `Surrogate` is single-fidelity only. To support an oracle with more
 than one fidelity level, subclass `MultiFidelitySurrogate` and implement
-`set_fidelity_confidences()`. The loop calls it once before fitting with the
-oracle's `{fidelity_level: confidence}` mapping.
+`set_fidelity_confidences()`. The CLI composition step calls it once before
+the loop starts with the oracle's `{fidelity_level: confidence}` mapping.
 
 ```python
 class MyMultiFidelitySurrogate(MultiFidelitySurrogate):

@@ -142,6 +142,7 @@ def test_load_config_dotlist_overrides_applied_last(base_config, acquisition_con
 def test_active_learning_loop_runs_from_merged_configs(base_config, acquisition_config):
     """Active learning loop must run to completion when built from merged configs."""
     from activelearning.active_learning import active_learning
+    from activelearning.main import _initialize_surrogate_fidelities
     from activelearning.runtime import bind_runtime_context
 
     cfg = load_and_parse([base_config, acquisition_config], ActiveLearningConfig)
@@ -155,6 +156,7 @@ def test_active_learning_loop_runs_from_merged_configs(base_config, acquisition_
     budget = cfg.budget.build()
     runtime_context = cfg.runtime.build(logger=None)
 
+    _initialize_surrogate_fidelities(surrogate, oracle)
     bind_runtime_context(
         [dataset, surrogate, acquisition, sampler, selector, oracle],
         runtime_context,
@@ -182,6 +184,7 @@ def test_active_learning_loop_budget_override_reduces_rounds(
 ):
     """Merging a tighter budget override must reduce total cost vs. the base config."""
     from activelearning.active_learning import active_learning
+    from activelearning.main import _initialize_surrogate_fidelities
     from activelearning.runtime import bind_runtime_context
 
     def _run(paths):
@@ -194,6 +197,7 @@ def test_active_learning_loop_budget_override_reduces_rounds(
         oracle = cfg.oracle.build()
         budget = cfg.budget.build()
         runtime_context = cfg.runtime.build(logger=None)
+        _initialize_surrogate_fidelities(surrogate, oracle)
         bind_runtime_context(
             [dataset, surrogate, acquisition, sampler, selector, oracle],
             runtime_context,
@@ -259,6 +263,7 @@ def test_cli_override_takes_effect_over_config_value(base_config, acquisition_co
 
     def _capture_budget(*args, **kwargs):
         captured["budget"] = kwargs.get("budget") or args[5]
+        captured["surrogate"] = kwargs.get("surrogate") or args[1]
         # Return the shape expected by main(): (dataset, total_cost, num_rounds)
         return kwargs.get("dataset") or args[0], 0.0, 0
 
@@ -282,6 +287,10 @@ def test_cli_override_takes_effect_over_config_value(base_config, acquisition_co
     assert captured["budget"].available_budget == pytest.approx(0.001), (
         "CLI override must take precedence over the value defined in the YAML config."
     )
+    assert captured["surrogate"].get_fidelity_confidences() == {
+        1: pytest.approx(0.1),
+        2: pytest.approx(1.0),
+    }
 
 
 def test_cli_raises_when_no_config_path_provided():

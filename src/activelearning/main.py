@@ -32,6 +32,8 @@ from activelearning.utils.config_loader import load_config
 
 if TYPE_CHECKING:
     from activelearning.config import ActiveLearningConfig
+    from activelearning.oracle.oracle import Oracle
+    from activelearning.surrogate.surrogate import Surrogate
 
 
 def _parse_args() -> tuple[argparse.Namespace, list[str]]:
@@ -91,6 +93,37 @@ def process_arguments() -> tuple[DictConfig, "ActiveLearningConfig"]:
     return raw_cfg, cfg
 
 
+def _initialize_surrogate_fidelities(
+    surrogate: "Surrogate",
+    oracle: "Oracle",
+) -> None:
+    """Inject validated oracle fidelity metadata into the runtime surrogate.
+
+    Parameters
+    ----------
+    surrogate : Surrogate
+        Built surrogate instance.
+    oracle : Oracle
+        Built oracle defining the authoritative fidelity metadata.
+
+    Raises
+    ------
+    ValueError
+        If a multi-fidelity oracle is paired with an unsupported surrogate.
+    """
+    from activelearning.surrogate.surrogate import MultiFidelitySurrogate
+
+    fidelity_confidences = oracle.get_fidelity_confidences()
+    if len(fidelity_confidences) == 1:
+        return
+    if not isinstance(surrogate, MultiFidelitySurrogate):
+        raise ValueError(
+            f"{type(surrogate).__name__} does not support multi-fidelity "
+            "oracles. Use a MultiFidelitySurrogate implementation."
+        )
+    surrogate.set_fidelity_confidences(fidelity_confidences)
+
+
 def main() -> None:
     """Load config, build components, run the active learning loop."""
     raw_cfg, cfg = process_arguments()
@@ -108,6 +141,8 @@ def main() -> None:
     budget = cfg.budget.build()
     logger = cfg.logger.build() if cfg.logger is not None else None
     runtime_context = cfg.runtime.build(logger=logger)
+
+    _initialize_surrogate_fidelities(surrogate, oracle)
 
     bind_runtime_context(
         [dataset, surrogate, acquisition, sampler, selector, oracle],

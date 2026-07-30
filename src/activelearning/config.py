@@ -67,7 +67,7 @@ class ActiveLearningConfig(BaseModel):
             self.sampler,
             set(fidelity_confidences),
         )
-        self.surrogate = _resolve_surrogate_fidelities(
+        self.surrogate = _resolve_surrogate_config_fidelities(
             self.surrogate,
             fidelity_confidences,
         )
@@ -265,7 +265,7 @@ def _resolve_sampler_fidelities(
     return sampler
 
 
-def _resolve_surrogate_fidelities(
+def _resolve_surrogate_config_fidelities(
     surrogate: BaseModel,
     fidelity_confidences: dict[int, float],
 ) -> BaseModel:
