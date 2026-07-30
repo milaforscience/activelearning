@@ -116,7 +116,7 @@ class MyMultiFidelitySurrogateConfig(BaseModel):
         self, confidences: dict[int, float]
     ) -> "MyMultiFidelitySurrogateConfig":
         data = self.model_dump()
-        data["multi_fidelity"] = len(confidences) > 1
+        data["is_multi_fidelity"] = len(confidences) > 1
         return type(self).model_validate(data)
 ```
 

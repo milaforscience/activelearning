@@ -74,7 +74,7 @@ def exact_mf_surrogate() -> ExactSelfiesDKLSurrogate:
     surrogate = ExactSelfiesDKLSurrogate(
         encoder=encoder,
         training_params=TRAINING,
-        multi_fidelity=True,
+        is_multi_fidelity=True,
         target_fidelity=3,
     )
     surrogate.set_fidelity_confidences(FIDELITY_CONFIDENCES)
@@ -193,7 +193,7 @@ class TestExactSelfiesDKLSurrogate:
         surrogate = ExactSelfiesDKLSurrogate(
             encoder=ENCODER_CFG.build(),
             training_params=TRAINING,
-            multi_fidelity=True,
+            is_multi_fidelity=True,
             target_fidelity=3,
         )
 
@@ -237,7 +237,7 @@ def var_mf_surrogate() -> VariationalSelfiesDKLSurrogate:
         encoder=encoder,
         training_params=TRAINING,
         num_inducing=8,
-        multi_fidelity=True,
+        is_multi_fidelity=True,
         target_fidelity=3,
     )
     surrogate.set_fidelity_confidences(FIDELITY_CONFIDENCES)
@@ -629,7 +629,7 @@ class TestDKLSurrogateConfigs:
 
         cfg = ExactSelfiesDKLSurrogateConfig(
             encoder=ENCODER_CFG,
-            multi_fidelity=True,
+            is_multi_fidelity=True,
         )
 
         with pytest.raises(ValueError, match="target_fidelity must be set"):

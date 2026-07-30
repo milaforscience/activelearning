@@ -132,10 +132,10 @@ def _resolve_dkl_fidelity_confidences(
     confidences: dict[int, float],
 ) -> BaseModel:
     """Resolve shared DKL fidelity settings from oracle metadata."""
-    multi_fidelity = len(confidences) > 1
+    is_multi_fidelity = len(confidences) > 1
     target_fidelity = config.target_fidelity
 
-    if not multi_fidelity:
+    if not is_multi_fidelity:
         target_fidelity = None
     elif target_fidelity is None:
         target_fidelity = max(confidences, key=confidences.__getitem__)
@@ -148,7 +148,7 @@ def _resolve_dkl_fidelity_confidences(
     data = config.model_dump()
     data.update(
         {
-            "multi_fidelity": multi_fidelity,
+            "is_multi_fidelity": is_multi_fidelity,
             "target_fidelity": target_fidelity,
         }
     )
@@ -167,7 +167,7 @@ class ExactSelfiesDKLSurrogateConfig(BaseModel):
         Encoder architecture.
     training_params : SelfiesTrainingConfig
         Training hyper-parameters for the joint MLM + GP Adam loop.
-    multi_fidelity : bool
+    is_multi_fidelity : bool
         Append the encoded fidelity confidence to feature tensors.
     target_fidelity : int, optional
         Target level for multi-fidelity acquisition. The top-level active
@@ -182,7 +182,7 @@ class ExactSelfiesDKLSurrogateConfig(BaseModel):
     training_params: SelfiesTrainingConfig = Field(
         default_factory=SelfiesTrainingConfig
     )
-    multi_fidelity: bool = False
+    is_multi_fidelity: bool = False
     target_fidelity: Optional[int] = None
     standardize_outputs: bool = True
 
@@ -217,7 +217,7 @@ class ExactSelfiesDKLSurrogateConfig(BaseModel):
         return ExactSelfiesDKLSurrogate(
             encoder=self.encoder.build(),
             training_params=self.training_params,
-            multi_fidelity=self.multi_fidelity,
+            is_multi_fidelity=self.is_multi_fidelity,
             target_fidelity=self.target_fidelity,
             standardize_outputs=self.standardize_outputs,
         )
@@ -236,7 +236,7 @@ class VariationalSelfiesDKLSurrogateConfig(BaseModel):
         Encoder architecture.
     training_params : SelfiesTrainingConfig
         Training hyper-parameters.
-    multi_fidelity : bool
+    is_multi_fidelity : bool
         Append the encoded fidelity confidence to latent feature vectors.
     target_fidelity : int, optional
         Target level for multi-fidelity acquisition. The top-level active
@@ -253,7 +253,7 @@ class VariationalSelfiesDKLSurrogateConfig(BaseModel):
     training_params: SelfiesTrainingConfig = Field(
         default_factory=SelfiesTrainingConfig
     )
-    multi_fidelity: bool = False
+    is_multi_fidelity: bool = False
     target_fidelity: Optional[int] = None
     num_inducing: int = 64
     standardize_outputs: bool = True
@@ -289,7 +289,7 @@ class VariationalSelfiesDKLSurrogateConfig(BaseModel):
         return VariationalSelfiesDKLSurrogate(
             encoder=self.encoder.build(),
             training_params=self.training_params,
-            multi_fidelity=self.multi_fidelity,
+            is_multi_fidelity=self.is_multi_fidelity,
             target_fidelity=self.target_fidelity,
             num_inducing=self.num_inducing,
             standardize_outputs=self.standardize_outputs,

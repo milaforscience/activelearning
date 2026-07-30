@@ -67,7 +67,7 @@ def test_single_fidelity_dkl_config_clears_target_level() -> None:
 
     config = parse_config(raw_config, ActiveLearningConfig)
 
-    assert config.surrogate.multi_fidelity is False
+    assert config.surrogate.is_multi_fidelity is False
     assert config.surrogate.target_fidelity is None
 
 
@@ -150,7 +150,7 @@ def test_dkl_target_is_derived_from_highest_oracle_confidence() -> None:
 
     config = parse_config(raw_config, ActiveLearningConfig)
 
-    assert config.surrogate.multi_fidelity is True
+    assert config.surrogate.is_multi_fidelity is True
     assert config.surrogate.target_fidelity == 2
 
 
@@ -168,7 +168,7 @@ def test_dkl_target_is_derived_through_composite_oracle() -> None:
 
     config = parse_config(raw_config, ActiveLearningConfig)
 
-    assert config.surrogate.multi_fidelity is True
+    assert config.surrogate.is_multi_fidelity is True
     assert config.surrogate.target_fidelity == 2
 
 
