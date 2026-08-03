@@ -25,6 +25,7 @@ Examples
 import argparse
 import hashlib
 import json
+import shlex
 import subprocess
 from collections.abc import Iterator, Sequence
 from pathlib import Path
@@ -183,7 +184,7 @@ def _format_activelearning_command(
 ) -> str:
     """Return a shell-friendly reproduction command for the current run."""
     args = [_display_path(path) for path in config_paths] + list(overrides)
-    return "activelearning " + " ".join(args)
+    return "activelearning " + " ".join(shlex.quote(arg) for arg in args)
 
 
 def _git_commit_sha() -> str | None:
