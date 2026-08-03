@@ -95,7 +95,9 @@ class AcquisitionProxy(Proxy):
         fidelity_map : list[int]
             Maps 1-based ``Choice`` env states to domain fidelity values.
         """
-        self._fidelity_map = fidelity_map
+        if not fidelity_map:
+            raise ValueError("fidelity_map must not be empty")
+        self._fidelity_map = list(fidelity_map)
 
     def __call__(self, states: Union[torch.Tensor, List, npt.NDArray]) -> torch.Tensor:
         """Evaluate *raw* proxy values for a batch of states in proxy format.
