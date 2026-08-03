@@ -375,6 +375,26 @@ class TestGFlowNetSamplerConfigRoundTrip:
         sampler = cfg.build()
         assert sampler.fidelities == [1, 2, 3]
 
+    def test_config_build_uses_default_fidelity(self, gflownet_conf_2d):
+        from activelearning.sampler.config import GFlowNetSamplerConfig
+        from omegaconf import OmegaConf
+
+        conf_dict, _ = gflownet_conf_2d
+        conf_raw = OmegaConf.to_container(conf_dict, resolve=True)
+        sampler = GFlowNetSamplerConfig(n_samples=3, conf=conf_raw).build()
+
+        assert sampler.fidelities == [DEFAULT_FIDELITY]
+
+    def test_grid_config_build_uses_default_fidelity(self, gflownet_conf_2d):
+        from activelearning.sampler.config import GFlowNetGridSamplerConfig
+        from omegaconf import OmegaConf
+
+        conf_dict, _ = gflownet_conf_2d
+        conf_raw = OmegaConf.to_container(conf_dict, resolve=True)
+        sampler = GFlowNetGridSamplerConfig(n_samples=3, conf=conf_raw).build()
+
+        assert sampler.fidelities == [DEFAULT_FIDELITY]
+
 
 # ---------------------------------------------------------------------------
 # Fidelity mapping: multi-fidelity sampler stamps correct fidelity values

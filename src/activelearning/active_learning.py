@@ -11,10 +11,32 @@ from activelearning.runtime import (
 )
 from activelearning.sampler.sampler import Sampler
 from activelearning.selector.selector import Selector
-from activelearning.surrogate.surrogate import Surrogate
+from activelearning.surrogate.surrogate import MultiFidelitySurrogate, Surrogate
 from activelearning.utils.types import filter_finite_target_observations
 
 _logger = logging.getLogger(__name__)
+
+
+def _initialize_surrogate_fidelities(
+    surrogate: Surrogate,
+    oracle: Oracle,
+) -> None:
+    """Initialize a multi-fidelity surrogate from the oracle's metadata.
+
+    Raises
+    ------
+    ValueError
+        If a multi-fidelity oracle is paired with an unsupported surrogate.
+    """
+    fidelity_confidences = oracle.get_fidelity_confidences()
+    if len(fidelity_confidences) == 1:
+        return
+    if not isinstance(surrogate, MultiFidelitySurrogate):
+        raise ValueError(
+            f"{type(surrogate).__name__} does not support multi-fidelity "
+            "oracles. Use a MultiFidelitySurrogate implementation."
+        )
+    surrogate.set_fidelity_confidences(fidelity_confidences)
 
 
 def active_learning(
@@ -75,6 +97,7 @@ def active_learning(
         [dataset, surrogate, acquisition, sampler, selector, oracle, budget],
         resolved_runtime_context,
     )
+    _initialize_surrogate_fidelities(surrogate, oracle)
 
     initial_budget = budget.available_budget
     num_rounds = 0

@@ -26,9 +26,7 @@ def dataset():
 @pytest.fixture
 def surrogate(oracle):
     """Create a BoTorch surrogate for testing the full AL loop end-to-end."""
-    surrogate = BoTorchGPSurrogate(is_multi_fidelity=True)
-    surrogate.set_fidelity_confidences(oracle.get_fidelity_confidences())
-    return surrogate
+    return BoTorchGPSurrogate(is_multi_fidelity=True)
 
 
 @pytest.fixture
@@ -107,6 +105,23 @@ def test_active_learning_loop(
     assert isinstance(best, list)
     assert isinstance(cost, float)
     assert isinstance(num_iter, int)
+    assert surrogate.get_fidelity_confidences() == oracle.get_fidelity_confidences()
+
+
+def test_active_learning_rejects_unsupported_multi_fidelity_surrogate(
+    dataset, acquisition, sampler, selector, oracle, budget
+):
+    """Multi-fidelity oracle metadata requires a compatible surrogate."""
+    with pytest.raises(ValueError, match="does not support multi-fidelity"):
+        active_learning(
+            dataset=dataset,
+            surrogate=DummyMeanSurrogate(),
+            acquisition=acquisition,
+            sampler=sampler,
+            selector=selector,
+            oracle=oracle,
+            budget=budget,
+        )
 
 
 def test_active_learning_logs_metrics_with_console_logger(

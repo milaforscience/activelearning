@@ -16,6 +16,7 @@ from activelearning.sampler.pool_file_sampler import PoolFileSampler
 from activelearning.sampler.gflownet.config_utils import compose_gflownet_conf
 from activelearning.sampler.gflownet.grid_sampler import GFlowNetGridSampler
 from activelearning.sampler.gflownet.gflownet_sampler import GFlowNetSampler
+from activelearning.utils.types import DEFAULT_FIDELITY
 
 _FidelityAction = Literal["any", "first", "last"]
 _FidelityLevels = Annotated[list[StrictInt], Field(min_length=1)]
@@ -24,6 +25,15 @@ _FidelityCosts = Annotated[
     Field(min_length=1),
 ]
 _Fidelities = _FidelityCosts | _FidelityLevels | None
+
+
+def _resolve_fidelities(
+    fidelities: _Fidelities,
+) -> _FidelityCosts | _FidelityLevels:
+    """Resolve omitted fidelity settings to the single-fidelity default."""
+    if fidelities is None:
+        return [DEFAULT_FIDELITY]
+    return fidelities
 
 
 class HypercubeSamplerConfig(BaseModel):
@@ -37,7 +47,7 @@ class HypercubeSamplerConfig(BaseModel):
         return HypercubeSampler(
             bounds=self.bounds,
             num_samples=self.num_samples,
-            fidelities=self.fidelities,
+            fidelities=_resolve_fidelities(self.fidelities),
             point_strategy=self.point_strategy,
         )
 
@@ -67,7 +77,7 @@ class PoolFileSamplerConfig(BaseModel):
         return PoolFileSampler(
             candidate_pool_file=self.candidate_pool_file,
             num_samples=self.num_samples,
-            fidelities=self.fidelities,
+            fidelities=_resolve_fidelities(self.fidelities),
         )
 
 
@@ -115,7 +125,7 @@ class GFlowNetSamplerConfig(BaseModel):
         return GFlowNetSampler(
             n_samples=self.n_samples,
             conf=compose_gflownet_conf(conf_overrides=self.conf, log_dir=self.log_dir),
-            fidelities=self.fidelities,
+            fidelities=_resolve_fidelities(self.fidelities),
             fidelity_action=self.fidelity_action,
         )
 
@@ -144,7 +154,7 @@ class GFlowNetGridSamplerConfig(GFlowNetSamplerConfig):
         return GFlowNetGridSampler(
             n_samples=self.n_samples,
             conf=compose_gflownet_conf(conf_overrides=self.conf, log_dir=self.log_dir),
-            fidelities=self.fidelities,
+            fidelities=_resolve_fidelities(self.fidelities),
             fidelity_action=self.fidelity_action,
             domain_bounds=self.domain_bounds,
         )
