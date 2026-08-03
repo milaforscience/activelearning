@@ -212,7 +212,7 @@ RunWriterConfig = JSONLinesRunWriterConfig
 
 def _jsonable(value: Any) -> Any:
     """Convert common payloads into JSON-serializable structures."""
-    if isinstance(value, Candidate | Observation):
+    if isinstance(value, (Candidate, Observation)):
         return _jsonable(asdict(value))
     if is_dataclass(value):
         return _jsonable(asdict(value))
