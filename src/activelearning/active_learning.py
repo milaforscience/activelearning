@@ -154,7 +154,7 @@ def active_learning(
         sample_scores = (
             acquisition.score(samples)
             if run_writer is not None and acquisition.supports_singleton_scoring
-            else []
+            else None
         )
 
         # Get the current round budget and pass the same oracle cost model to
@@ -174,7 +174,7 @@ def active_learning(
         selected_scores = (
             acquisition.score(selected_samples)
             if run_writer is not None and acquisition.supports_singleton_scoring
-            else []
+            else None
         )
 
         # Query oracle to obtain total cost for the samples
@@ -260,9 +260,9 @@ def _log_completed_round(
     run_writer: RunWriter | None,
     round_index: int,
     sampled_candidates: Sequence[Candidate],
-    sampled_scores: Sequence[float],
+    sampled_scores: Sequence[float] | None,
     selected_candidates: Sequence[Candidate],
-    selected_scores: Sequence[float],
+    selected_scores: Sequence[float] | None,
     selected_costs: Sequence[float],
     observations: Sequence[Observation],
     cumulative_cost: float,
