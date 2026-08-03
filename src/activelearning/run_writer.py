@@ -26,9 +26,9 @@ class RunWriter(ABC):
         *,
         round_index: int,
         sampled_candidates: Sequence[Candidate],
-        sampled_scores: Sequence[float],
+        sampled_scores: Sequence[float] | None,
         selected_candidates: Sequence[Candidate],
-        selected_scores: Sequence[float],
+        selected_scores: Sequence[float] | None,
         selected_costs: Sequence[float],
         observations: Sequence[Observation],
         cumulative_cost: float,
@@ -63,36 +63,40 @@ class JSONLinesRunWriter(RunWriter):
         self._next_experiment_row_index = 0
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._rounds_path = self.output_dir / "round_history.jsonl"
-        self._rounds_handle = self._rounds_path.open("w", encoding="utf-8")
+        self._started = False
 
     def start_run(self, metadata: dict[str, Any]) -> None:
         """Write run metadata to disk."""
+        self._rounds_path.write_text("", encoding="utf-8")
         self._manifest = _deep_merge(self.metadata, metadata)
         self._method = _resolve_method(self._manifest, self.output_dir)
         self._seed = _resolve_seed(self._manifest)
         if self.write_config:
             self._write_json("run_manifest.json", self._manifest)
         self._write_experiment_log()
+        self._started = True
 
     def record_round(
         self,
         *,
         round_index: int,
         sampled_candidates: Sequence[Candidate],
-        sampled_scores: Sequence[float],
+        sampled_scores: Sequence[float] | None,
         selected_candidates: Sequence[Candidate],
-        selected_scores: Sequence[float],
+        selected_scores: Sequence[float] | None,
         selected_costs: Sequence[float],
         observations: Sequence[Observation],
         cumulative_cost: float,
         remaining_budget: float,
     ) -> None:
         """Append one round record to the JSONL history."""
+        if not self._started:
+            raise RuntimeError("Call start_run() before recording rounds.")
+
         record: dict[str, Any] = {
             "round": round_index,
             "round_index": round_index,
             "selected_candidates": _jsonable(selected_candidates),
-            "selected_scores": _jsonable(selected_scores),
             "selected_costs": _jsonable(selected_costs),
             "observations": _jsonable(observations),
             "new_observations": _jsonable(observations),
@@ -100,12 +104,15 @@ class JSONLinesRunWriter(RunWriter):
             "cumulative_cost": float(cumulative_cost),
             "remaining_budget": float(remaining_budget),
         }
+        if selected_scores is not None:
+            record["selected_scores"] = _jsonable(selected_scores)
         if self.write_samples:
             record["sampled_candidates"] = _jsonable(sampled_candidates)
-            record["sampled_scores"] = _jsonable(sampled_scores)
+            if sampled_scores is not None:
+                record["sampled_scores"] = _jsonable(sampled_scores)
 
-        self._rounds_handle.write(json.dumps(record, sort_keys=True) + "\n")
-        self._rounds_handle.flush()
+        with self._rounds_path.open("a", encoding="utf-8") as rounds_handle:
+            rounds_handle.write(json.dumps(record, sort_keys=True) + "\n")
         self._append_experiment_row(
             round_index=round_index,
             observations=observations,
@@ -113,10 +120,9 @@ class JSONLinesRunWriter(RunWriter):
         )
 
     def end_run(self, summary: dict[str, Any]) -> None:
-        """Write the final summary and close the round-history file."""
+        """Write the final summary."""
         self._write_json("run_summary.json", summary)
         self._write_experiment_log()
-        self._rounds_handle.close()
 
     def _write_json(self, filename: str, payload: dict[str, Any]) -> None:
         """Write one JSON artifact in a stable format."""

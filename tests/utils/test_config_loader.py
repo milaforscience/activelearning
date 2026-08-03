@@ -10,12 +10,27 @@ These tests verify that:
 
 import sys
 import textwrap
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from activelearning.config import ActiveLearningConfig
 from activelearning.utils.config_loader import load_and_parse, load_config
+
+
+def test_format_activelearning_command_quotes_shell_sensitive_arguments() -> None:
+    """Reproduction commands must preserve paths and overrides with spaces."""
+    from activelearning.main import _format_activelearning_command
+
+    command = _format_activelearning_command(
+        [Path("config with spaces.yaml")],
+        ["run.name=experiment name"],
+    )
+
+    assert (
+        command == "activelearning 'config with spaces.yaml' 'run.name=experiment name'"
+    )
 
 
 # ---------------------------------------------------------------------------

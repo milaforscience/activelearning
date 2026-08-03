@@ -2,6 +2,8 @@ import csv
 import json
 import math
 
+import pytest
+
 from activelearning.run_writer import JSONLinesRunWriter
 from activelearning.utils.types import Candidate, Observation
 
@@ -267,3 +269,40 @@ def test_run_writer_omits_sample_fields_and_handles_empty_observations(
             "round": "0",
         }
     ]
+
+
+def test_run_writer_omits_unsupported_scores_and_requires_startup(tmp_path) -> None:
+    """Unsupported scores should be omitted and rounds require startup."""
+    run_writer = JSONLinesRunWriter(output_dir=tmp_path)
+
+    with pytest.raises(RuntimeError, match="Call start_run"):
+        run_writer.record_round(
+            round_index=1,
+            sampled_candidates=[],
+            sampled_scores=None,
+            selected_candidates=[],
+            selected_scores=None,
+            selected_costs=[],
+            observations=[],
+            cumulative_cost=0.0,
+            remaining_budget=1.0,
+        )
+
+    run_writer.start_run({})
+    run_writer.record_round(
+        round_index=1,
+        sampled_candidates=[Candidate(1)],
+        sampled_scores=None,
+        selected_candidates=[Candidate(1)],
+        selected_scores=None,
+        selected_costs=[1.0],
+        observations=[],
+        cumulative_cost=1.0,
+        remaining_budget=0.0,
+    )
+
+    round_record = json.loads(
+        (tmp_path / "round_history.jsonl").read_text(encoding="utf-8").strip()
+    )
+    assert "sampled_scores" not in round_record
+    assert "selected_scores" not in round_record
