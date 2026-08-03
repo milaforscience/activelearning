@@ -579,8 +579,10 @@ class BoTorchGPSurrogate(MultiFidelitySurrogate):
         Raises
         ------
         ValueError
-            If the observation list is empty or multi-fidelity observations are
-            missing a fidelity present in the confidence map.
+            If the observation list is empty.
+        KeyError
+            If a multi-fidelity observation references a fidelity absent from
+            the confidence map.
         """
         obs_list = list(observations)
         if not obs_list:
