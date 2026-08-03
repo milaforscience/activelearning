@@ -1,9 +1,12 @@
 import logging
+from collections.abc import Sequence
 
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.budget.budget import Budget
 from activelearning.dataset.dataset import Dataset
+from activelearning.logger.logger import Logger
 from activelearning.oracle.oracle import Oracle
+from activelearning.run_writer import RunWriter
 from activelearning.runtime import (
     DEFAULT_RUNTIME_CONTEXT,
     RuntimeContext,
@@ -12,7 +15,11 @@ from activelearning.runtime import (
 from activelearning.sampler.sampler import Sampler
 from activelearning.selector.selector import Selector
 from activelearning.surrogate.surrogate import MultiFidelitySurrogate, Surrogate
-from activelearning.utils.types import filter_finite_target_observations
+from activelearning.utils.types import (
+    Candidate,
+    Observation,
+    filter_finite_target_observations,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -48,6 +55,7 @@ def active_learning(
     oracle: Oracle,
     budget: Budget,
     runtime_context: RuntimeContext | None = None,
+    run_writer: RunWriter | None = None,
 ) -> tuple[Dataset, float, int]:
     """Execute the active learning loop with budget constraints.
 
@@ -76,6 +84,9 @@ def active_learning(
         Shared runtime settings propagated to runtime-aware components. If
         omitted, components fall back to the default context. If the context
         contains a logger, the loop records per-round metrics through it.
+    run_writer : RunWriter, optional
+        Structured run logger used to persist run-start metadata, per-round
+        artifacts, and the final run summary.
 
     Returns
     -------
@@ -106,6 +117,11 @@ def active_learning(
     # Catches misconfigured schedules (e.g. sigmoid with too-slow start) that
     # would silently terminate the experiment.
     budget.validate_schedule(min_query_cost=oracle.get_min_query_cost())
+    _start_run_logging(
+        run_writer=run_writer,
+        dataset=dataset,
+        initial_budget=initial_budget,
+    )
 
     while budget.available_budget > 0:
         # Call once per round so all consumers share the same consistent epoch view.
@@ -135,6 +151,11 @@ def active_learning(
             observations=observations,
             cost_fn=oracle.get_costs,
         )
+        sample_scores = (
+            acquisition.score(samples)
+            if run_writer is not None and acquisition.supports_singleton_scoring
+            else []
+        )
 
         # Get the current round budget and pass the same oracle cost model to
         # the selector for ranking/filtering.
@@ -150,6 +171,11 @@ def active_learning(
         # No candidates selected for this round; terminate to avoid stalling.
         if not selected_samples:
             break
+        selected_scores = (
+            acquisition.score(selected_samples)
+            if run_writer is not None and acquisition.supports_singleton_scoring
+            else []
+        )
 
         # Query oracle to obtain total cost for the samples
         costs = oracle.get_costs(selected_samples)
@@ -179,17 +205,110 @@ def active_learning(
 
         num_rounds += 1
 
-        if logger is not None:
-            logger.log_metric("round", num_rounds)
-            logger.log_metric("num_new_samples", len(selected_samples))
-            logger.log_metric("round_cost", total_cost)
-            logger.log_metric("total_cost", initial_budget - budget.available_budget)
-            logger.log_metric("budget_remaining", budget.available_budget)
-            logger.log_step(num_rounds)
+        _log_completed_round(
+            logger=logger,
+            run_writer=run_writer,
+            round_index=num_rounds,
+            sampled_candidates=samples,
+            sampled_scores=sample_scores,
+            selected_candidates=selected_samples,
+            selected_scores=selected_scores,
+            selected_costs=costs,
+            observations=valid_observations,
+            cumulative_cost=initial_budget - budget.available_budget,
+            remaining_budget=budget.available_budget,
+            num_new_samples=len(selected_samples),
+            round_cost=total_cost,
+        )
 
     total_cost = initial_budget - budget.available_budget
 
-    if logger is not None:
-        logger.end()
+    _finish_run_logging(
+        logger=logger,
+        run_writer=run_writer,
+        num_rounds=num_rounds,
+        total_cost=total_cost,
+        budget_remaining=budget.available_budget,
+    )
 
     return dataset, total_cost, num_rounds
+
+
+def _start_run_logging(
+    *,
+    run_writer: RunWriter | None,
+    dataset: Dataset,
+    initial_budget: float,
+) -> None:
+    """Write run-start artifacts when a run writer is configured."""
+    if run_writer is None:
+        return
+
+    run_writer.start_run(
+        {
+            "initial_budget": initial_budget,
+            "initial_data": {
+                "initial_observations": list(dataset.get_observations_iterable())
+            },
+        }
+    )
+
+
+def _log_completed_round(
+    *,
+    logger: Logger | None,
+    run_writer: RunWriter | None,
+    round_index: int,
+    sampled_candidates: Sequence[Candidate],
+    sampled_scores: Sequence[float],
+    selected_candidates: Sequence[Candidate],
+    selected_scores: Sequence[float],
+    selected_costs: Sequence[float],
+    observations: Sequence[Observation],
+    cumulative_cost: float,
+    remaining_budget: float,
+    num_new_samples: int,
+    round_cost: float,
+) -> None:
+    """Log one completed round to the configured backends."""
+    if run_writer is not None:
+        run_writer.record_round(
+            round_index=round_index,
+            sampled_candidates=sampled_candidates,
+            sampled_scores=sampled_scores,
+            selected_candidates=selected_candidates,
+            selected_scores=selected_scores,
+            selected_costs=selected_costs,
+            observations=observations,
+            cumulative_cost=cumulative_cost,
+            remaining_budget=remaining_budget,
+        )
+
+    if logger is not None:
+        logger.log_metric("round", round_index)
+        logger.log_metric("num_new_samples", num_new_samples)
+        logger.log_metric("round_cost", round_cost)
+        logger.log_metric("total_cost", cumulative_cost)
+        logger.log_metric("budget_remaining", remaining_budget)
+        logger.log_step(round_index)
+
+
+def _finish_run_logging(
+    *,
+    logger: Logger | None,
+    run_writer: RunWriter | None,
+    num_rounds: int,
+    total_cost: float,
+    budget_remaining: float,
+) -> None:
+    """Finalize the configured logging backends."""
+    if logger is not None:
+        logger.end()
+    if run_writer is not None:
+        run_writer.end_run(
+            {
+                "num_rounds": num_rounds,
+                "total_cost": total_cost,
+                "budget_remaining": budget_remaining,
+            }
+        )
