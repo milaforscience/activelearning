@@ -125,9 +125,6 @@ def test_tensor_parsing_shapes(multi_fidelity_observations):
     expected_fidelities = torch.tensor([0.0, 1.0, 0.0, 1.0])
     assert torch.all(train_X[:, -1] == expected_fidelities)
 
-    # Check that the last column of train_X matches the mapped confidences (0.0, 1.0, 0.0, 1.0)
-    expected_fidelities = torch.tensor([0.0, 1.0, 0.0, 1.0])
-    assert torch.all(train_X[:, -1] == expected_fidelities)
 
 
 def test_scalar_observation_parsing_uses_column_vector(
