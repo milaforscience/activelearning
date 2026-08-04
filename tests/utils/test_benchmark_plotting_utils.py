@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import matplotlib.pyplot as plt
+import numpy as np
 import pytest
 
 from activelearning.run_writer import JSONLinesRunWriter
@@ -14,10 +16,19 @@ from activelearning.utils.plotting import (
     MetricStatistics,
     RunCheckpoint,
     aggregate_checkpoints,
+    compute_mean_top_k,
     load_run_checkpoints,
     plot_metric,
 )
 from activelearning.utils.types import Candidate, Observation
+
+
+def test_compute_mean_top_k_accepts_numpy_arrays() -> None:
+    """Top-k aggregation should support NumPy sequence inputs."""
+
+    values = np.asarray([1.0, 3.0, 2.0])
+
+    assert compute_mean_top_k(values, k=2) == pytest.approx(2.5)
 
 
 def test_loading_reads_jsonlines_run_writer_artifacts(tmp_path: Path) -> None:
@@ -251,3 +262,33 @@ def test_generic_plotting_writes_png_for_both_scales(
     )
 
     assert output_path.is_file()
+
+
+def test_generic_plotting_does_not_mutate_global_spine_settings(
+    tmp_path: Path,
+) -> None:
+    """The renderer should apply spine styling only to its local axis."""
+
+    original_top = plt.rcParams["axes.spines.top"]
+    original_right = plt.rcParams["axes.spines.right"]
+    aggregated_data = {
+        "demo": [
+            AggregatedCheckpoint(
+                round_index=1,
+                seed_count=1,
+                cumulative_cost=MetricStatistics(mean=1.0, std=0.0),
+                metrics={"score": MetricStatistics(mean=0.5, std=0.0)},
+            )
+        ]
+    }
+
+    plot_metric(
+        aggregated_data,
+        metric="score",
+        output_path=tmp_path / "plot.png",
+        method_order=("demo",),
+        method_styles={"demo": MethodStyle("Demo", "#1f77b4")},
+    )
+
+    assert plt.rcParams["axes.spines.top"] == original_top
+    assert plt.rcParams["axes.spines.right"] == original_right

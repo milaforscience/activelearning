@@ -89,7 +89,7 @@ def warn(message: str) -> None:
 def compute_mean_top_k(values: Sequence[float], *, k: int) -> float | None:
     """Return the mean of the top-k values, or all values when fewer exist."""
 
-    if not values:
+    if len(values) == 0:
         return None
     top_values = sorted((float(value) for value in values), reverse=True)[:k]
     return fmean(top_values)
@@ -308,8 +308,9 @@ def plot_metric(
         Whether to use a logarithmic x-axis.
     """
 
-    plt.rcParams.update({"axes.spines.top": False, "axes.spines.right": False})
     figure, axis = plt.subplots(figsize=(9, 5.5))
+    axis.spines["top"].set_visible(False)
+    axis.spines["right"].set_visible(False)
     methods = (
         tuple(method_order) if method_order is not None else tuple(aggregated_data)
     )
