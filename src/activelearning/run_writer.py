@@ -258,11 +258,9 @@ def _resolve_seed(manifest: dict[str, Any]) -> int | str | None:
 
 
 def _resolve_method(manifest: dict[str, Any], output_dir: Path) -> str | None:
-    """Extract the run method name for CSV output."""
-    config = manifest.get("config", {})
+    """Resolve the optional method label for CSV output."""
     run_metadata = manifest.get("run", {})
-    reproduce_paper = config.get("reproduce_paper", {})
-    raw_method = run_metadata.get("method", reproduce_paper.get("method"))
+    raw_method = run_metadata.get("method")
     if raw_method is None and output_dir.parent != output_dir:
         raw_method = output_dir.parent.name
     if raw_method is None:
