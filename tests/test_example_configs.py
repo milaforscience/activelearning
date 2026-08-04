@@ -103,6 +103,7 @@ def test_branin_benchmark_configs_parse(
     assert config.oracle.fidelity_confidences == oracle_confidences
     assert config.surrogate.is_multi_fidelity is surrogate_is_multi_fidelity
     assert config.budget.available_budget == 100.0
+    assert config.budget.max_rounds == 300
     assert config.run_writer is not None
     assert config.run_writer.output_dir == Path(
         f"outputs/branin_benchmark/{overlay_name}/seed_42"

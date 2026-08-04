@@ -62,6 +62,7 @@ oracle:
 
 budget:
   available_budget: 300.0
+  max_rounds: 300
   schedule:
     type: constant
     value: 30.0
@@ -110,6 +111,7 @@ The fields that materially define the study are:
 - `oracle.fidelity_confidences`: optional confidence map $\kappa(m)$; the built-in augmented-function oracles derive it from relative cost when omitted.
 - `sampler.fidelities`: fidelity levels the sampler will stamp on candidates.  Accepts a simple list for uniform fidelity sampling, or a cost map that biases sampling inversely proportional to fidelity cost.  **When omitted, the validator auto-fills this from the oracle's fidelity set.**  An error is raised if the sampler declares levels that are not in the oracle's set.
 - `budget.available_budget` and `budget.schedule`: total expenditure limit and per-round spending policy (`constant` or `sigmoid_iterations` in the current schema).
+- `budget.max_rounds`: optional positive limit on the number of completed active-learning rounds.
 
 ## **Configuration Overrides**
 

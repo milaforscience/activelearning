@@ -87,20 +87,29 @@ def test_uniform_subsampling_is_seeded_by_runtime_context_and_round() -> None:
 
     sampler.active_learning_round = 2
     first = sampler.sample()
+    assert sampler.active_learning_round == 3
     second = sampler.sample()
+    assert sampler.active_learning_round == 4
     expected_round_2 = [
         full_pool[idx] for idx in random.Random(13).sample(range(len(full_pool)), k=4)
     ]
-
-    sampler.active_learning_round = 3
-    third = sampler.sample()
     expected_round_3 = [
         full_pool[idx] for idx in random.Random(14).sample(range(len(full_pool)), k=4)
     ]
 
-    assert _candidate_signature(first) == _candidate_signature(second)
     assert _candidate_signature(first) == _candidate_signature(expected_round_2)
-    assert _candidate_signature(third) == _candidate_signature(expected_round_3)
+    assert _candidate_signature(second) == _candidate_signature(expected_round_3)
+    assert _candidate_signature(first) != _candidate_signature(second)
+
+    replay = ExactGridSampler(
+        bounds=[(0.0, 1.0), (0.0, 1.0)],
+        points_per_dimension=[3, 3],
+        num_samples=4,
+    )
+    replay.bind_runtime_context(RuntimeContext(seed=11))
+    replay.active_learning_round = 2
+    assert _candidate_signature(replay.sample()) == _candidate_signature(first)
+    assert _candidate_signature(replay.sample()) == _candidate_signature(second)
 
 
 def test_weighted_subsampling_uses_multinomial_and_cost_weighting(
@@ -144,6 +153,7 @@ def test_weighted_subsampling_uses_multinomial_and_cost_weighting(
         "replacement": False,
         "seed": 12,
     }
+    assert sampler.active_learning_round == 8
     assert _candidate_signature(result) == [
         ((1.0, 1.0), DEFAULT_FIDELITY),
         ((0.0, 1.0), DEFAULT_FIDELITY),
@@ -171,6 +181,7 @@ def test_weighted_subsampling_rejects_invalid_scores(
 
     with pytest.raises(ValueError, match=match):
         sampler.sample(acquisition=DummyAcquisition(scores))
+    assert sampler.active_learning_round == 0
 
 
 def test_subsampling_without_replacement_rejects_oversized_request() -> None:
@@ -183,3 +194,4 @@ def test_subsampling_without_replacement_rejects_oversized_request() -> None:
 
     with pytest.raises(ValueError, match="cannot exceed the candidate pool size"):
         sampler.sample()
+    assert sampler.active_learning_round == 0

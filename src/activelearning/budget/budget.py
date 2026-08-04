@@ -21,7 +21,10 @@ class Budget(ALRuntimeMixin):
     """
 
     def __init__(
-        self, available_budget: float, schedule: Callable[[int], float]
+        self,
+        available_budget: float,
+        schedule: Callable[[int], float],
+        max_rounds: int | None = None,
     ) -> None:
         """Initialize the Budget with total budget and scheduling function.
 
@@ -32,24 +35,33 @@ class Budget(ALRuntimeMixin):
         schedule : Callable[[int], float]
             Callable taking round number (int) and returning budget
             allocation (float) for that round.
+        max_rounds : int, optional
+            Maximum number of active learning rounds. When omitted, the
+            experiment is limited only by the available budget.
         """
         available_budget = float(available_budget)
         if available_budget < 0:
             raise ValueError(
                 f"Initial available_budget {available_budget:.2f} must be non-negative"
             )
+        if max_rounds is not None:
+            if (
+                not isinstance(max_rounds, int)
+                or isinstance(max_rounds, bool)
+                or max_rounds <= 0
+            ):
+                raise ValueError("max_rounds must be a positive integer when specified")
         self.available_budget = available_budget
         self.schedule = schedule
+        self.max_rounds = max_rounds
 
     def validate_schedule(self, min_query_cost: float) -> None:
         """Validate that every round's budget can afford at least one query.
 
-        Infers the number of active rounds by iterating the schedule until the
-        cumulative allocation covers ``available_budget`` or the schedule is
-        deemed exhausted (first non-positive value after at least one positive
-        round). Call this at experiment setup time to fail fast when the
-        schedule would produce rounds too cheap to query anything or cannot
-        cover the configured budget.
+        Iterates the schedule until the cumulative allocation covers
+        ``available_budget`` or the schedule is deemed exhausted. When
+        ``max_rounds`` is configured, only the reachable rounds are checked and
+        the schedule is not required to cover the full available budget.
 
         Parameters
         ----------
@@ -68,7 +80,13 @@ class Budget(ALRuntimeMixin):
         underfunded_rounds: list[tuple[int, float]] = []
         cumulative = 0.0
 
-        for i in range(_SCHEDULE_VALIDATION_MAX_ROUNDS):
+        validation_rounds = (
+            self.max_rounds
+            if self.max_rounds is not None
+            else _SCHEDULE_VALIDATION_MAX_ROUNDS
+        )
+
+        for i in range(validation_rounds):
             allocation = self.schedule(i)
 
             if allocation < min_query_cost:
@@ -95,7 +113,10 @@ class Budget(ALRuntimeMixin):
                 f"{min_query_cost:.4g} budget."
             )
 
-        if cumulative < self.available_budget - _BUDGET_ATOL:
+        if (
+            self.max_rounds is None
+            and cumulative < self.available_budget - _BUDGET_ATOL
+        ):
             raise ValueError(
                 f"Budget schedule allocates only {cumulative:.4g} total budget, "
                 f"which cannot cover available_budget={self.available_budget:.4g}."
