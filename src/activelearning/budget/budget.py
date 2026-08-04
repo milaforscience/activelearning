@@ -72,35 +72,33 @@ class Budget(ALRuntimeMixin):
         ValueError
             If the schedule cannot cover ``available_budget``.
         """
-        underfunded_rounds: list[tuple[int, float]] = []
         cumulative = 0.0
+        has_positive_allocation = False
 
         for i in range(_SCHEDULE_VALIDATION_MAX_ROUNDS):
             allocation = self.schedule(i)
 
-            if allocation < min_query_cost:
-                # Oracle cannot query with less than min_query_cost,
-                # so this budget is effectively unusable.
-                underfunded_rounds.append((i, allocation))
-            else:
-                cumulative += allocation
+            if allocation <= 0.0 and has_positive_allocation:
+                break
+
+            effective_allocation = min(allocation, self.available_budget - cumulative)
+            if effective_allocation < min_query_cost:
+                raise ValueError(
+                    f"Budget schedule assigns less than the minimum oracle query "
+                    f"cost ({min_query_cost:.4g}) for: round {i} "
+                    f"(budget={effective_allocation:.4g}). "
+                    f"The experiment would terminate prematurely because no oracle "
+                    f"query can be afforded in this round. Adjust the schedule "
+                    f"parameters so that every round receives at least "
+                    f"{min_query_cost:.4g} budget."
+                )
+
+            cumulative += effective_allocation
+            has_positive_allocation = has_positive_allocation or allocation > 0.0
 
             # Covered full budget — no need to scan further
             if cumulative >= self.available_budget - _BUDGET_ATOL:
                 break
-
-        if underfunded_rounds:
-            rounds_str = ", ".join(
-                f"round {r} (budget={b:.4g})" for r, b in underfunded_rounds
-            )
-            raise ValueError(
-                f"Budget schedule assigns less than the minimum oracle query "
-                f"cost ({min_query_cost:.4g}) for: {rounds_str}. "
-                f"The experiment would terminate prematurely because no oracle "
-                f"query can be afforded in these rounds. Adjust the schedule "
-                f"parameters so that every round receives at least "
-                f"{min_query_cost:.4g} budget."
-            )
 
         if cumulative < self.available_budget - _BUDGET_ATOL:
             raise ValueError(
