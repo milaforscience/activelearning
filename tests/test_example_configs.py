@@ -342,7 +342,7 @@ def test_sampler_fidelities_must_belong_to_oracle() -> None:
     raw_config = load_config(config_path)
     raw_config.sampler.fidelities = [1, 4]
 
-    with pytest.raises(ValidationError, match="Sampler fidelities \[4\]"):
+    with pytest.raises(ValidationError, match=r"Sampler fidelities \[4\]"):
         parse_config(raw_config, ActiveLearningConfig)
 
 
