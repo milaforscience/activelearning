@@ -2,7 +2,7 @@
 
 ## **What is the recommended first run?**
 
-Start from `config/branin_single_fidelity.yaml` with the reduced-budget command in
+Start from `config/branin/single_fidelity.yaml` with the reduced-budget command in
 [Quickstart](../getting-started/quickstart.md). It is the smallest validated
 path for confirming that configuration loading, runtime setup, acquisition,
 budget-aware selection, oracle queries, and logging all work locally.
