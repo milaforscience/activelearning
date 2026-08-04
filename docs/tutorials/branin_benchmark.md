@@ -112,9 +112,9 @@ Every method shares the same protocol:
 - Oracle fidelities `[1, 2, 3]` with costs `[0.01, 0.1, 1.0]` and confidences
   `[0.1, 0.5, 1.0]`. Cost determines budget consumption; confidence determines
   which deformed Branin landscape is evaluated.
-- The same 42 initial $x$-locations across all methods. The MF method observes
-  20 at fidelity 1, 20 at fidelity 2, and 2 at fidelity 3; each SF baseline
-  observes all 42 at its one available fidelity.
+- The same 37 unique initial $x$-locations across all methods. The MF method
+  observes 20 at fidelity 1, 17 at fidelity 2, and 2 at fidelity 3; each SF
+  baseline observes all 37 at its one available fidelity.
 
 The figure shows the MF initial dataset overlaid on each landscape. Marker
 style indicates the fidelity at which each point was observed, even when that
