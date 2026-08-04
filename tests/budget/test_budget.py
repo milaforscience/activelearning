@@ -319,6 +319,27 @@ class TestValidateSchedule:
         with pytest.raises(ValueError, match="cannot cover available_budget"):
             budget.validate_schedule(min_query_cost=0.0)
 
+    def test_validation_stops_at_schedule_exhaustion(self):
+        """A non-positive allocation after a positive round ends validation."""
+        calls = []
+
+        def finite_schedule(round_index: int) -> float:
+            calls.append(round_index)
+            return 10.0 if round_index == 0 else 0.0
+
+        budget = Budget(available_budget=100.0, schedule=finite_schedule)
+        with pytest.raises(ValueError, match="cannot cover available_budget"):
+            budget.validate_schedule(min_query_cost=5.0)
+
+        assert calls == [0, 1]
+
+    def test_validation_uses_capped_round_budget(self):
+        """The effective budget must satisfy the minimum query cost."""
+        budget = Budget(available_budget=4.0, schedule=lambda r: 10.0)
+
+        with pytest.raises(ValueError, match="less than the minimum oracle query cost"):
+            budget.validate_schedule(min_query_cost=5.0)
+
 
 class TestBudgetInitialization:
     """Tests for Budget.__init__ edge cases."""
