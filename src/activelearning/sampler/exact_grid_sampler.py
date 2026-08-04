@@ -206,25 +206,28 @@ class ExactGridSampler(Sampler):
         candidate_pool = self._build_candidate_pool()
 
         if self.requested_num_samples is None:
-            return candidate_pool
+            result = candidate_pool
+        else:
+            if not self.with_replacement and self.requested_num_samples > len(
+                candidate_pool
+            ):
+                raise ValueError(
+                    "num_samples cannot exceed the candidate pool size when "
+                    "with_replacement=False"
+                )
 
-        if not self.with_replacement and self.requested_num_samples > len(
-            candidate_pool
-        ):
-            raise ValueError(
-                "num_samples cannot exceed the candidate pool size when "
-                "with_replacement=False"
-            )
+            if self.use_acquisition_scores:
+                result = self._sample_scored_candidates(
+                    candidate_pool,
+                    num_samples=self.requested_num_samples,
+                    acquisition=acquisition,
+                    cost_fn=cost_fn,
+                )
+            else:
+                result = self._sample_uniform_candidates(
+                    candidate_pool,
+                    num_samples=self.requested_num_samples,
+                )
 
-        if self.use_acquisition_scores:
-            return self._sample_scored_candidates(
-                candidate_pool,
-                num_samples=self.requested_num_samples,
-                acquisition=acquisition,
-                cost_fn=cost_fn,
-            )
-
-        return self._sample_uniform_candidates(
-            candidate_pool,
-            num_samples=self.requested_num_samples,
-        )
+        self.active_learning_round += 1
+        return result
