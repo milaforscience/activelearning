@@ -72,6 +72,29 @@ def test_sample_expands_each_grid_point_across_fidelities() -> None:
     ]
 
 
+def test_sample_reuses_cached_candidate_pool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sampler = ExactGridSampler(
+        bounds=[(0.0, 1.0)],
+        points_per_dimension=[3],
+    )
+    original_generate_grid_points = sampler._generate_grid_points
+    call_count = 0
+
+    def generate_grid_points_once() -> torch.Tensor:
+        nonlocal call_count
+        call_count += 1
+        return original_generate_grid_points()
+
+    monkeypatch.setattr(sampler, "_generate_grid_points", generate_grid_points_once)
+
+    sampler.sample()
+    sampler.sample()
+
+    assert call_count == 1
+
+
 def test_uniform_subsampling_is_seeded_by_runtime_context_and_round() -> None:
     sampler = ExactGridSampler(
         bounds=[(0.0, 1.0), (0.0, 1.0)],

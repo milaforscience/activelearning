@@ -77,6 +77,8 @@ class ExactGridSampler(Sampler):
         self.use_acquisition_scores = use_acquisition_scores
         self.with_replacement = with_replacement
         self.active_learning_round = 0
+        self._candidate_pool: tuple[Candidate, ...] | None = None
+        self._candidate_pool_dtype: torch.dtype | None = None
 
         if isinstance(fidelities, dict):
             self._fidelity_levels = sorted(fidelities)
@@ -111,12 +113,15 @@ class ExactGridSampler(Sampler):
 
     def _build_candidate_pool(self) -> list[Candidate]:
         """Return the deterministic grid expanded across fidelity levels."""
-        points = self._generate_grid_points()
-        return [
-            Candidate(x=point.tolist(), fidelity=fidelity)
-            for point in points
-            for fidelity in self._fidelity_levels
-        ]
+        if self._candidate_pool is None or self._candidate_pool_dtype != self.dtype:
+            points = self._generate_grid_points()
+            self._candidate_pool = tuple(
+                Candidate(x=point.tolist(), fidelity=fidelity)
+                for point in points
+                for fidelity in self._fidelity_levels
+            )
+            self._candidate_pool_dtype = self.dtype
+        return list(self._candidate_pool)
 
     def _sample_uniform_candidates(
         self, candidate_pool: list[Candidate], num_samples: int
