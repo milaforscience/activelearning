@@ -7,39 +7,161 @@ from omegaconf import OmegaConf
 from pydantic import ValidationError
 
 from activelearning.config import ActiveLearningConfig
+from activelearning.run_writer import JSONLinesRunWriter
 from activelearning.utils.config_loader import load_and_parse, load_config, parse_config
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_multi_fidelity_branin_tutorial_config_parses() -> None:
-    """Ensure the multi-fidelity tutorial config matches the current schema."""
+@pytest.mark.parametrize(
+    (
+        "overlay_name",
+        "sampler_type",
+        "sampler_fidelities",
+        "acquisition_type",
+        "oracle_costs",
+        "oracle_confidences",
+        "surrogate_is_multi_fidelity",
+    ),
+    [
+        pytest.param(
+            "mf_gfn",
+            "ExactGridSampler",
+            [1, 2, 3],
+            "QMultiFidelityLowerBoundMaxValueEntropy",
+            {1: 0.01, 2: 0.1, 3: 1.0},
+            {1: 0.1, 2: 0.5, 3: 1.0},
+            True,
+            id="mf-gfn",
+        ),
+        pytest.param(
+            "random",
+            "HypercubeSampler",
+            [1, 2, 3],
+            "QMultiFidelityLowerBoundMaxValueEntropy",
+            {1: 0.01, 2: 0.1, 3: 1.0},
+            {1: 0.1, 2: 0.5, 3: 1.0},
+            True,
+            id="random",
+        ),
+        pytest.param(
+            "sf_low_fid",
+            "ExactGridSampler",
+            [1],
+            "QMultiFidelityLowerBoundMaxValueEntropy",
+            {1: 0.01},
+            {1: 0.1},
+            False,
+            id="sf-low",
+        ),
+        pytest.param(
+            "sf_mid_fid",
+            "ExactGridSampler",
+            [2],
+            "QMultiFidelityLowerBoundMaxValueEntropy",
+            {2: 0.1},
+            {2: 0.5},
+            False,
+            id="sf-mid",
+        ),
+        pytest.param(
+            "sf_high_fid",
+            "ExactGridSampler",
+            [3],
+            "QMultiFidelityLowerBoundMaxValueEntropy",
+            {3: 1.0},
+            {3: 1.0},
+            False,
+            id="sf-high",
+        ),
+    ],
+)
+def test_branin_benchmark_configs_parse(
+    overlay_name: str,
+    sampler_type: str,
+    sampler_fidelities: list[int],
+    acquisition_type: str,
+    oracle_costs: dict[int, float],
+    oracle_confidences: dict[int, float],
+    surrogate_is_multi_fidelity: bool,
+) -> None:
+    """Ensure each public Branin benchmark overlay resolves as intended."""
+    config = load_and_parse(
+        [
+            REPOSITORY_ROOT / "config" / "branin_benchmark" / "base.yaml",
+            REPOSITORY_ROOT / "config" / "branin_benchmark" / f"{overlay_name}.yaml",
+        ],
+        ActiveLearningConfig,
+    )
+
+    assert config.oracle.type == "BraninOracle"
+    assert config.sampler.type == sampler_type
+    assert config.sampler.fidelities == sampler_fidelities
+    assert config.acquisition.type == acquisition_type
+    assert config.oracle.fidelity_costs == oracle_costs
+    assert config.oracle.fidelity_confidences == oracle_confidences
+    assert config.surrogate.is_multi_fidelity is surrogate_is_multi_fidelity
+    assert config.budget.available_budget == 100.0
+    assert config.run_writer is not None
+    assert config.run_writer.output_dir == Path(
+        f"outputs/branin_benchmark/{overlay_name}/seed_42"
+    )
+
+
+def test_branin_benchmark_base_config_parses_run_writer(tmp_path) -> None:
+    """The public Branin benchmark config should resolve a runnable JSON-lines writer."""
+    config = load_and_parse(
+        [
+            REPOSITORY_ROOT / "config" / "branin_benchmark" / "base.yaml",
+            REPOSITORY_ROOT / "config" / "branin_benchmark" / "mf_gfn.yaml",
+        ],
+        ActiveLearningConfig,
+    )
+
+    assert config.run_writer is not None
+    assert config.run_writer.output_dir == Path(
+        "outputs/branin_benchmark/mf_gfn/seed_42"
+    )
+
+    run_writer = config.run_writer.model_copy(
+        update={"output_dir": tmp_path / "benchmark-run"}
+    ).build()
+
+    assert isinstance(run_writer, JSONLinesRunWriter)
+
+
+def test_branin_single_fidelity_tutorial_config_parses() -> None:
+    """Ensure the standalone single-fidelity Branin tutorial config matches the schema."""
+    config_path = REPOSITORY_ROOT / "config" / "branin" / "single_fidelity.yaml"
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.oracle.type == "BraninOracle"
+    assert config.sampler.type == "HypercubeSampler"
+    assert config.sampler.fidelities == [1]
+    assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
+    assert config.oracle.fidelity_costs == {1: 1.0}
+    assert config.surrogate.is_multi_fidelity is False
+
+
+def test_branin_multi_fidelity_tutorial_config_parses() -> None:
+    """Ensure the standalone multi-fidelity Branin tutorial config matches the schema."""
     config_path = REPOSITORY_ROOT / "config" / "branin" / "multi_fidelity.yaml"
 
     config = load_and_parse(config_path, ActiveLearningConfig)
 
     assert config.oracle.type == "BraninOracle"
-    assert config.budget.available_budget == 300.0
-    assert config.runtime.seed == 42
-    assert config.logger is not None
-
-
-def test_single_fidelity_branin_tutorial_config_parses() -> None:
-    """Ensure the single-fidelity tutorial config matches the current schema."""
-    config_path = REPOSITORY_ROOT / "config" / "branin" / "single_fidelity.yaml"
-
-    config = load_and_parse(config_path, ActiveLearningConfig)
-
-    assert config.oracle.type == "BraninOracle"
-    assert config.budget.schedule.type == "constant"
-    assert config.runtime.seed == 42
-    assert config.logger is not None
+    assert config.sampler.type == "HypercubeSampler"
+    assert config.sampler.fidelities == [1, 2, 3]
+    assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
+    assert config.oracle.fidelity_costs == {1: 0.01, 2: 0.1, 3: 1.0}
+    assert config.surrogate.is_multi_fidelity is True
 
 
 def test_single_fidelity_config_derives_sampler_level_and_surrogate_mode() -> None:
     """The oracle's sole level must drive omitted sampler and surrogate settings."""
-    config_path = REPOSITORY_ROOT / "config" / "branin" / "single_fidelity.yaml"
+    config_path = REPOSITORY_ROOT / "config" / "hartmann" / "single_fidelity.yaml"
     raw_config = load_config(config_path)
     raw_config.sampler.fidelities = None
 
@@ -51,7 +173,7 @@ def test_single_fidelity_config_derives_sampler_level_and_surrogate_mode() -> No
 
 def test_multi_fidelity_config_rejects_fidelity_agnostic_surrogate() -> None:
     """A multi-level oracle requires a fidelity-aware surrogate config."""
-    config_path = REPOSITORY_ROOT / "config" / "branin" / "multi_fidelity.yaml"
+    config_path = REPOSITORY_ROOT / "config" / "hartmann" / "multi_fidelity.yaml"
     raw_config = load_config(config_path)
     raw_config.surrogate = {"type": "DummyMeanSurrogate"}
 
@@ -100,7 +222,7 @@ def test_aim_logging_overlay_parses_when_merged_with_base_config() -> None:
     """Ensure the Aim logging overlay remains schema-valid when merged with a base config."""
     config = load_and_parse(
         [
-            REPOSITORY_ROOT / "config" / "branin" / "single_fidelity.yaml",
+            REPOSITORY_ROOT / "config" / "hartmann" / "single_fidelity.yaml",
             REPOSITORY_ROOT / "config" / "aim_logging.yaml",
         ],
         ActiveLearningConfig,
@@ -184,7 +306,7 @@ def test_dkl_target_must_be_declared_by_oracle() -> None:
 
 def test_sampler_fidelities_must_not_be_empty() -> None:
     """An empty configured fidelity set must fail during parsing."""
-    config_path = REPOSITORY_ROOT / "config" / "branin" / "multi_fidelity.yaml"
+    config_path = REPOSITORY_ROOT / "config" / "hartmann" / "multi_fidelity.yaml"
     raw_config = load_config(config_path)
     raw_config.sampler.fidelities = []
 
@@ -194,7 +316,7 @@ def test_sampler_fidelities_must_not_be_empty() -> None:
 
 def test_sampler_fidelities_must_not_contain_duplicates() -> None:
     """Duplicate IDs must not change the sampler's derived fidelity mode."""
-    config_path = REPOSITORY_ROOT / "config" / "branin" / "single_fidelity.yaml"
+    config_path = REPOSITORY_ROOT / "config" / "hartmann" / "single_fidelity.yaml"
     raw_config = load_config(config_path)
     raw_config.sampler.fidelities = [1, 1]
 
@@ -205,7 +327,7 @@ def test_sampler_fidelities_must_not_contain_duplicates() -> None:
 @pytest.mark.parametrize("cost", [0.0, -1.0])
 def test_sampler_fidelity_costs_must_be_positive(cost: float) -> None:
     """Invalid sampler costs must fail during parsing."""
-    config_path = REPOSITORY_ROOT / "config" / "branin" / "single_fidelity.yaml"
+    config_path = REPOSITORY_ROOT / "config" / "hartmann" / "single_fidelity.yaml"
     raw_config = load_config(config_path)
     raw_config.sampler.fidelities = {1: cost}
 
@@ -215,17 +337,17 @@ def test_sampler_fidelity_costs_must_be_positive(cost: float) -> None:
 
 def test_sampler_fidelities_must_belong_to_oracle() -> None:
     """Sampler levels outside the oracle's authoritative set must be rejected."""
-    config_path = REPOSITORY_ROOT / "config" / "branin" / "multi_fidelity.yaml"
+    config_path = REPOSITORY_ROOT / "config" / "hartmann" / "multi_fidelity.yaml"
     raw_config = load_config(config_path)
     raw_config.sampler.fidelities = [1, 4]
 
-    with pytest.raises(ValidationError, match="Sampler fidelities \\[4\\]"):
+    with pytest.raises(ValidationError, match="Sampler fidelities \[4\]"):
         parse_config(raw_config, ActiveLearningConfig)
 
 
 def test_composite_oracle_rejects_conflicting_confidences() -> None:
     """Sub-oracles must agree when they expose the same fidelity level."""
-    config_path = REPOSITORY_ROOT / "config" / "branin" / "multi_fidelity.yaml"
+    config_path = REPOSITORY_ROOT / "config" / "hartmann" / "multi_fidelity.yaml"
     raw_config = load_config(config_path)
     first_oracle = OmegaConf.to_container(raw_config.oracle, resolve=True)
     second_oracle = OmegaConf.to_container(raw_config.oracle, resolve=True)
