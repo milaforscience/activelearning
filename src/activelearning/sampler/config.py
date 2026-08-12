@@ -181,6 +181,71 @@ class GFlowNetGridSamplerConfig(GFlowNetSamplerConfig):
         )
 
 
+class S3GFNSamplerConfig(BaseModel):
+    """Configuration for the soft-constrained S3-GFN molecule sampler.
+
+    The language model generates canonical connected SMILES, which are passed
+    unchanged to the active-learning loop after validation. Multiple configured
+    fidelities add one terminal fidelity action; a single fidelity keeps the
+    molecule-only trajectory.
+    """
+
+    type: Literal["S3GFNSampler"] = "S3GFNSampler"
+    n_samples: int = Field(gt=0)
+    fidelities: _FidelityLevels | None = None
+    model_name_or_path: str = Field(
+        default="ibm-research/GP-MoLFormer-Uniq",
+        min_length=1,
+    )
+    tokenizer_name_or_path: str = Field(
+        default="ibm-research/MoLFormer-XL-both-10pct",
+        min_length=1,
+    )
+    trust_remote_code: bool = True
+    cache_dir: str | None = None
+    max_length: int = Field(default=140, ge=2)
+    batch_size: int = Field(default=64, gt=0)
+    replay_batch_size: int = Field(default=64, gt=0)
+    n_train_steps: int = Field(default=5000, gt=0)
+    num_warmup_steps: int = Field(default=100, ge=0)
+    learning_rate: PositiveFloat = 1.0e-4
+    log_z_learning_rate: PositiveFloat = 1.0e-3
+    beta: PositiveFloat = 25.0
+    aux_coefficient: float = Field(default=1.0e-3, ge=0.0)
+    buffer_size: int = Field(default=6400, gt=0)
+    sa_threshold: float = Field(default=4.0, ge=0.0)
+    sampling_temperature: PositiveFloat = 1.0
+    gradient_clip_norm: PositiveFloat = 10.0
+    seed: int = Field(default=42, ge=0)
+
+    def build(self) -> Sampler:
+        """Build the sampler lazily so base installs need no Transformers."""
+        from activelearning.sampler.s3gfn.sampler import S3GFNSampler
+
+        return S3GFNSampler(
+            n_samples=self.n_samples,
+            fidelities=_resolve_fidelities(self.fidelities),
+            model_name_or_path=self.model_name_or_path,
+            tokenizer_name_or_path=self.tokenizer_name_or_path,
+            trust_remote_code=self.trust_remote_code,
+            cache_dir=self.cache_dir,
+            max_length=self.max_length,
+            batch_size=self.batch_size,
+            replay_batch_size=self.replay_batch_size,
+            n_train_steps=self.n_train_steps,
+            num_warmup_steps=self.num_warmup_steps,
+            learning_rate=self.learning_rate,
+            log_z_learning_rate=self.log_z_learning_rate,
+            beta=self.beta,
+            aux_coefficient=self.aux_coefficient,
+            buffer_size=self.buffer_size,
+            sa_threshold=self.sa_threshold,
+            sampling_temperature=self.sampling_temperature,
+            gradient_clip_norm=self.gradient_clip_norm,
+            seed=self.seed,
+        )
+
+
 SamplerConfig = Annotated[
     Union[
         HypercubeSamplerConfig,
@@ -188,6 +253,7 @@ SamplerConfig = Annotated[
         PoolFileSamplerConfig,
         GFlowNetSamplerConfig,
         GFlowNetGridSamplerConfig,
+        S3GFNSamplerConfig,
     ],
     Field(discriminator="type"),
 ]
