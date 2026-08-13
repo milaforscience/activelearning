@@ -8,6 +8,7 @@ from activelearning.applications.molecules.selfies_tokenizer import (
     SELFIES_VOCAB_SMALL,
     SelfiesTokenizer,
 )
+from activelearning.surrogate.sequence.tokenizer import SequenceTokenizer
 
 BENZENE = "[C][=C][C][=C][C][=C][Ring1][=Branch1]"
 ALANINE = "[C][C][Branch1][C][N][C][=Branch1][C][=O][O]"
@@ -31,6 +32,11 @@ class TestSelfiesVocab:
 
 
 class TestSelfiesTokenizer:
+    def test_implements_molecule_tokenizer_protocol(
+        self, tokenizer: SelfiesTokenizer
+    ) -> None:
+        assert isinstance(tokenizer, SequenceTokenizer)
+
     def test_vocab_size(self, tokenizer: SelfiesTokenizer):
         # base_vocab = SELFIES_VOCAB_SMALL + [nop, EOS] + dedup specials
         assert tokenizer.vocab_size > len(SELFIES_VOCAB_SMALL)

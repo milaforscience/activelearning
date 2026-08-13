@@ -44,7 +44,7 @@ def _blocked_imports_prelude() -> str:
         _real_import = builtins.__import__
 
         def _blocked_import(name, globals=None, locals=None, fromlist=(), level=0):
-            if name.split(".", 1)[0] in {"selfies", "rdkit"}:
+            if name.split(".", 1)[0] in {"selfies", "rdkit", "transformers"}:
                 raise ModuleNotFoundError(f"blocked optional dependency: {name}")
             return _real_import(name, globals, locals, fromlist, level)
 
@@ -90,6 +90,50 @@ def test_building_molecule_component_raises_helpful_error_without_extras() -> No
             assert "uv sync --extra molecules" in message
         else:
             raise AssertionError("Expected ImportError when molecules extras are blocked")
+        """
+    )
+
+    result = _run_python_snippet_in_subprocess(script)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_shared_surrogate_imports_stay_lazy_without_molecule_extras() -> None:
+    script = _blocked_imports_prelude() + textwrap.dedent(
+        """
+        from activelearning.surrogate.dkl import ExactDKLSurrogate
+        from activelearning.surrogate.sequence import (
+            HuggingFaceSequenceEncoder,
+            HuggingFaceTokenizer,
+            TransformerSequenceEncoder,
+        )
+
+        assert ExactDKLSurrogate
+        assert HuggingFaceSequenceEncoder
+        assert HuggingFaceTokenizer
+        assert TransformerSequenceEncoder
+        """
+    )
+
+    result = _run_python_snippet_in_subprocess(script)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_importing_s3gfn_sampler_stays_lazy_without_molecule_extras() -> None:
+    script = _blocked_imports_prelude() + textwrap.dedent(
+        """
+        from activelearning.sampler.s3gfn.sampler import S3GFNSampler
+        from activelearning.sampler.s3gfn._optional import require_rdkit
+
+        try:
+            require_rdkit()
+        except ImportError as error:
+            message = str(error)
+            assert "molecules" in message
+            assert "uv sync --extra molecules" in message
+        else:
+            raise AssertionError("Expected ImportError when molecule extras are blocked")
         """
     )
 
