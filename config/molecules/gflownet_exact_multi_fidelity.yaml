@@ -7,7 +7,7 @@
 # multi-fidelity example (gflownet_variational_multi_fidelity.yaml):
 # - GFlowNetSampler trains a generative policy to propose (SELFIES, fidelity) pairs;
 #   fidelity_action: any lets the policy choose any of the three fidelity levels.
-# - ExactSelfiesDKLSurrogate fits an exact GP that conditions on both molecule features
+# - ExactDKLSurrogate fits an exact GP that conditions on both molecule features
 #   and a fidelity confidence embedding (is_multi_fidelity: true, target_fidelity: 3).
 # - QMultiFidelityLowerBoundMaxValueEntropy (MF-MES) scores each (molecule, fidelity)
 #   pair by expected information gain about the optimum at target fidelity 3. This score
@@ -23,7 +23,7 @@ dataset:
   type: ListDataset
 
 surrogate:
-  type: ExactSelfiesDKLSurrogate
+  type: ExactDKLSurrogate
   is_multi_fidelity: true
   target_fidelity: 3
   encoder:

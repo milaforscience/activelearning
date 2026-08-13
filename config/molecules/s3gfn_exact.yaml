@@ -1,0 +1,73 @@
+# S3-GFN molecule experiment: GP-MoLFormer prior + exact SMILES DKL.
+#
+# Prerequisites:
+#   - uv sync --extra molecules
+#   - the xtb binary on PATH
+#
+# The sampler, surrogate, and oracle use canonical connected SMILES
+# throughout, and the policy is post-trained with S3-GFN's RTB objective.
+
+runtime:
+  device: cpu
+  precision: 64
+  seed: 42
+
+dataset:
+  type: ListDataset
+
+surrogate:
+  type: ExactDKLSurrogate
+  encoder:
+    type: GPMoLFormerSmilesEncoder
+    max_mol_tokens: 140
+    latent_dim: 32
+  training_params:
+    epochs: 10
+    lr: 1.0e-3
+    mask_ratio: 0.125
+    pretrain_epochs: 0
+  standardize_outputs: true
+
+acquisition:
+  type: UpperConfidenceBound
+  beta: 2.0
+
+sampler:
+  type: S3GFNSampler
+  n_samples: 64
+  fidelities: [1]
+  model_name_or_path: ibm-research/GP-MoLFormer-Uniq
+  tokenizer_name_or_path: ibm-research/MoLFormer-XL-both-10pct
+  trust_remote_code: true
+  max_length: 140
+  batch_size: 16
+  replay_batch_size: 16
+  n_train_steps: 25
+  num_warmup_steps: 5
+  beta: 25.0
+  aux_coefficient: 0.001
+  sa_threshold: 4.0
+
+selector:
+  type: TopKAcquisitionSelector
+  num_samples: 16
+
+oracle:
+  type: XTBIPEAOracle
+  task: ea
+  fidelity_costs:
+    1: 1.0
+  gfn_version: 2
+  ff: mmff
+  mol_repr: smiles
+
+budget:
+  available_budget: 48.0
+  schedule:
+    type: constant
+    value: 16.0
+
+logger:
+  type: ConsoleLogger
+  project_name: activelearning_tutorials
+  run_name: molecules-s3gfn-exact

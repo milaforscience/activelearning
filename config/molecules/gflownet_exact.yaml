@@ -10,7 +10,7 @@
 # This example keeps the setup intentionally small:
 # - GFlowNetSampler trains a generative policy (GFlowNet) to propose SELFIES strings
 #   in proportion to their acquisition scores, rather than drawing from a fixed pool.
-# - ExactSelfiesDKLSurrogate fits an exact GP with a deep-kernel-learning SELFIES
+# - ExactDKLSurrogate fits an exact GP with a deep-kernel-learning molecular
 #   transformer encoder to model electron affinity.
 # - UpperConfidenceBound scores candidate molecules by predicted mean plus uncertainty.
 # - Only fidelity 1 (the cheapest xTB approximation) is used so the run stays cheap
@@ -29,7 +29,7 @@ dataset:
   type: ListDataset
 
 surrogate:
-  type: ExactSelfiesDKLSurrogate
+  type: ExactDKLSurrogate
   encoder:
     type: SelfiesTransformerEncoder
     max_mol_tokens: 16
