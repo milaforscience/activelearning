@@ -1,11 +1,11 @@
-"""SELFIES Transformer encoder.
+"""Transformer encoders for tokenized sequence representations.
 
 Pipeline:
     token IDs → nn.Embedding → positional encoding → Transformer encoder
-    → masked-mean pool → latent molecules vector
+    → masked-mean pool → latent sequence vector
 
 The encoder also exposes an MLM head so it can be trained jointly with:
-- masked language modelling (MLM) loss on masked SELFIES tokens
+- masked language modelling (MLM) loss on masked sequence tokens
 - GP regression loss (exact MLL or variational ELBO)
 """
 
@@ -18,7 +18,13 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from activelearning.applications.molecules.selfies_tokenizer import SelfiesTokenizer
+from activelearning.surrogate.sequence.tokenizer import SequenceTokenizer
+
+__all__ = [
+    "MaskedMeanPool",
+    "PositionalEncoding",
+    "TransformerSequenceEncoder",
+]
 
 
 class PositionalEncoding(nn.Module):
@@ -83,7 +89,7 @@ class MaskedMeanPool(nn.Module):
         self.proj = nn.Linear(input_dim, output_dim)
 
     def forward(self, token_features: Tensor, mask: Tensor) -> Tensor:
-        """Pool token features into one vector per molecules.
+        """Pool token features into one vector per sequence.
 
         Parameters
         ----------
@@ -104,7 +110,7 @@ class MaskedMeanPool(nn.Module):
         return self.proj(pooled)
 
 
-class SelfiesTransformerEncoder(nn.Module):
+class TransformerSequenceEncoder(nn.Module):
     """Sequence encoder used by the DKL surrogate.
 
     Architecture:
@@ -113,15 +119,15 @@ class SelfiesTransformerEncoder(nn.Module):
         → ``MaskedMeanPool`` → latent vector
 
     The encoder also exposes an MLM head (``mlm_loss``) so it can be trained
-    jointly with a GP loss inside :class:`SelfiesDeepKernelSurrogate`.
+    jointly with a GP loss inside a DKL surrogate.
 
     Parameters
     ----------
-    tokenizer : SelfiesTokenizer
+    tokenizer : SequenceTokenizer
         Tokenizer providing vocabulary and special-token indices.
-    max_mol_tokens : int
-        Maximum number of molecular (SELFIES) tokens, not counting the
-        ``[CLS]`` and ``[EOS]`` specials.  Stored as ``max_seq_len = max_mol_tokens + 2``.
+    max_tokens : int
+        Maximum number of sequence tokens, not counting the ``[CLS]`` and
+        ``[EOS]`` specials. Stored as ``max_seq_len = max_tokens + 2``.
     embed_dim : int
         Embedding and Transformer hidden dimensionality.
     ff_dim : int
@@ -131,15 +137,15 @@ class SelfiesTransformerEncoder(nn.Module):
     num_layers : int
         Number of Transformer encoder layers.
     latent_dim : int
-        Output dimensionality of the pooled molecules vector.
+        Output dimensionality of the pooled sequence vector.
     dropout : float
         Dropout rate applied throughout.
     """
 
     def __init__(
         self,
-        tokenizer: SelfiesTokenizer,
-        max_mol_tokens: int = 64,
+        tokenizer: SequenceTokenizer,
+        max_tokens: int = 64,
         embed_dim: int = 64,
         ff_dim: int = 256,
         num_heads: int = 8,
@@ -149,8 +155,8 @@ class SelfiesTransformerEncoder(nn.Module):
     ) -> None:
         super().__init__()
         self.tokenizer = tokenizer
-        self.max_mol_tokens: int = max_mol_tokens
-        self.max_seq_len: int = max_mol_tokens + 2  # CLS + mol tokens + EOS
+        self.max_tokens: int = max_tokens
+        self.max_seq_len: int = max_tokens + 2  # CLS + sequence tokens + EOS
         self.embed_dim = embed_dim
         self.latent_dim = latent_dim
 
@@ -196,6 +202,7 @@ class SelfiesTransformerEncoder(nn.Module):
             tokens (including ``[CLS]`` and ``[EOS]``) that contribute to
             the pooled vector.
         """
+        token_batch = token_batch.long()
         if token_batch.size(1) > self.max_seq_len:
             token_batch = token_batch[:, : self.max_seq_len]
 
@@ -205,12 +212,12 @@ class SelfiesTransformerEncoder(nn.Module):
         x = self.encoder_layers(x, src_key_padding_mask=key_padding_mask)
         x = self.embed_to_latent(x)
 
-        # Pool over all non-padding tokens (CLS, molecular tokens, and EOS).
+        # Pool over all non-padding tokens (CLS, sequence tokens, and EOS).
         keep_mask = ~key_padding_mask
         return x, keep_mask
 
     def forward(self, token_batch: Tensor) -> Tensor:
-        """Encode a batch of token sequences to molecules latent vectors.
+        """Encode a batch of token sequences to latent vectors.
 
         Parameters
         ----------
@@ -243,6 +250,7 @@ class SelfiesTransformerEncoder(nn.Module):
         Tensor
             Shape ``(B, seq_len, vocab_size)``.
         """
+        token_batch = token_batch.long()
         if token_batch.size(1) > self.max_seq_len:
             token_batch = token_batch[:, : self.max_seq_len]
 
@@ -255,7 +263,7 @@ class SelfiesTransformerEncoder(nn.Module):
     def sample_mask_positions(self, token_batch: Tensor, mask_ratio: float) -> Tensor:
         """Sample token positions to mask for MLM training.
 
-        Masking is applied only to regular SELFIES tokens, not to ``[CLS]``,
+        Masking is applied only to regular sequence tokens, not to ``[CLS]``,
         ``[EOS]``, or ``[nop]`` padding positions.
 
         Parameters

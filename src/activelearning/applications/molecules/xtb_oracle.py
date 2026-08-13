@@ -109,8 +109,8 @@ def _decode_to_smiles(molecule: str, mol_repr: str = "selfies") -> str:
     Returns
     -------
     str
-        SMILES string. May be empty when a syntactically valid SELFIES string
-        collapses to the empty molecule during decoding.
+        SMILES string. May be empty when the input represents an empty
+        molecule.
 
     Raises
     ------
@@ -452,8 +452,8 @@ class XTBIPEAOracle(MultiFidelityOracle):
         ``TOTAL ENERGY`` differences in the optimisation logs, minus
         the empirical ``correction_factor``.
 
-    Each ``candidate.x`` must be a SELFIES (or SMILES) string representing the
-    molecule to evaluate.
+    Each ``candidate.x`` must be a SELFIES or SMILES string, as selected by
+    ``mol_repr``, representing the molecule to evaluate.
 
     Parameters
     ----------
@@ -490,11 +490,11 @@ class XTBIPEAOracle(MultiFidelityOracle):
         Large query batches are ranked by score and capped to this limit.
     Notes
     -----
-    SELFIES strings that decode to the empty molecule and molecules that fail
-    during RDKit/MMFF or xtb processing return ``NaN``. The dataset layer
-    filters these failed evaluations before surrogate fitting, matching the
-    original MF-GFN behavior where geometry-construction failures were treated
-    as invalid molecules.
+    Molecules that decode to the empty molecule or fail during RDKit/MMFF or
+    xtb processing return ``NaN``. The dataset layer filters these failed
+    evaluations before surrogate fitting, matching the original MF-GFN
+    behavior where geometry-construction failures were treated as invalid
+    molecules.
     """
 
     def __init__(
@@ -514,6 +514,10 @@ class XTBIPEAOracle(MultiFidelityOracle):
     ) -> None:
         if task not in {"ea", "ip"}:
             raise ValueError(f"task must be 'ea' or 'ip', got {task!r}")
+        if mol_repr not in {"selfies", "smiles"}:
+            raise ValueError(
+                f"mol_repr must be 'selfies' or 'smiles', got {mol_repr!r}"
+            )
         if not fidelity_costs:
             raise ValueError("fidelity_costs must define at least one fidelity.")
         invalid_fidelities = sorted(set(fidelity_costs) - {1, 2, 3})
@@ -604,7 +608,7 @@ class XTBIPEAOracle(MultiFidelityOracle):
         ----------
         candidate : Candidate
             The candidate whose molecule string is to be extracted.
-            ``candidate.x`` must be a SELFIES (or SMILES) string.
+            ``candidate.x`` must be a string in ``self._mol_repr`` format.
 
         Returns
         -------
@@ -618,8 +622,9 @@ class XTBIPEAOracle(MultiFidelityOracle):
         """
         if isinstance(candidate.x, str):
             return candidate.x
+        representation = self._mol_repr.upper()
         raise ValueError(
-            f"Expected candidate.x to be a SELFIES string, "
+            f"Expected candidate.x to be a {representation} string, "
             f"got {type(candidate.x).__name__}."
         )
 

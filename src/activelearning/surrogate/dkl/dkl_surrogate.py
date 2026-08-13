@@ -1,15 +1,15 @@
-"""Deep Kernel Learning surrogates for SELFIES molecules optimisation.
+"""Deep Kernel Learning surrogates for encoded active-learning inputs.
 
 Two variants are provided, both inheriting from :class:`BoTorchGPSurrogate`:
 
-``ExactSelfiesDKLSurrogate``
-    Uses BoTorch's ``SingleTaskGP`` with a :class:`SelfiesKernel` as the
+``ExactDKLSurrogate``
+    Uses BoTorch's ``SingleTaskGP`` with an encoder kernel as the
     covariance module.  Compatible with **all BoTorch acquisition functions**.
     Training minimises ``ExactMarginalLogLikelihood + MLM loss`` via Adam.
 
-``VariationalSelfiesDKLSurrogate``
+``VariationalDKLSurrogate``
     Uses a sparse variational GP head, following the reference
-    ``DeepKernelMoleculeRegressor``.  Training minimises
+    ``DeepKernelRegressor``.  Training minimises
     ``VariationalELBO + MLM loss`` via Adam.
 
 **Multi-fidelity** is controlled via the ``is_multi_fidelity`` constructor
@@ -19,16 +19,17 @@ the surrogate appends the BoTorch-facing **fidelity confidence** from
 the GP. This keeps the fidelity coordinate in the continuous space used by
 BoTorch's multi-fidelity helpers such as ``project_to_target_fidelity``.
 
-Floating-point tensors in the SELFIES DKL stack follow ``RuntimeContext.dtype``
-(``torch.float64`` by default). Token IDs remain integer tensors inside the
-encoder/tokenizer path and are only cast to the runtime floating dtype where
-BoTorch / GPyTorch expect floating inputs.
+The input representation is supplied through an ``input_adapter`` callable.
+This keeps conversion from domain objects to model-space tensors outside the
+generic DKL implementation. Floating-point tensors follow
+``RuntimeContext.dtype`` (``torch.float64`` by default).
 """
 
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import Any, Iterable, Optional
+from collections.abc import Sequence
+from typing import Any, Iterable, Optional, Protocol
 
 import gpytorch
 import torch
@@ -36,29 +37,60 @@ from botorch.models.model import Model
 from gpytorch.mlls import ExactMarginalLogLikelihood, VariationalELBO
 from torch.optim import Adam
 
-from activelearning.applications.molecules.selfies_transformer_encoder import (
-    SelfiesTransformerEncoder,
-)
-from activelearning.applications.molecules.selfies_kernel import SelfiesKernel
 from activelearning.runtime import RuntimeContext
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
+from activelearning.surrogate.dkl.kernel import EncoderKernel
 from activelearning.utils.types import Candidate, Observation
 
 
-class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
-    """Base class for SELFIES DKL surrogates (template-method pattern).
+class InputAdapter(Protocol):
+    """Convert domain-specific inputs into batched DKL model inputs."""
 
-    Handles tokenisation, MLM pre-training, and the shared Adam training loop.
+    def __call__(
+        self,
+        values: Sequence[Any],
+        *,
+        device: torch.device,
+    ) -> torch.Tensor:
+        """Encode domain values into a model-space tensor.
 
-    Not intended to be instantiated directly.  Use
-    :class:`ExactSelfiesDKLSurrogate` or :class:`VariationalSelfiesDKLSurrogate`.
+        Parameters
+        ----------
+        values : Sequence[Any]
+            Domain values extracted from candidates or observations.
+        device : torch.device
+            Device on which the returned tensor should be allocated.
+
+        Returns
+        -------
+        torch.Tensor
+            Batched model-space inputs, with one row per value.
+        """
+        ...
+
+
+class DeepKernelSurrogate(BoTorchGPSurrogate):
+    """Base class for exact and variational deep-kernel surrogates.
+
+    The class owns the representation-independent training and multi-fidelity
+    logic. ``input_adapter`` is the only domain-specific boundary: it converts
+    the ``x`` values carried by candidates and observations into a batched
+    tensor accepted by the encoder and GP.
+
+    Not intended to be instantiated directly. Use :class:`ExactDKLSurrogate`
+    or :class:`VariationalDKLSurrogate`.
 
     Parameters
     ----------
-    encoder : SelfiesTransformerEncoder
-        The shared Transformer encoder jointly optimised with the GP.
-    training_params : SelfiesTrainingConfig
+    encoder : torch.nn.Module
+        Feature encoder jointly optimised with the GP where its parameters
+        are trainable.
+    input_adapter : InputAdapter
+        Callable converting a sequence of domain inputs into a batched tensor.
+    training_params : object
         Training hyper-parameters (epochs, lr, mask_ratio, pretrain_epochs).
+        The masking parameters are used only when the encoder exposes an
+        optional ``mlm_loss`` method.
     is_multi_fidelity : bool
         Whether to append the encoded fidelity confidence to each feature
         vector. Should match the ``is_multi_fidelity`` key in the YAML run config.
@@ -77,7 +109,7 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
 
     * :meth:`_build_model` -- construct the GP model (sets self.model).
     * :meth:`_make_mll` -- return the MLL / ELBO objective.
-    * :meth:`_gp_forward` -- run the GP forward pass on token-ID tensors.
+    * :meth:`_gp_forward` -- run the GP forward pass on model-space tensors.
     * :meth:`_make_optimizer` -- return an Adam optimiser over all parameters.
 
     Subclasses **may** override:
@@ -89,18 +121,52 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
 
     def __init__(
         self,
-        encoder: SelfiesTransformerEncoder,
+        encoder: Any,
+        input_adapter: InputAdapter,
         training_params: Any,
         is_multi_fidelity: bool = False,
         target_fidelity: Optional[int] = None,
         **botorch_kwargs: Any,
     ) -> None:
+        """Initialize a representation-independent DKL surrogate.
+
+        Parameters
+        ----------
+        encoder : torch.nn.Module
+            Feature encoder jointly optimized with the GP when its parameters
+            are trainable.
+        input_adapter : InputAdapter
+            Callable that converts candidate and observation values into
+            batched model-space tensors.
+        training_params : object
+            Training settings containing ``epochs`` and ``lr``. Encoders with
+            an ``mlm_loss`` method may also use ``pretrain_epochs`` and
+            ``mask_ratio``.
+        is_multi_fidelity : bool, default=False
+            Whether to append encoded fidelity confidences to model inputs.
+        target_fidelity : int, optional
+            Fidelity level to use for target-fidelity projections. Required
+            when ``is_multi_fidelity`` is true.
+        **botorch_kwargs : Any
+            Additional keyword arguments passed to
+            :class:`BoTorchGPSurrogate`.
+
+        Raises
+        ------
+        ValueError
+            If multi-fidelity mode is enabled without a target fidelity.
+        TypeError
+            If ``input_adapter`` is not callable.
+        """
         if is_multi_fidelity and target_fidelity is None:
             raise ValueError(
                 "target_fidelity must be set when is_multi_fidelity=True. "
                 "Set it to the maximum fidelity level (e.g. max(fidelity_costs))."
             )
+        if not callable(input_adapter):
+            raise TypeError("input_adapter must be callable.")
         self._encoder = encoder
+        self._input_adapter = input_adapter
         self._training = training_params
 
         self._target_fidelity_level = target_fidelity if is_multi_fidelity else None
@@ -109,15 +175,27 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         super().__init__(**botorch_kwargs)
 
     def bind_runtime_context(self, runtime_context: RuntimeContext) -> None:
-        """Move the DKL stack onto the shared runtime device and dtype."""
+        """Move the DKL stack onto the shared runtime device and dtype.
+
+        Parameters
+        ----------
+        runtime_context : RuntimeContext
+            Runtime device and floating-point dtype used by the active-learning
+            loop.
+        """
         super().bind_runtime_context(runtime_context)
         self._apply_runtime_context()
 
     def _apply_runtime_context(self) -> None:
         """Apply the currently bound runtime device/dtype to all learnable modules."""
+        # Runtime precision applies to trainable DKL components; frozen
+        # pretrained encoders may restore their checkpoint dtype below.
         self._encoder = self._encoder.to(device=self.device, dtype=self.dtype)
         if self.model is not None:
             self.model = self.model.to(device=self.device, dtype=self.dtype)
+        restore_backbone_dtype = getattr(self._encoder, "restore_backbone_dtype", None)
+        if restore_backbone_dtype is not None:
+            restore_backbone_dtype()
         if hasattr(self, "_gp_model") and self._gp_model is not None:
             self._gp_model = self._gp_model.to(device=self.device, dtype=self.dtype)
         if hasattr(self, "_likelihood") and self._likelihood is not None:
@@ -128,6 +206,15 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
             )
 
     def fit(self, observations: Iterable[Observation]) -> None:
+        """Fit the encoder and GP jointly to a collection of observations.
+
+        Parameters
+        ----------
+        observations : Iterable[Observation]
+            Observations whose ``x`` values are converted by the input adapter
+            and whose ``y`` values are used as regression targets. An empty
+            iterable leaves the surrogate unchanged.
+        """
         obs_list = list(observations)
         if not obs_list:
             return
@@ -141,7 +228,14 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         self._joint_train(self._make_mll(len(obs_list)))
 
     def updates_from_latest(self) -> bool:
-        """DKL always retrains from scratch -- the AL loop will call fit()."""
+        """Report whether fitting can reuse the latest observations.
+
+        Returns
+        -------
+        bool
+            Always ``False`` because DKL fitting rebuilds and retrains the GP
+            stack from the complete observation set.
+        """
         return False
 
     def get_target_fidelity_value(self) -> float | None:
@@ -150,6 +244,12 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         Overrides :meth:`BoTorchGPSurrogate.get_target_fidelity_value` so the
         configured target fidelity level is converted through the active
         confidence mapping before BoTorch uses it.
+
+        Returns
+        -------
+        float or None
+            Encoded target-fidelity confidence in multi-fidelity mode, or
+            ``None`` for single-fidelity surrogates.
         """
         if not self._is_multi_fidelity or self._target_fidelity_level is None:
             return None
@@ -166,7 +266,7 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         """Return the MLL / ELBO objective for this GP variant."""
 
     @abstractmethod
-    def _gp_forward(self, token_X: torch.Tensor) -> Any:
+    def _gp_forward(self, model_X: torch.Tensor) -> Any:
         """Run the GP forward pass and return the output distribution."""
 
     @abstractmethod
@@ -177,73 +277,100 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         """Optional hook for target standardisation. No-op by default."""
         return train_Y
 
+    @property
+    def _has_mlm_loss(self) -> bool:
+        """Return whether the encoder provides an MLM auxiliary objective."""
+        return callable(getattr(self._encoder, "mlm_loss", None))
+
     # Shared training loop
 
     def _joint_train(self, mll: Any) -> None:
-        """Run the joint MLM + GP Adam training loop."""
+        """Run the joint auxiliary-loss + GP Adam training loop."""
         optimizer = self._make_optimizer()
         all_params = [p for group in optimizer.param_groups for p in group["params"]]
         train_X = self._train_X.to(device=self.device, dtype=self.dtype)
         targets = self._train_Y.squeeze(-1).to(device=self.device, dtype=self.dtype)
-        # MLM only sees token IDs -- strip the fidelity column when present
-        mlm_tokens = (
-            train_X[:, :-1].long() if self._is_multi_fidelity else train_X.long()
-        )
 
-        for _ in range(self._training.pretrain_epochs):
-            self._encoder.train()
-            optimizer.zero_grad()
-            self._encoder.mlm_loss(mlm_tokens, self._training.mask_ratio).backward()
-            torch.nn.utils.clip_grad_norm_(all_params, max_norm=1.0)
-            optimizer.step()
+        if self._has_mlm_loss:
+            # Auxiliary masked-token objectives consume integer token IDs;
+            # ordinary DKL encoders never enter this branch.
+            mlm_tokens = (
+                train_X[:, :-1].long() if self._is_multi_fidelity else train_X.long()
+            )
+            for _ in range(self._training.pretrain_epochs):
+                self._encoder.train()
+                optimizer.zero_grad()
+                self._encoder.mlm_loss(mlm_tokens, self._training.mask_ratio).backward()
+                torch.nn.utils.clip_grad_norm_(all_params, max_norm=1.0)
+                optimizer.step()
 
         for _ in range(self._training.epochs):
             self._set_train_mode()
             optimizer.zero_grad()
-            mlm_loss = self._encoder.mlm_loss(mlm_tokens, self._training.mask_ratio)
+            mlm_loss = None
+            if self._has_mlm_loss:
+                mlm_loss = self._encoder.mlm_loss(mlm_tokens, self._training.mask_ratio)
             # Extra Cholesky jitter stabilises early training when embeddings are similar
             with gpytorch.settings.cholesky_jitter(1e-1):
                 gp_loss = -mll(self._gp_forward(train_X), targets)
-            (mlm_loss + gp_loss).backward()
+            (gp_loss if mlm_loss is None else mlm_loss + gp_loss).backward()
             torch.nn.utils.clip_grad_norm_(all_params, max_norm=1.0)
             optimizer.step()
 
         self._set_eval_mode()
 
-    # Overrides: tokenise SELFIES strings
+    # Domain input conversion
 
     def _parse_observations(
         self, observations: Iterable[Observation]
     ) -> tuple[torch.Tensor, torch.Tensor, bool]:
-        """Tokenise SELFIES strings to runtime-dtype token-ID tensors."""
+        """Convert observations to model-space inputs and runtime-dtype targets."""
         obs_list = list(observations)
         if not obs_list:
             raise ValueError("Cannot parse an empty observation iterable.")
-        tokens = self._tokenize_with_fidelity(obs_list)
+        inputs = self._encode_inputs_with_fidelity(obs_list)
         train_Y = torch.as_tensor([o.y for o in obs_list], dtype=self.dtype).unsqueeze(
             -1
         )
-        return tokens, train_Y, self._is_multi_fidelity
+        return inputs, train_Y, self._is_multi_fidelity
 
     def encode_candidates(self, candidates: Iterable[Candidate]) -> torch.Tensor:
-        """Tokenise candidates to runtime-dtype token-ID tensors.
+        """Convert candidates to model-space inputs.
 
         Appends the encoded fidelity confidence as the last column when
         ``is_multi_fidelity=True``.
+
+        Parameters
+        ----------
+        candidates : Iterable[Candidate]
+            Candidates to encode.
+
+        Returns
+        -------
+        torch.Tensor
+            Batched model-space inputs on the active runtime device and dtype.
+
+        Raises
+        ------
+        ValueError
+            If ``candidates`` is empty or a multi-fidelity item has an
+            undeclared fidelity level.
         """
         cand_list = list(candidates)
         if not cand_list:
             raise ValueError("Cannot encode an empty candidate iterable.")
-        return self._tokenize_with_fidelity(cand_list)
+        return self._encode_inputs_with_fidelity(cand_list)
 
     # Internal helpers
 
-    def _tokenize_with_fidelity(
+    def _encode_inputs_with_fidelity(
         self, items: list[Candidate | Observation]
     ) -> torch.Tensor:
-        """Tokenise items and append the encoded fidelity value when active."""
-        strings = [self._extract_molecule_string(item) for item in items]
-        tokens = self._tokenize_strings(strings)
+        """Encode items and append the fidelity value when active."""
+        inputs = self._input_adapter(
+            [item.x for item in items],
+            device=self.device,
+        ).to(device=self.device, dtype=self.dtype)
         if self._is_multi_fidelity:
             fidelities = torch.tensor(
                 [
@@ -255,8 +382,8 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
                 dtype=self.dtype,
                 device=self.device,
             ).unsqueeze(-1)
-            tokens = torch.cat([tokens, fidelities], dim=-1)
-        return tokens
+            inputs = torch.cat([inputs, fidelities], dim=-1)
+        return inputs
 
     def _encode_fidelity_level(self, fidelity_level: int) -> float:
         """Map a discrete fidelity level to the BoTorch-facing confidence value."""
@@ -265,22 +392,9 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
                 "Missing fidelity confidence for "
                 f"level {fidelity_level}. Call set_fidelity_confidences() with "
                 "the oracle's confidence mapping before fitting or scoring a "
-                "multi-fidelity SELFIES surrogate."
+                "multi-fidelity DKL surrogate."
             )
         return float(self._fidelity_confidences[fidelity_level])
-
-    def _tokenize_strings(self, strings: list[str]) -> torch.Tensor:
-        return self._encoder.tokenizer.batch_from_selfies(
-            strings, max_mol_tokens=self._encoder.max_mol_tokens, device=self.device
-        ).to(dtype=self.dtype)
-
-    def _extract_molecule_string(self, item: Candidate | Observation) -> str:
-        """Extract the SELFIES string from a candidate or observation."""
-        if isinstance(item.x, str):
-            return item.x
-        raise ValueError(
-            f"Expected item.x to be a SELFIES string, got {type(item.x).__name__}."
-        )
 
     def _remove_noise_prior(self) -> None:
         """Remove BoTorch LogNormalPrior from the GP noise and initialise to 0.1.
@@ -318,45 +432,72 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
 # ---------------------------------------------------------------------------
 
 
-class ExactSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
+class ExactDKLSurrogate(DeepKernelSurrogate):
     """DKL surrogate with an exact GP backed by BoTorch SingleTaskGP.
 
-    The encoder is embedded inside a SelfiesKernel passed to SingleTaskGP as
+    The encoder is embedded inside an encoder kernel passed to SingleTaskGP as
     its covar_module, making all BoTorch acquisition functions work out of the
-    box.  Training jointly optimises encoder, GP kernel, and likelihood noise
+    box. Training jointly optimises encoder, GP kernel, and likelihood noise
     via Adam (ExactMarginalLogLikelihood + MLM loss).
 
     Parameters
     ----------
-    encoder : SelfiesTransformerEncoder
-    training_params : SelfiesTrainingConfig
+    encoder : torch.nn.Module
+    input_adapter : InputAdapter
+    training_params : object
     is_multi_fidelity : bool
     target_fidelity : int, optional
         Required when ``is_multi_fidelity=True``.
     standardize_outputs : bool
         Normalise GP outputs to mean 0 / variance 1.
+    scale_inputs : bool
+        Whether BoTorch should normalize the model-space inputs. Defaults to
+        ``False`` because tokenized sequence inputs are not continuous features.
     """
 
     def __init__(
         self,
-        encoder: SelfiesTransformerEncoder,
+        encoder: Any,
+        input_adapter: InputAdapter,
         training_params: Any,
         is_multi_fidelity: bool = False,
         target_fidelity: Optional[int] = None,
         standardize_outputs: bool = True,
+        scale_inputs: bool = False,
     ) -> None:
+        """Initialize an exact-GP DKL surrogate.
+
+        Parameters
+        ----------
+        encoder : torch.nn.Module
+            Feature encoder used inside the exact GP kernel.
+        input_adapter : InputAdapter
+            Callable converting domain values into model-space tensors.
+        training_params : object
+            DKL training settings, including the epoch count and learning rate.
+        is_multi_fidelity : bool, default=False
+            Whether to append encoded fidelity confidences to the GP inputs.
+        target_fidelity : int, optional
+            Fidelity level used for target-fidelity projections. Required when
+            ``is_multi_fidelity`` is true.
+        standardize_outputs : bool, default=True
+            Whether to standardize regression targets before GP training.
+        scale_inputs : bool, default=False
+            Whether BoTorch should normalize model-space inputs.
+        """
         super().__init__(
             encoder=encoder,
+            input_adapter=input_adapter,
             training_params=training_params,
             is_multi_fidelity=is_multi_fidelity,
             target_fidelity=target_fidelity,
-            scale_inputs=False,  # token IDs must not be normalised
+            scale_inputs=scale_inputs,
             standardize_outputs=standardize_outputs,
         )
 
     def _build_model(self, train_X: torch.Tensor, train_Y: torch.Tensor) -> None:
         gp_input_dim = self._encoder.latent_dim + (1 if self._is_multi_fidelity else 0)
-        self.covar_module = SelfiesKernel(
+        self.covar_module = EncoderKernel(
             encoder=self._encoder,
             base_kernel=gpytorch.kernels.ScaleKernel(
                 gpytorch.kernels.MaternKernel(ard_num_dims=gp_input_dim)
@@ -369,12 +510,19 @@ class ExactSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
     def _make_mll(self, num_data: int) -> ExactMarginalLogLikelihood:
         return ExactMarginalLogLikelihood(self.model.likelihood, self.model)
 
-    def _gp_forward(self, token_X: torch.Tensor) -> Any:
-        return self.model(token_X.to(device=self.device, dtype=self.dtype))
+    def _gp_forward(self, model_X: torch.Tensor) -> Any:
+        return self.model(model_X.to(device=self.device, dtype=self.dtype))
 
     def _make_optimizer(self) -> Adam:
         # model already contains the likelihood as a submodule
-        return Adam(self.model.parameters(), lr=self._training.lr)
+        return Adam(
+            [
+                parameter
+                for parameter in self.model.parameters()
+                if parameter.requires_grad
+            ],
+            lr=self._training.lr,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -383,7 +531,7 @@ class ExactSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
 
 
 class _VariationalDKLGP(gpytorch.models.ApproximateGP):
-    """Sparse variational GP head used by VariationalSelfiesDKLSurrogate.
+    """Sparse variational GP head used by :class:`VariationalDKLSurrogate`.
 
     Operates in **latent feature space** — it receives encoder output vectors,
     not raw token IDs.  The encoder is kept separate and called explicitly by
@@ -397,6 +545,8 @@ class _VariationalDKLGP(gpytorch.models.ApproximateGP):
         dtype: torch.dtype = torch.float64,
         device: torch.device | None = None,
     ) -> None:
+        # The surrogate passes RuntimeContext.dtype; this fallback matches the
+        # default runtime precision for standalone construction.
         inducing_points = torch.randn(
             num_inducing, input_dim, dtype=dtype, device=device
         )
@@ -447,16 +597,27 @@ class _VariationalBoTorchAdapter(Model):
         gp_model: _VariationalDKLGP,
         likelihood: gpytorch.likelihoods.GaussianLikelihood,
     ) -> None:
+        """Initialize an adapter around a trained variational GP and likelihood.
+
+        Parameters
+        ----------
+        gp_model : _VariationalDKLGP
+            Sparse variational GP head operating on latent feature vectors.
+        likelihood : gpytorch.likelihoods.GaussianLikelihood
+            Likelihood used to include observation noise in posterior queries.
+        """
         super().__init__()
         self._gp = gp_model
         self._likelihood = likelihood
 
     @property
     def num_outputs(self) -> int:
+        """Return the number of modeled outputs."""
         return 1
 
     @property
     def batch_shape(self) -> torch.Size:
+        """Return the empty batch shape of the single-output GP."""
         return torch.Size([])
 
     def posterior(
@@ -474,6 +635,11 @@ class _VariationalBoTorchAdapter(Model):
             encoder latent dimension (+ 1 for fidelity in multi-fidelity mode).
         observation_noise : bool, default=False
             If True, adds likelihood noise to the predictive variance.
+
+        Returns
+        -------
+        GPyTorchPosterior
+            BoTorch posterior backed by the variational GP distribution.
         """
         from botorch.posteriors.gpytorch import GPyTorchPosterior
 
@@ -485,10 +651,10 @@ class _VariationalBoTorchAdapter(Model):
         return GPyTorchPosterior(distribution=dist)
 
 
-class VariationalSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
+class VariationalDKLSurrogate(DeepKernelSurrogate):
     """DKL surrogate with a sparse variational GP head — paper-faithful variant.
 
-    Reproduces the architecture from the reference ``DeepKernelMoleculeRegressor``:
+    Reproduces the architecture from the reference ``DeepKernelRegressor``:
 
     - Encoder and GP are **separate** components; encoding is explicit.
     - Training minimises ``VariationalELBO + MLM loss`` via Adam (ELBO, not MLL).
@@ -498,8 +664,9 @@ class VariationalSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
 
     Parameters
     ----------
-    encoder : SelfiesTransformerEncoder
-    training_params : SelfiesTrainingConfig
+    encoder : torch.nn.Module
+    input_adapter : InputAdapter
+    training_params : object
     is_multi_fidelity : bool
         Append fidelity scalar to latent feature vectors.
     target_fidelity : int, optional
@@ -512,13 +679,34 @@ class VariationalSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
 
     def __init__(
         self,
-        encoder: SelfiesTransformerEncoder,
+        encoder: Any,
+        input_adapter: InputAdapter,
         training_params: Any,
         is_multi_fidelity: bool = False,
         target_fidelity: Optional[int] = None,
         num_inducing: int = 64,
         standardize_outputs: bool = True,
     ) -> None:
+        """Initialize a sparse variational DKL surrogate.
+
+        Parameters
+        ----------
+        encoder : torch.nn.Module
+            Feature encoder whose output is modeled by the variational GP.
+        input_adapter : InputAdapter
+            Callable converting domain values into model-space tensors.
+        training_params : object
+            DKL training settings, including the epoch count and learning rate.
+        is_multi_fidelity : bool, default=False
+            Whether to append encoded fidelity confidences to latent features.
+        target_fidelity : int, optional
+            Fidelity level used for target-fidelity projections. Required when
+            ``is_multi_fidelity`` is true.
+        num_inducing : int, default=64
+            Number of inducing points in the sparse variational GP.
+        standardize_outputs : bool, default=True
+            Whether to standardize regression targets before GP training.
+        """
         self._num_inducing = num_inducing
         self._standardize_outputs = standardize_outputs
         self._gp_model: Optional[_VariationalDKLGP] = None
@@ -528,6 +716,7 @@ class VariationalSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
         self._y_std: float = 1.0
         super().__init__(
             encoder=encoder,
+            input_adapter=input_adapter,
             training_params=training_params,
             is_multi_fidelity=is_multi_fidelity,
             target_fidelity=target_fidelity,
@@ -557,6 +746,16 @@ class VariationalSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
         Overrides :meth:`BoTorchGPSurrogate.get_model` so that acquisition
         functions receive a model that implements the BoTorch ``posterior()``
         interface and operates in latent feature space.
+
+        Returns
+        -------
+        _VariationalBoTorchAdapter
+            Fitted variational GP adapter for use by acquisition functions.
+
+        Raises
+        ------
+        RuntimeError
+            If the surrogate has not been fitted.
         """
         if self._botorch_adapter is None:
             raise RuntimeError("Surrogate has not been fitted yet.")
@@ -570,6 +769,12 @@ class VariationalSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
         functions receive **latent features** from :meth:`encode_candidates`,
         so the fidelity column sits at index ``latent_dim`` — the last column
         of the ``(latent_dim + 1)``-dimensional latent tensor.
+
+        Returns
+        -------
+        int or None
+            Fidelity column index in multi-fidelity mode, or ``None`` for
+            single-fidelity surrogates.
         """
         if not self._is_multi_fidelity:
             return None
@@ -578,19 +783,35 @@ class VariationalSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
     def encode_candidates(self, candidates: Iterable[Candidate]) -> torch.Tensor:
         """Return encoder latent features (+ fidelity) for each candidate.
 
-        Overrides the base tokenisation path.  The variational GP head operates
+        Overrides the base input path. The variational GP head operates
         in latent feature space, so acquisition functions must receive encoded
         vectors rather than raw token IDs.  This ensures the candidate set
         produced by :class:`~activelearning.acquisition.botorch.candidate_set.TrainDataCandidateSetSpec`
         and the projection in MF-MES are consistent with the GP's input space.
+
+        Parameters
+        ----------
+        candidates : Iterable[Candidate]
+            Candidates to encode.
+
+        Returns
+        -------
+        torch.Tensor
+            Batched latent features, with an optional fidelity confidence as
+            the final column.
+
+        Raises
+        ------
+        RuntimeError
+            If the surrogate has not been fitted.
         """
         if self._gp_model is None:
             raise RuntimeError("Surrogate has not been fitted yet.")
-        # Tokenise via parent, then encode to latent features.
-        token_X = super().encode_candidates(candidates).to(self.device)
+        # Encode via the parent, then map inputs to latent features.
+        input_X = super().encode_candidates(candidates).to(self.device)
         self._set_eval_mode()
         with torch.no_grad():
-            return self._encode_with_fidelity(token_X)
+            return self._encode_with_fidelity(input_X)
 
     def _prepare_targets(self, train_Y: torch.Tensor) -> torch.Tensor:
         if self._standardize_outputs:
@@ -602,19 +823,43 @@ class VariationalSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
     def _make_mll(self, num_data: int) -> VariationalELBO:
         return VariationalELBO(self._likelihood, self._gp_model, num_data=num_data)
 
-    def _gp_forward(self, token_X: torch.Tensor) -> Any:
-        return self._gp_model(self._encode_with_fidelity(token_X))
+    def _gp_forward(self, model_X: torch.Tensor) -> Any:
+        return self._gp_model(self._encode_with_fidelity(model_X))
 
     def _make_optimizer(self) -> Adam:
         return Adam(
-            list(self._encoder.parameters())
-            + list(self._gp_model.parameters())
-            + list(self._likelihood.parameters()),
+            [
+                parameter
+                for parameter in (
+                    list(self._encoder.parameters())
+                    + list(self._gp_model.parameters())
+                    + list(self._likelihood.parameters())
+                )
+                if parameter.requires_grad
+            ],
             lr=self._training.lr,
         )
 
     def predict(self, candidates: Iterable[Candidate]) -> dict[str, Any]:
-        """Predict mean and std, denormalised to the original target scale."""
+        """Predict target means and standard deviations for candidates.
+
+        Parameters
+        ----------
+        candidates : Iterable[Candidate]
+            Candidates whose values are converted by the input adapter.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary containing CPU lists under ``"mean"`` and ``"std"``.
+            Values are returned on the original, pre-standardization target
+            scale.
+
+        Raises
+        ------
+        RuntimeError
+            If the surrogate has not been fitted.
+        """
         if self._gp_model is None or self._likelihood is None:
             raise RuntimeError("Surrogate has not been fitted yet.")
 
@@ -627,9 +872,9 @@ class VariationalSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
         std = pred.variance.sqrt() * self._y_std
         return {"mean": mean.cpu().tolist(), "std": std.cpu().tolist()}
 
-    def _encode_with_fidelity(self, token_X: torch.Tensor) -> torch.Tensor:
-        """Encode token IDs → latent features, appending fidelity when active."""
+    def _encode_with_fidelity(self, input_X: torch.Tensor) -> torch.Tensor:
+        """Encode model inputs to latent features, appending fidelity if active."""
         if self._is_multi_fidelity:
-            features = self._encoder(token_X[:, :-1].long())
-            return torch.cat([features, token_X[:, -1:].to(features.dtype)], dim=-1)
-        return self._encoder(token_X.long())
+            features = self._encoder(input_X[:, :-1])
+            return torch.cat([features, input_X[:, -1:].to(features.dtype)], dim=-1)
+        return self._encoder(input_X)

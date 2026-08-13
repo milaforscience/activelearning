@@ -9,14 +9,17 @@ from activelearning.applications.molecules._optional import (
     missing_molecules_dependency_error,
 )
 from activelearning.applications.molecules.constants import SELFIES_VOCAB_SMALL
+from activelearning.surrogate.sequence.tokenizer import SequenceTokenizer
 
 try:
     import selfies as sf
 except ImportError as error:  # pragma: no cover - exercised via subprocess test
     raise missing_molecules_dependency_error("SelfiesTokenizer", error) from error
 
+__all__ = ["SELFIES_VOCAB_SMALL", "SelfiesTokenizer"]
 
-class SelfiesTokenizer:
+
+class SelfiesTokenizer(SequenceTokenizer):
     """Minimal tokenizer that converts SELFIES strings to padded token-ID tensors.
 
     There are two layers of token handling:
@@ -175,8 +178,22 @@ class SelfiesTokenizer:
         Tensor
             Shape ``(len(selfies_list), max_mol_tokens + 2)`` of dtype ``torch.long``.
         """
+        return self.batch_from_strings(
+            selfies_list,
+            max_tokens=max_mol_tokens,
+            device=device,
+        )
+
+    def batch_from_strings(
+        self,
+        strings: Sequence[str],
+        max_tokens: int,
+        device: Optional[torch.device] = None,
+    ) -> Tensor:
+        """Encode and transform a batch through the generic tokenizer interface."""
         raw = torch.stack(
-            [self.encode_selfies(s, max_mol_tokens) for s in selfies_list], dim=0
+            [self.encode_selfies(string, max_tokens) for string in strings],
+            dim=0,
         )
         batch = self.transform_batch(raw)
         if device is not None:

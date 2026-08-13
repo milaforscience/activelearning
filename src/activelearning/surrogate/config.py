@@ -23,8 +23,8 @@ from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
 from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
 from activelearning.surrogate.surrogate import Surrogate
 from activelearning.applications.molecules.config import (
-    ExactSelfiesDKLSurrogateConfig,
-    VariationalSelfiesDKLSurrogateConfig,
+    ExactDKLSurrogateConfig,
+    VariationalDKLSurrogateConfig,
 )
 
 
@@ -209,8 +209,8 @@ SurrogateConfig = Annotated[
     Union[
         DummyMeanSurrogateConfig,
         BoTorchGPSurrogateConfig,
-        ExactSelfiesDKLSurrogateConfig,
-        VariationalSelfiesDKLSurrogateConfig,
+        ExactDKLSurrogateConfig,
+        VariationalDKLSurrogateConfig,
     ],
     Field(discriminator="type"),
 ]
