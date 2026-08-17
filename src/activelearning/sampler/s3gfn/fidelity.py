@@ -117,7 +117,11 @@ class FidelityActionHead(nn.Module):
             .squeeze(-1)
         )
 
-    def sample(self, terminal_hidden_states: Tensor) -> Tensor:
+    def sample(
+        self,
+        terminal_hidden_states: Tensor,
+        temperature: float = 1.0,
+    ) -> Tensor:
         """Sample one zero-based fidelity action for each terminal state.
 
         Parameters
@@ -125,6 +129,8 @@ class FidelityActionHead(nn.Module):
         terminal_hidden_states : Tensor
             Floating-point hidden states at the molecule terminal token with
             shape ``(batch, hidden_size)``.
+        temperature : float, optional
+            Sampling temperature applied to the fidelity logits.
 
         Returns
         -------
@@ -135,9 +141,15 @@ class FidelityActionHead(nn.Module):
         Raises
         ------
         ValueError
-            If the hidden states do not have the expected rank or width.
+            If the hidden states do not have the expected rank or width, or
+            if ``temperature`` is not finite and positive.
         """
-        probabilities = torch.softmax(self(terminal_hidden_states), dim=-1)
+        if temperature <= 0.0 or not math.isfinite(temperature):
+            raise ValueError("temperature must be finite and positive.")
+        probabilities = torch.softmax(
+            self(terminal_hidden_states) / temperature,
+            dim=-1,
+        )
         return torch.multinomial(probabilities, num_samples=1).squeeze(-1)
 
     def uniform_prior_log_prob(

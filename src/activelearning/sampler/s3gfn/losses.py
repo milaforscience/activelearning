@@ -12,6 +12,53 @@ import torch.nn.functional as functional
 from torch import Tensor
 
 
+def sequence_log_probabilities_from_logits(
+    shifted_logits: Tensor,
+    labels: Tensor,
+    pad_token_id: int,
+) -> Tensor:
+    """Sum next-token log probabilities over non-padding labels.
+
+    This is the shared scoring core: ``shifted_logits[:, i]`` must be the
+    distribution predicting ``labels[:, i]``. Padding labels contribute zero,
+    while EOS is included because it is a regular non-padding label.
+
+    Parameters
+    ----------
+    shifted_logits : Tensor
+        Logits aligned to ``labels`` with shape
+        ``(batch, sequence_length - 1, vocabulary_size)``.
+    labels : Tensor
+        Next-token targets with shape ``(batch, sequence_length - 1)``.
+    pad_token_id : int
+        Token id excluded from the sequence sum.
+
+    Returns
+    -------
+    Tensor
+        Sequence log probabilities with shape ``(batch,)``.
+
+    Raises
+    ------
+    ValueError
+        If the logits do not align with the shifted labels.
+    """
+    if shifted_logits.shape[:2] != labels.shape:
+        raise ValueError(
+            "The causal LM logits must align with the shifted sequence labels."
+        )
+
+    token_log_probabilities = functional.log_softmax(shifted_logits, dim=-1).gather(
+        dim=-1,
+        index=labels.unsqueeze(-1),
+    )
+    token_log_probabilities = token_log_probabilities.squeeze(-1)
+    return token_log_probabilities.masked_fill(
+        labels.eq(pad_token_id),
+        0.0,
+    ).sum(dim=-1)
+
+
 def sequence_log_probabilities(
     causal_lm: Any,
     input_ids: Tensor,
@@ -63,19 +110,11 @@ def sequence_log_probabilities(
         input_ids=model_input_ids,
         attention_mask=attention_mask,
     )
-    logits = outputs.logits
-    if logits.shape[:2] != labels.shape:
-        raise ValueError(
-            "The causal LM logits must align with the shifted sequence labels."
-        )
-
-    token_log_probabilities = functional.log_softmax(logits, dim=-1).gather(
-        dim=-1,
-        index=labels.unsqueeze(-1),
+    return sequence_log_probabilities_from_logits(
+        outputs.logits,
+        labels=labels,
+        pad_token_id=pad_token_id,
     )
-    token_log_probabilities = token_log_probabilities.squeeze(-1)
-    label_mask = labels.ne(pad_token_id)
-    return token_log_probabilities.masked_fill(~label_mask, 0.0).sum(dim=-1)
 
 
 def relative_trajectory_balance_loss(
@@ -141,7 +180,7 @@ def relative_trajectory_balance_loss(
     return residual.square().mean()
 
 
-def summed_negative_infonce_loss(
+def negative_replay_contrastive_loss(
     positive_log_probabilities: Tensor,
     negative_log_probabilities: Tensor,
 ) -> Tensor:

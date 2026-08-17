@@ -3,9 +3,9 @@
 from activelearning.sampler.s3gfn._optional import S3GFNOptionalDependencyError
 from activelearning.sampler.s3gfn.fidelity import FidelityActionHead
 from activelearning.sampler.s3gfn.losses import (
+    negative_replay_contrastive_loss,
     relative_trajectory_balance_loss,
     sequence_log_probabilities,
-    summed_negative_infonce_loss,
 )
 from activelearning.sampler.s3gfn.model import GeneratedSequences, S3GFNModel
 from activelearning.sampler.s3gfn.replay_buffer import ReplayBatch, ReplayBuffer
@@ -25,5 +25,5 @@ __all__ = [
     "passes_sa_threshold",
     "relative_trajectory_balance_loss",
     "sequence_log_probabilities",
-    "summed_negative_infonce_loss",
+    "negative_replay_contrastive_loss",
 ]

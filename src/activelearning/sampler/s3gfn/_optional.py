@@ -33,6 +33,29 @@ def require_transformers() -> tuple[Any, Any]:
     return AutoModelForCausalLM, AutoTokenizer
 
 
+def require_linear_schedule_with_warmup() -> Any:
+    """Return Transformers' linear warmup scheduler or raise an actionable error.
+
+    Returns
+    -------
+    Any
+        The ``get_linear_schedule_with_warmup`` helper from Transformers.
+
+    Raises
+    ------
+    S3GFNOptionalDependencyError
+        If Transformers is not installed.
+    """
+    try:
+        from transformers import get_linear_schedule_with_warmup
+    except ImportError as error:
+        raise S3GFNOptionalDependencyError(
+            "S3-GFN training requires Transformers. "
+            "Install them with: uv sync --extra molecules"
+        ) from error
+    return get_linear_schedule_with_warmup
+
+
 def require_rdkit() -> tuple[ModuleType, ModuleType, ModuleType]:
     """Return RDKit modules used by replay and SA-score evaluation.
 

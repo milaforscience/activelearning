@@ -69,14 +69,16 @@ class ReplayBuffer:
 
     ``policy="reward"`` keeps high-reward, chemically diverse trajectories.
     ``policy="fifo"`` keeps unique trajectories in insertion order for the
-    negative auxiliary loss.
+    negative auxiliary loss. Reward-prioritized insertion compares a new
+    fingerprint with every retained fingerprint, so its time and memory costs
+    grow with ``capacity``.
     """
 
     def __init__(
         self,
         pad_token_id: int,
         capacity: int = 4096,
-        similarity_threshold: float = 0.75,
+        similarity_threshold: float | None = None,
         policy: Literal["reward", "fifo"] = "reward",
         seed: int = 0,
     ) -> None:
@@ -88,11 +90,13 @@ class ReplayBuffer:
             Token id used to pad trajectories when a replay batch is sampled.
         capacity : int, optional
             Maximum number of unique trajectories retained by the buffer.
-        similarity_threshold : float, optional
+        similarity_threshold : float or None, optional
             Tanimoto-similarity threshold used by the reward-prioritized
             policy. A new molecule at or above this similarity to a stored
             molecule replaces it only when its reward score is higher. This
-            value is ignored by the FIFO policy.
+            value is ignored by the FIFO policy. ``None`` uses ``0.75`` and
+            does not emit a FIFO warning when the default is selected
+            implicitly.
         policy : {"reward", "fifo"}, optional
             Retention strategy. ``"reward"`` keeps high-scoring, chemically
             diverse trajectories; ``"fifo"`` keeps unique trajectories in
@@ -112,11 +116,12 @@ class ReplayBuffer:
             raise ValueError("pad_token_id must be nonnegative.")
         if capacity <= 0:
             raise ValueError("capacity must be positive.")
-        if not 0.0 <= similarity_threshold <= 1.0:
+        threshold = 0.75 if similarity_threshold is None else similarity_threshold
+        if not 0.0 <= threshold <= 1.0:
             raise ValueError("similarity_threshold must be between zero and one.")
         if policy not in {"reward", "fifo"}:
             raise ValueError("policy must be 'reward' or 'fifo'.")
-        if policy == "fifo" and similarity_threshold != 0.75:
+        if policy == "fifo" and similarity_threshold is not None:
             warnings.warn(
                 "similarity_threshold is ignored when policy='fifo'.",
                 UserWarning,
@@ -125,7 +130,7 @@ class ReplayBuffer:
 
         self.pad_token_id = pad_token_id
         self.capacity = capacity
-        self.similarity_threshold = similarity_threshold
+        self.similarity_threshold = threshold
         self.policy = policy
         self._entries: list[_ReplayEntry] = []
         self._smiles: set[str] = set()

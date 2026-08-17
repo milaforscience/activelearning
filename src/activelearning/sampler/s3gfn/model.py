@@ -26,9 +26,10 @@ from torch import Tensor, nn
 from activelearning.sampler.s3gfn._optional import require_transformers
 from activelearning.sampler.s3gfn.fidelity import FidelityActionHead
 from activelearning.sampler.s3gfn.losses import (
+    negative_replay_contrastive_loss,
     relative_trajectory_balance_loss,
     sequence_log_probabilities,
-    summed_negative_infonce_loss,
+    sequence_log_probabilities_from_logits,
 )
 
 
@@ -108,6 +109,10 @@ class S3GFNModel(nn.Module):
             raise ValueError("The S3-GFN tokenizer must define pad_token_id.")
         if tokenizer.eos_token_id is None:
             raise ValueError("The S3-GFN tokenizer must define eos_token_id.")
+        if int(tokenizer.pad_token_id) == int(tokenizer.eos_token_id):
+            raise ValueError("The S3-GFN tokenizer must use distinct pad and EOS ids.")
+        if getattr(tokenizer, "padding_side", None) != "right":
+            raise ValueError("The S3-GFN tokenizer must use right-side padding.")
 
         self.policy = policy
         self.prior = prior
@@ -123,6 +128,7 @@ class S3GFNModel(nn.Module):
         self.pad_token_id = int(tokenizer.pad_token_id)
         self.eos_token_id = int(tokenizer.eos_token_id)
         self.log_z = nn.Parameter(torch.tensor(float(initial_log_z)))
+        self._last_auxiliary_loss: Tensor | None = None
 
         for parameter in self.prior.parameters():
             parameter.requires_grad_(False)
@@ -141,6 +147,7 @@ class S3GFNModel(nn.Module):
         dtype: torch.dtype | None = None,
         initial_log_z: float = 0.0,
         n_fidelities: int | None = None,
+        deterministic_eval: bool | None = True,
     ) -> "S3GFNModel":
         """Load a policy, prior, and tokenizer from Hugging Face or disk.
 
@@ -171,6 +178,16 @@ class S3GFNModel(nn.Module):
         n_fidelities : int or None, optional
             Number of configured fidelity levels. A terminal action head is
             created only when this is greater than one.
+        deterministic_eval : bool or None, optional
+            GP-MoLFormer-specific flag forwarded to Transformers. It defaults
+            to ``True`` because GP-MoLFormer approximates attention with
+            random features that are otherwise redrawn on every forward pass,
+            even in evaluation mode. Without it the frozen prior would return
+            a different likelihood for the same molecule on each call, making
+            the RTB target noisy. Note that the checkpoint's own config sets
+            it to ``False``, so omitting it is not equivalent to leaving it
+            unset. Pass ``None`` only for checkpoints that do not define this
+            custom argument.
 
         Returns
         -------
@@ -200,9 +217,10 @@ class S3GFNModel(nn.Module):
         )
         model_kwargs: dict[str, Any] = {
             "trust_remote_code": trust_remote_code,
-            "deterministic_eval": True,
             "cache_dir": cache_dir,
         }
+        if deterministic_eval is not None:
+            model_kwargs["deterministic_eval"] = deterministic_eval
         if dtype is not None:
             model_kwargs["torch_dtype"] = dtype
         prior = AutoModelForCausalLM.from_pretrained(prior_name, **model_kwargs)
@@ -233,6 +251,13 @@ class S3GFNModel(nn.Module):
         """
         return self.log_z.device
 
+    @property
+    def last_auxiliary_loss(self) -> float | None:
+        """Return the most recently evaluated replay auxiliary loss."""
+        if self._last_auxiliary_loss is None:
+            return None
+        return float(self._last_auxiliary_loss.item())
+
     def train(self, mode: bool = True) -> "S3GFNModel":
         """Set the policy's training mode and keep the prior in evaluation.
 
@@ -253,22 +278,19 @@ class S3GFNModel(nn.Module):
     def encode_smiles(
         self,
         smiles: Sequence[str],
-        max_length: int | None = None,
     ) -> Tensor:
         """Tokenize a batch of SMILES for model input.
 
         Special tokens are added and sequences are padded to the longest item
-        in the batch. If ``max_length`` is provided, it includes special tokens
-        and enables truncation. The result is moved to :attr:`device`. An empty
-        input returns a ``(0, 0)`` tensor.
+        in the batch. The method never truncates: dropping EOS would change the
+        trajectory probability used by RTB. The result is moved to
+        :attr:`device`. An empty input returns a ``(0, 0)`` tensor.
 
         Parameters
         ----------
         smiles : Sequence[str]
             SMILES strings to tokenize. The method does not canonicalize or
             validate them.
-        max_length : int or None, optional
-            Maximum sequence length, including special tokens.
 
         Returns
         -------
@@ -278,11 +300,8 @@ class S3GFNModel(nn.Module):
         Raises
         ------
         ValueError
-            If ``max_length`` is less than two or the tokenizer returns
-            non-matrix input ids.
+            If the tokenizer returns non-matrix input ids.
         """
-        if max_length is not None and max_length < 2:
-            raise ValueError("max_length must be at least two.")
         if not smiles:
             return torch.empty((0, 0), dtype=torch.long, device=self.device)
 
@@ -291,8 +310,6 @@ class S3GFNModel(nn.Module):
             "padding": True,
             "return_tensors": "pt",
         }
-        if max_length is not None:
-            arguments.update({"truncation": True, "max_length": max_length})
         encoded = self.tokenizer(list(smiles), **arguments)
         input_ids = encoded["input_ids"]
         if input_ids.ndim != 2:
@@ -359,7 +376,8 @@ class S3GFNModel(nn.Module):
         fidelity_indices = None
         if self.fidelity_head is not None:
             fidelity_indices = self.fidelity_head.sample(
-                self._terminal_hidden_states(generated_ids)
+                self._terminal_hidden_states(generated_ids),
+                temperature=temperature,
             )
         return GeneratedSequences(
             input_ids=generated_ids,
@@ -462,8 +480,10 @@ class S3GFNModel(nn.Module):
         TypeError
             If fidelity indices are not integer-valued.
         """
-        sequence_log_probabilities_ = self.policy_sequence_log_probabilities(input_ids)
         if self.fidelity_head is None:
+            sequence_log_probabilities_ = self.policy_sequence_log_probabilities(
+                input_ids
+            )
             if fidelity_indices is not None:
                 raise ValueError(
                     "Fidelity indices require a model with multiple fidelities."
@@ -473,8 +493,13 @@ class S3GFNModel(nn.Module):
             raise ValueError(
                 "Fidelity indices are required for a multi-fidelity trajectory."
             )
+        sequence_log_probabilities_, terminal_hidden_states = (
+            self._policy_sequence_log_probabilities_and_terminal_hidden_states(
+                input_ids
+            )
+        )
         return sequence_log_probabilities_ + self.fidelity_head.log_prob(
-            self._terminal_hidden_states(input_ids),
+            terminal_hidden_states,
             fidelity_indices,
         )
 
@@ -689,6 +714,7 @@ class S3GFNModel(nn.Module):
         """
         if not math.isfinite(aux_coefficient) or aux_coefficient < 0.0:
             raise ValueError("aux_coefficient must be finite and nonnegative.")
+        self._last_auxiliary_loss = None
         if positive_input_ids.ndim != 2:
             raise ValueError(
                 "positive_input_ids must have shape (batch, sequence_length)."
@@ -719,7 +745,9 @@ class S3GFNModel(nn.Module):
             beta=beta,
         )
 
-        auxiliary_loss = rtb_loss * 0.0
+        # ``_last_auxiliary_loss`` stays ``None`` unless the contrastive branch runs,
+        # so reporting can distinguish "not computed" from a measured zero.
+        total_loss = rtb_loss
         if aux_coefficient > 0.0 and negative_input_ids is not None:
             if negative_input_ids.ndim != 2:
                 raise ValueError(
@@ -730,21 +758,42 @@ class S3GFNModel(nn.Module):
                     negative_input_ids,
                     fidelity_indices=negative_fidelity_indices,
                 )
-                auxiliary_loss = summed_negative_infonce_loss(
+                auxiliary_loss = negative_replay_contrastive_loss(
                     positive_log_probabilities,
                     negative_log_probabilities,
                 )
-        return rtb_loss + aux_coefficient * auxiliary_loss
+                self._last_auxiliary_loss = auxiliary_loss.detach()
+                total_loss = rtb_loss + aux_coefficient * auxiliary_loss
+        return total_loss
 
-    def _terminal_hidden_states(self, input_ids: Tensor) -> Tensor:
-        """Return policy hidden states at the final non-padding tokens."""
-        input_ids = input_ids.to(self.device)
-        attention_mask = input_ids.ne(self.pad_token_id).long()
-        outputs = self.policy(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            output_hidden_states=True,
-        )
+    def _select_terminal_hidden_states(
+        self,
+        outputs: Any,
+        input_ids: Tensor,
+        attention_mask: Tensor,
+    ) -> Tensor:
+        """Return final-layer hidden states at each row's last non-padding token.
+
+        Parameters
+        ----------
+        outputs : Any
+            Causal language-model output carrying ``hidden_states``.
+        input_ids : Tensor
+            Integer tensor with shape ``(batch, sequence_length)``.
+        attention_mask : Tensor
+            Non-padding mask covering the full ``input_ids`` sequence.
+
+        Returns
+        -------
+        Tensor
+            Terminal hidden states with shape ``(batch, hidden_size)``.
+
+        Raises
+        ------
+        ValueError
+            If hidden states are missing, misaligned with ``input_ids``, or a
+            row contains no non-padding token.
+        """
         hidden_states = getattr(outputs, "hidden_states", None)
         if not hidden_states:
             raise ValueError(
@@ -756,12 +805,70 @@ class S3GFNModel(nn.Module):
                 "The policy hidden states must align with input_ids for "
                 "terminal fidelity actions."
             )
+        if not torch.all(attention_mask.sum(dim=1) > 0):
+            raise ValueError(
+                "Terminal fidelity actions require at least one non-padding token."
+            )
         terminal_positions = attention_mask.sum(dim=1) - 1
         batch_positions = torch.arange(
             input_ids.shape[0],
             device=input_ids.device,
         )
         return final_hidden_states[batch_positions, terminal_positions]
+
+    def _terminal_hidden_states(self, input_ids: Tensor) -> Tensor:
+        """Return policy hidden states at the final non-padding tokens."""
+        input_ids = input_ids.to(self.device)
+        attention_mask = input_ids.ne(self.pad_token_id).long()
+        outputs = self.policy(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=True,
+        )
+        return self._select_terminal_hidden_states(
+            outputs,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )
+
+    def _policy_sequence_log_probabilities_and_terminal_hidden_states(
+        self,
+        input_ids: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        """Compute policy sequence probabilities and terminal states in one pass."""
+        input_ids = input_ids.to(self.device)
+        if input_ids.ndim != 2:
+            raise ValueError("input_ids must have shape (batch, sequence_length).")
+        if input_ids.dtype not in (torch.int32, torch.int64):
+            raise TypeError("input_ids must contain integer token ids.")
+        if input_ids.shape[1] < 2:
+            raise ValueError("input_ids must contain at least two tokens.")
+
+        labels = input_ids[:, 1:]
+        attention_mask = input_ids.ne(self.pad_token_id).long()
+        outputs = self.policy(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=True,
+        )
+        if outputs.logits.shape[:2] != input_ids.shape:
+            raise ValueError(
+                "The causal LM logits must align with the shifted sequence labels."
+            )
+        # The full sequence is scored in one pass so the terminal hidden state is
+        # available; causal masking makes positions 0..L-2 independent of the last
+        # token, so slicing here matches ``sequence_log_probabilities``.
+        sequence_log_probabilities_ = sequence_log_probabilities_from_logits(
+            outputs.logits[:, :-1],
+            labels=labels,
+            pad_token_id=self.pad_token_id,
+        )
+        terminal_hidden_states = self._select_terminal_hidden_states(
+            outputs,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )
+        return sequence_log_probabilities_, terminal_hidden_states
 
 
 def _model_hidden_size(model: nn.Module) -> int:

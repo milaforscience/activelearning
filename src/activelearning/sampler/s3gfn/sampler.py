@@ -18,6 +18,7 @@ import copy
 import logging
 import math
 import random
+import time
 from dataclasses import dataclass
 from typing import Any, Callable, Iterable, Sequence
 
@@ -26,7 +27,14 @@ from torch import Tensor
 
 from activelearning.acquisition.cost_utility import cost_weighting_from_cost_fn
 from activelearning.sampler.sampler import Sampler
-from activelearning.sampler.s3gfn._optional import require_rdkit
+from activelearning.sampler.s3gfn._optional import (
+    require_linear_schedule_with_warmup,
+    require_rdkit,
+)
+from activelearning.sampler.s3gfn.logging import (
+    S3GFNLoggingMixin,
+    _RoundMetrics,
+)
 from activelearning.sampler.s3gfn.model import S3GFNModel
 from activelearning.sampler.s3gfn.replay_buffer import ReplayBuffer
 from activelearning.sampler.s3gfn.synthesizability import SAScoreSynthesizability
@@ -56,6 +64,8 @@ class _PreparedMoleculeBatch:
         Optional terminal fidelity-action indices aligned with ``smiles``.
     synthesizable : tuple[bool, ...]
         Synthetic accessibility score (SA-score) threshold results aligned with ``smiles``.
+    raw_reward_scores : tuple[float, ...]
+        Acquisition scores before per-batch RTB normalization.
     """
 
     smiles: tuple[str, ...]
@@ -63,9 +73,10 @@ class _PreparedMoleculeBatch:
     reward_scores: Tensor
     synthesizable: tuple[bool, ...]
     fidelity_indices: Tensor | None = None
+    raw_reward_scores: tuple[float, ...] = ()
 
 
-class S3GFNSampler(Sampler):
+class S3GFNSampler(S3GFNLoggingMixin, Sampler):
     """Generate canonical SMILES with an acquisition-guided S3-GFN policy.
 
     Generated strings are canonicalized by RDKit before scoring: invalid or
@@ -74,12 +85,15 @@ class S3GFNSampler(Sampler):
 
     Each :meth:`sample` call creates a fresh trainable policy from the
     pretrained GP-MoLFormer checkpoint. The policy is optimized with RTB using
-    acquisition-derived reward scores. A reward-prioritized replay buffer keeps
+    acquisition-derived reward scores normalized per generated batch to
+    ``[0, 1]``. A reward-prioritized replay buffer keeps
     synthesizable, chemically diverse trajectories, while an optional FIFO
     buffer supplies negative trajectories to the auxiliary contrastive loss.
 
     The sampler models molecules and, when multiple fidelities are configured,
-    adds one categorical fidelity action after each terminal molecule.
+    adds one categorical fidelity action after each terminal molecule. This
+    fidelity action is an extension specific to this framework; it is not part
+    of the upstream S3-GFN implementation.
     The frozen prior, tokenizer, and pretrained policy weights are cached
     across rounds; learned policy weights are not carried between rounds.
     """
@@ -92,6 +106,7 @@ class S3GFNSampler(Sampler):
         tokenizer_name_or_path: str = "ibm-research/MoLFormer-XL-both-10pct",
         *,
         trust_remote_code: bool = True,
+        deterministic_eval: bool | None = True,
         cache_dir: str | None = None,
         max_length: int = 140,
         batch_size: int = 64,
@@ -100,12 +115,13 @@ class S3GFNSampler(Sampler):
         num_warmup_steps: int = 100,
         learning_rate: float = 1.0e-4,
         log_z_learning_rate: float = 1.0e-3,
-        beta: float = 25.0,
-        aux_coefficient: float = 1.0e-3,
+        beta: float = 50.0,
+        aux_coefficient: float = 1.0e-4,
         buffer_size: int = 6400,
         sa_threshold: float = 4.0,
         sampling_temperature: float = 1.0,
         gradient_clip_norm: float = 10.0,
+        max_generation_attempts: int | None = None,
         seed: int = 42,
     ) -> None:
         """Initialize an acquisition-guided S3-GFN sampler.
@@ -124,11 +140,21 @@ class S3GFNSampler(Sampler):
             Hugging Face identifier or local path for its tokenizer.
         trust_remote_code : bool, optional
             Whether Transformers may load custom model and tokenizer code.
+            This defaults to ``True`` because the default GP-MoLFormer
+            checkpoint requires custom code. Only enable it for trusted model
+            repositories.
+        deterministic_eval : bool, optional
+            Whether to pass the GP-MoLFormer-specific ``deterministic_eval``
+            option to Transformers. It defaults to ``True`` so the frozen
+            prior returns a stable likelihood for the same molecule; the
+            checkpoint's own config would otherwise redraw the linear-attention
+            random features on every forward pass. Set this to ``None`` for
+            checkpoints that do not support it.
         cache_dir : str or None, optional
             Directory used for Hugging Face downloads and cache files.
         max_length : int, optional
-            Maximum tokenized or generated sequence length, including special
-            tokens.
+            Maximum generated sequence length, including special tokens.
+            Tokenization retains full EOS-terminated sequences for RTB.
         batch_size : int, optional
             Number of molecules generated for each training step and final
             generation attempt.
@@ -157,7 +183,11 @@ class S3GFNSampler(Sampler):
         sampling_temperature : float, optional
             Temperature used when sampling policy tokens.
         gradient_clip_norm : float, optional
-            Maximum global norm for policy and ``log Z`` gradients.
+            Maximum global norm for all optimized policy, fidelity-head, and
+            ``log Z`` gradients.
+        max_generation_attempts : int or None, optional
+            Maximum number of final-generation samples attempted before
+            failing. Defaults to ``max(n_samples * 20, batch_size * 2)``.
         seed : int, optional
             Base seed. The active-learning round index is added to it before
             seeding Python, PyTorch, and CUDA generators.
@@ -195,6 +225,8 @@ class S3GFNSampler(Sampler):
             raise ValueError("sampling_temperature must be finite and positive.")
         if gradient_clip_norm <= 0.0 or not math.isfinite(gradient_clip_norm):
             raise ValueError("gradient_clip_norm must be finite and positive.")
+        if max_generation_attempts is not None and max_generation_attempts <= 0:
+            raise ValueError("max_generation_attempts must be positive.")
         if seed < 0:
             raise ValueError("seed must be nonnegative.")
 
@@ -203,6 +235,7 @@ class S3GFNSampler(Sampler):
         self.model_name_or_path = model_name_or_path
         self.tokenizer_name_or_path = tokenizer_name_or_path
         self.trust_remote_code = trust_remote_code
+        self.deterministic_eval = deterministic_eval
         self.cache_dir = cache_dir
         self.max_length = max_length
         self.batch_size = batch_size
@@ -217,9 +250,15 @@ class S3GFNSampler(Sampler):
         self.sa_threshold = sa_threshold
         self.sampling_temperature = sampling_temperature
         self.gradient_clip_norm = gradient_clip_norm
+        self.max_generation_attempts = (
+            max_generation_attempts
+            if max_generation_attempts is not None
+            else max(n_samples * 20, batch_size * 2)
+        )
         self.seed = seed
         self._pretrained_model: S3GFNModel | None = None
         self._round_index = 0
+        self._round_metrics = _RoundMetrics()
 
     def sample(
         self,
@@ -259,6 +298,7 @@ class S3GFNSampler(Sampler):
             If bounded final-generation retries cannot produce enough unique
             valid molecules.
         """
+        self._round_metrics = _RoundMetrics()
         _ = observations
         self._validate_acquisition(acquisition)
 
@@ -281,6 +321,7 @@ class S3GFNSampler(Sampler):
             pad_token_id=model.pad_token_id
         )
 
+        training_started = time.perf_counter()
         self._train_round(
             model=model,
             synthesizability=synthesizability,
@@ -290,10 +331,20 @@ class S3GFNSampler(Sampler):
             acquisition=acquisition,
             cost_fn=cost_fn,
         )
+        self.round_metrics.training_duration_s = time.perf_counter() - training_started
         _logger.info("S3-GFN round %d: policy training complete.", round_number)
+
+        generation_started = time.perf_counter()
         candidates = self._generate_final_candidates(
             model=model,
             molecule_chem=molecule_chem,
+        )
+        self.round_metrics.generation_duration_s = (
+            time.perf_counter() - generation_started
+        )
+        self._log_round_metrics(
+            positive_buffer=positive_buffer,
+            negative_buffer=negative_buffer,
         )
         _logger.info(
             "S3-GFN round %d complete: generated %d candidate(s).",
@@ -313,13 +364,17 @@ class S3GFNSampler(Sampler):
                 policy_model_name_or_path=self.model_name_or_path,
                 tokenizer_name_or_path=self.tokenizer_name_or_path,
                 trust_remote_code=self.trust_remote_code,
+                deterministic_eval=self.deterministic_eval,
                 cache_dir=self.cache_dir,
                 device=self.device,
                 n_fidelities=len(self.fidelities),
             )
+            self._keep_pretrained_template_on_cpu()
         else:
             _logger.info("Reusing cached S3-GFN pretrained model components.")
-            self._pretrained_model.to(self.device)
+            # The prior is read on every training step, so it is deliberately kept
+            # resident on the accelerator rather than cycled to CPU between rounds.
+            self._keep_pretrained_template_on_cpu()
 
         policy = copy.deepcopy(self._pretrained_model.policy)
         model = S3GFNModel(
@@ -332,6 +387,14 @@ class S3GFNSampler(Sampler):
         model.prior.eval()
         _logger.info("Fresh trainable S3-GFN policy initialized.")
         return model
+
+    def _keep_pretrained_template_on_cpu(self) -> None:
+        """Keep the cached policy template off accelerator memory."""
+        if self._pretrained_model is None:
+            return
+        self._pretrained_model.policy.to("cpu")
+        if self._pretrained_model.fidelity_head is not None:
+            self._pretrained_model.fidelity_head.to("cpu")
 
     def _validate_acquisition(self, acquisition: Any | None) -> None:
         """Validate the singleton-scoring acquisition contract."""
@@ -398,7 +461,14 @@ class S3GFNSampler(Sampler):
         )
 
         for step_index in range(self.n_train_steps):
-            generated_count, valid_count, synthesizable_count = self._train_step(
+            (
+                generated_count,
+                valid_count,
+                synthesizable_count,
+                online_loss,
+                replay_loss,
+                auxiliary_loss,
+            ) = self._train_step(
                 model=model,
                 synthesizability=synthesizability,
                 positive_buffer=positive_buffer,
@@ -431,7 +501,7 @@ class S3GFNSampler(Sampler):
         acquisition: Any,
         cost_fn: Callable[[Sequence[Candidate]], list[float]] | None,
         optimizer: torch.optim.Optimizer,
-    ) -> tuple[int, int, int]:
+    ) -> tuple[int, int, int, float | None, float | None, float | None]:
         """Generate one batch and apply on-policy and replay updates."""
         generated = model.generate(
             count=self.batch_size,
@@ -447,23 +517,39 @@ class S3GFNSampler(Sampler):
             acquisition=acquisition,
             cost_fn=cost_fn,
         )
-        self._update_generated_batch(
+        online_loss = self._update_generated_batch(
             model=model,
             prepared=prepared,
             positive_buffer=positive_buffer,
             negative_buffer=negative_buffer,
             optimizer=optimizer,
         )
-        self._update_replay_batch(
-            model=model,
-            positive_buffer=positive_buffer,
-            negative_buffer=negative_buffer,
-            optimizer=optimizer,
+        replay_loss = None
+        auxiliary_loss = None
+        if prepared.smiles:
+            replay_loss, auxiliary_loss = self._update_replay_batch(
+                model=model,
+                positive_buffer=positive_buffer,
+                negative_buffer=negative_buffer,
+                optimizer=optimizer,
+            )
+        self.round_metrics.record_training_step(
+            generated_count=len(generated.smiles),
+            valid_count=len(prepared.smiles),
+            synthesizable_count=sum(prepared.synthesizable),
+            online_loss=online_loss,
+            replay_loss=replay_loss,
+            auxiliary_loss=auxiliary_loss,
+            log_z=float(model.log_z.detach().item()),
+            raw_reward_scores=prepared.raw_reward_scores,
         )
         return (
             len(generated.smiles),
             len(prepared.smiles),
             sum(prepared.synthesizable),
+            online_loss,
+            replay_loss,
+            auxiliary_loss,
         )
 
     def _update_generated_batch(
@@ -474,7 +560,7 @@ class S3GFNSampler(Sampler):
         positive_buffer: ReplayBuffer,
         negative_buffer: ReplayBuffer | None,
         optimizer: torch.optim.Optimizer,
-    ) -> None:
+    ) -> float | None:
         """Store generated trajectories and apply the on-policy update."""
         positive_mask = torch.tensor(
             prepared.synthesizable,
@@ -490,6 +576,7 @@ class S3GFNSampler(Sampler):
             )
             if is_positive
         )
+        online_loss = None
         if positive_smiles:
             positive_input_ids = prepared.input_ids[positive_mask]
             positive_reward_scores = prepared.reward_scores[positive_mask]
@@ -504,7 +591,7 @@ class S3GFNSampler(Sampler):
                 positive_reward_scores,
                 fidelity_indices=positive_fidelity_indices,
             )
-            self._optimize(
+            online_loss = self._optimize(
                 optimizer,
                 model.on_policy_loss(
                     positive_input_ids,
@@ -534,6 +621,7 @@ class S3GFNSampler(Sampler):
                     else prepared.fidelity_indices[negative_mask]
                 ),
             )
+        return online_loss
 
     def _update_replay_batch(
         self,
@@ -542,10 +630,10 @@ class S3GFNSampler(Sampler):
         positive_buffer: ReplayBuffer,
         negative_buffer: ReplayBuffer | None,
         optimizer: torch.optim.Optimizer,
-    ) -> None:
+    ) -> tuple[float | None, float | None]:
         """Sample replay data and apply the replay loss when available."""
-        if not positive_buffer:
-            return
+        if len(positive_buffer) < self.replay_batch_size:
+            return None, None
 
         positive_replay = positive_buffer.sample(
             count=min(self.replay_batch_size, len(positive_buffer)),
@@ -555,63 +643,34 @@ class S3GFNSampler(Sampler):
             replace=True,
         )
         negative_replay = None
-        if negative_buffer is not None and len(negative_buffer) > 0:
+        if (
+            negative_buffer is not None
+            and len(negative_buffer) >= self.replay_batch_size
+        ):
             negative_replay = negative_buffer.sample(
-                count=min(self.replay_batch_size, len(negative_buffer)),
+                count=self.replay_batch_size,
                 device=self.device,
                 dtype=self.dtype,
             )
-        self._optimize(
-            optimizer,
-            model.replay_loss(
-                positive_input_ids=positive_replay.input_ids,
-                reward_scores=positive_replay.reward_scores,
-                beta=self.beta,
-                negative_input_ids=(
-                    None if negative_replay is None else negative_replay.input_ids
-                ),
-                aux_coefficient=self.aux_coefficient,
-                positive_fidelity_indices=positive_replay.fidelity_indices,
-                negative_fidelity_indices=(
-                    None
-                    if negative_replay is None
-                    else negative_replay.fidelity_indices
-                ),
+        loss = model.replay_loss(
+            positive_input_ids=positive_replay.input_ids,
+            reward_scores=positive_replay.reward_scores,
+            beta=self.beta,
+            negative_input_ids=(
+                None if negative_replay is None else negative_replay.input_ids
             ),
+            aux_coefficient=self.aux_coefficient,
+            positive_fidelity_indices=positive_replay.fidelity_indices,
+            negative_fidelity_indices=(
+                None if negative_replay is None else negative_replay.fidelity_indices
+            ),
+        )
+        optimized_loss = self._optimize(
+            optimizer,
+            loss,
             model,
         )
-
-    def _log_training_progress(
-        self,
-        *,
-        step_number: int,
-        progress_interval: int,
-        generated_count: int,
-        valid_count: int,
-        synthesizable_count: int,
-        positive_buffer: ReplayBuffer,
-        negative_buffer: ReplayBuffer | None,
-    ) -> None:
-        """Log periodic training counts."""
-        if not (
-            step_number == 1
-            or step_number % progress_interval == 0
-            or step_number == self.n_train_steps
-        ):
-            return
-        _logger.info(
-            "S3-GFN training step %d/%d: generated=%d, valid=%d, "
-            "invalid=%d, synthesizable=%d, positive_buffer=%d, "
-            "negative_buffer=%d.",
-            step_number,
-            self.n_train_steps,
-            generated_count,
-            valid_count,
-            generated_count - valid_count,
-            synthesizable_count,
-            len(positive_buffer),
-            len(negative_buffer) if negative_buffer is not None else 0,
-        )
+        return optimized_loss, getattr(model, "last_auxiliary_loss", None)
 
     def _prepare_batch(
         self,
@@ -655,22 +714,24 @@ class S3GFNSampler(Sampler):
                 ),
             )
         ]
-        scores = _score_candidates(acquisition, candidates, cost_fn=cost_fn)
+        raw_scores = _score_candidates(acquisition, candidates, cost_fn=cost_fn)
+        scores = _normalize_reward_scores(raw_scores)
 
-        input_ids = model.encode_smiles(canonical_smiles, max_length=self.max_length)
+        input_ids = model.encode_smiles(canonical_smiles)
         labels = synthesizability.classify_batch(canonical_smiles)
         return _PreparedMoleculeBatch(
             smiles=tuple(canonical_smiles),
             input_ids=input_ids,
             reward_scores=torch.tensor(
                 scores,
-                # Reward scores are derived floating-point data, so use the
-                # bound runtime dtype while tokenized inputs remain integer.
+                # Reward scores are normalized floating-point data, so use
+                # the bound runtime dtype while tokenized inputs remain integer.
                 dtype=self.dtype,
                 device=input_ids.device,
             ),
             synthesizable=tuple(labels),
             fidelity_indices=canonical_fidelity_indices,
+            raw_reward_scores=tuple(raw_scores),
         )
 
     def _canonicalize_batch(
@@ -753,7 +814,7 @@ class S3GFNSampler(Sampler):
         candidates: list[Candidate] = []
         seen_smiles: set[str] = set()
         generated_attempts = 0
-        max_attempts = max(self.n_samples * 20, self.batch_size * 2)
+        max_attempts = self.max_generation_attempts
         batch_index = 0
         _logger.info(
             "Generating %d final candidate(s), with at most %d model attempts.",
@@ -763,19 +824,24 @@ class S3GFNSampler(Sampler):
 
         while len(candidates) < self.n_samples and generated_attempts < max_attempts:
             batch_index += 1
-            requested = min(self.batch_size, self.n_samples - len(candidates))
             generated = model.generate(
-                count=requested,
+                count=self.batch_size,
                 max_length=self.max_length,
                 temperature=self.sampling_temperature,
             )
-            generated_attempts += max(requested, len(generated.smiles))
+            batch_attempts = max(self.batch_size, len(generated.smiles))
+            generated_attempts += batch_attempts
             valid_count, invalid_count, duplicate_count = self._process_candidate_batch(
                 smiles=generated.smiles,
                 fidelity_indices=generated.fidelity_indices,
                 candidates=candidates,
                 seen_smiles=seen_smiles,
                 molecule_chem=molecule_chem,
+            )
+            self.round_metrics.record_generation_batch(
+                attempts=batch_attempts,
+                invalid_count=invalid_count,
+                duplicate_count=duplicate_count,
             )
             self._log_final_batch_progress(
                 batch_index=batch_index,
@@ -799,6 +865,7 @@ class S3GFNSampler(Sampler):
                 f"S3GFNSampler generated {len(candidates)} valid unique molecules "
                 f"after {generated_attempts} attempts; requested {self.n_samples}."
             )
+        self.round_metrics.record_final_candidates(candidates)
         _logger.info(
             "Final candidate generation complete: %d unique candidate(s).",
             len(candidates),
@@ -882,17 +949,7 @@ class S3GFNSampler(Sampler):
         """Build the optional linear warmup/decay scheduler."""
         if self.num_warmup_steps == 0:
             return None
-        from activelearning.sampler.s3gfn._optional import (
-            S3GFNOptionalDependencyError,
-        )
-
-        try:
-            from transformers import get_linear_schedule_with_warmup
-        except ImportError as error:  # pragma: no cover - optional dependency
-            raise S3GFNOptionalDependencyError(
-                "S3-GFN training requires Transformers. "
-                "Install it with: uv sync --extra molecules"
-            ) from error
+        get_linear_schedule_with_warmup = require_linear_schedule_with_warmup()
         return get_linear_schedule_with_warmup(
             optimizer,
             num_warmup_steps=self.num_warmup_steps,
@@ -904,17 +961,23 @@ class S3GFNSampler(Sampler):
         optimizer: torch.optim.Optimizer,
         loss: Tensor | None,
         model: S3GFNModel,
-    ) -> None:
+    ) -> float | None:
         """Apply one guarded optimizer update with gradient clipping."""
         if loss is None or not loss.requires_grad:
-            return
+            return None
+        loss_value = float(loss.detach().item())
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
+        optimized_parameters = list(model.policy.parameters())
+        if model.fidelity_head is not None:
+            optimized_parameters.extend(model.fidelity_head.parameters())
+        optimized_parameters.append(model.log_z)
         torch.nn.utils.clip_grad_norm_(
-            list(model.policy.parameters()) + [model.log_z],
+            optimized_parameters,
             self.gradient_clip_norm,
         )
         optimizer.step()
+        return loss_value
 
     def _set_round_seed(self) -> None:
         """Seed Python, PyTorch, and CUDA for the current round."""
@@ -937,7 +1000,11 @@ def _canonicalize_to_smiles(
     if molecule is None:
         return None
     try:
-        canonical = molecule_chem.MolToSmiles(molecule, canonical=True)
+        canonical = molecule_chem.MolToSmiles(
+            molecule,
+            canonical=True,
+            isomericSmiles=False,
+        )
         if "." in canonical:
             return None
     except (TypeError, ValueError, RuntimeError):
@@ -954,11 +1021,6 @@ def _score_candidates(
     cost_fn: Callable[[Sequence[Candidate]], list[float]] | None,
 ) -> list[float]:
     """Score candidates and optionally apply inverse-cost weighting."""
-    if not getattr(acquisition, "supports_singleton_scoring", True):
-        raise ValueError(
-            f"{type(acquisition).__name__} does not support singleton scoring. "
-            "S3GFNSampler requires an acquisition with score()."
-        )
     scores = (
         acquisition.score(candidates)
         if cost_fn is None
@@ -969,4 +1031,19 @@ def _score_candidates(
     )
     if len(scores) != len(candidates):
         raise ValueError("Acquisition returned a score count that does not align.")
-    return scores
+    normalized_scores = [float(score) for score in scores]
+    if not all(math.isfinite(score) for score in normalized_scores):
+        raise ValueError("Acquisition returned a non-finite score.")
+    return normalized_scores
+
+
+def _normalize_reward_scores(scores: Sequence[float]) -> list[float]:
+    """Scale one acquisition batch to the stable RTB range ``[0, 1]``."""
+    if not scores:
+        return []
+    minimum = min(scores)
+    maximum = max(scores)
+    if maximum == minimum:
+        return [0.0] * len(scores)
+    scale = maximum - minimum
+    return [(score - minimum) / scale for score in scores]
