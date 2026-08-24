@@ -4,7 +4,7 @@
 # multi-fidelity variant (gflownet_exact_multi_fidelity.yaml):
 # - GFlowNetSampler trains a generative policy to propose (SELFIES, fidelity) pairs
 #   in proportion to their MF-MES acquisition scores, exploring all three fidelities.
-# - VariationalSelfiesDKLSurrogate replaces the exact GP with an inducing-point
+# - VariationalDKLSurrogate replaces the exact GP with an inducing-point
 #   variational GP, which scales to larger datasets at the cost of more training epochs.
 # - QMultiFidelityLowerBoundMaxValueEntropy (MF-MES) scores each (molecule, fidelity)
 #   pair by expected information gain about the target-fidelity optimum. This score is
@@ -29,12 +29,11 @@ dataset:
   type: ListDataset
 
 surrogate:
-  type: VariationalSelfiesDKLSurrogate
-  is_multi_fidelity: true
+  type: VariationalDKLSurrogate
   target_fidelity: 3
   encoder:
     type: SelfiesTransformerEncoder
-    max_mol_tokens: 64
+    max_mol_tokens: 66
     embed_dim: 64
     ff_dim: 256
     num_heads: 8
