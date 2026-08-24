@@ -1,11 +1,14 @@
 """Tests for explicit Pydantic component configuration unions."""
 
+from pathlib import Path
+
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from activelearning.surrogate.encoder_config import (
     EncoderConfig,
     GPMoLFormerSmilesEncoderConfig,
+    MiniMolSmilesEncoderConfig,
     MoLFormerSmilesEncoderConfig,
     SelfiesTransformerEncoderConfig,
 )
@@ -35,6 +38,7 @@ from activelearning.surrogate.dkl.config import (
         ("SelfiesTransformerEncoder", SelfiesTransformerEncoderConfig),
         ("GPMoLFormerSmilesEncoder", GPMoLFormerSmilesEncoderConfig),
         ("MoLFormerSmilesEncoder", MoLFormerSmilesEncoderConfig),
+        ("MiniMolSmilesEncoder", MiniMolSmilesEncoderConfig),
     ],
 )
 def test_encoder_union_selects_config_by_type(
@@ -116,6 +120,25 @@ def test_dkl_config_parses_nested_encoder_union() -> None:
 
     assert isinstance(config.encoder, MoLFormerSmilesEncoderConfig)
     assert config.encoder.latent_dim == 32
+
+
+def test_minimol_encoder_config_parses_checkpoint_path() -> None:
+    """MiniMol configs preserve a custom predictor checkpoint path."""
+    config = MiniMolSmilesEncoderConfig.model_validate(
+        {
+            "type": "MiniMolSmilesEncoder",
+            "checkpoint_path": "weights/minimol-finetuned.pth",
+        }
+    )
+
+    assert config.checkpoint_path == Path("weights/minimol-finetuned.pth")
+
+
+def test_minimol_encoder_config_defaults_to_32_latent_features() -> None:
+    """MiniMol uses the compact projected representation by default."""
+    config = MiniMolSmilesEncoderConfig()
+
+    assert config.latent_dim == 32
 
 
 @pytest.mark.parametrize(
