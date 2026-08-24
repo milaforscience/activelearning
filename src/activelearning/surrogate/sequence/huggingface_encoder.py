@@ -23,26 +23,6 @@ class HuggingFaceSequenceEncoder(SequenceEncoder):
     backbone remains frozen and in evaluation mode, so only the projection is
     trained by this module.
 
-    Parameters
-    ----------
-    backbone : torch.nn.Module
-        Already-loaded Hugging Face-compatible model. Its forward method must
-        return per-token hidden states through ``last_hidden_state`` or as the
-        first positional output.
-    tokenizer : SequenceTokenizer
-        Tokenizer adapter that provides the padding token ID.
-    max_tokens : int, default=140
-        Total number of token positions consumed by the encoder, including
-        special tokens and padding.
-    latent_dim : int, default=64
-        Size of the projected latent representation.
-    pooling : {"last", "mean"}, default="mean"
-        Sequence pooling strategy. ``"last"`` selects each row's last
-        non-padding hidden state. ``"mean"`` computes a masked mean over all
-        non-padding positions.
-    cache_size : int, default=4096
-        Maximum number of pooled backbone rows retained in the cache. Set to
-        zero to disable caching.
     """
 
     def __init__(
@@ -255,14 +235,17 @@ class HuggingFaceSequenceEncoder(SequenceEncoder):
                     while len(self._pooled_cache) > self.cache_size:
                         self._pooled_cache.popitem(last=False)
 
-        return torch.stack(
-            [
+        features: list[Tensor] = []
+        for index, feature in enumerate(cached_features):
+            if feature is None:
+                raise RuntimeError(
+                    "Backbone feature cache is missing row "
+                    f"{index} after cache population."
+                )
+            features.append(
                 feature.to(device=input_ids.device, dtype=self._backbone_dtype)
-                for feature in cached_features
-                if feature is not None
-            ],
-            dim=0,
-        )
+            )
+        return torch.stack(features, dim=0)
 
     def forward(self, token_batch: Tensor) -> Tensor:
         """Convert a batch of padded token IDs into projected latent features.
@@ -275,7 +258,7 @@ class HuggingFaceSequenceEncoder(SequenceEncoder):
         ----------
         token_batch : Tensor
             Two-dimensional tensor of shape ``(B, seq_len)`` containing padded
-            token IDs. Inputs longer than ``max_seq_len`` are truncated.
+            token IDs. Inputs longer than ``max_tokens`` are truncated.
 
         Returns
         -------
@@ -292,16 +275,8 @@ class HuggingFaceSequenceEncoder(SequenceEncoder):
             raise ValueError(
                 f"token_batch must be 2-D (B, seq_len), got {tuple(token_batch.shape)}"
             )
-        input_ids = token_batch[:, : self.max_seq_len].long()
-        attention_mask_from_batch = getattr(
-            self.tokenizer,
-            "attention_mask_from_batch",
-            None,
-        )
-        if attention_mask_from_batch is None:
-            attention_mask = input_ids.ne(self.tokenizer.padding_idx).long()
-        else:
-            attention_mask = attention_mask_from_batch(input_ids)
+        input_ids = token_batch[:, : self.max_tokens].long()
+        attention_mask = self.tokenizer.attention_mask_from_batch(input_ids)
         if attention_mask.shape != input_ids.shape:
             raise ValueError(
                 "attention_mask_from_batch must return a mask matching token_batch."

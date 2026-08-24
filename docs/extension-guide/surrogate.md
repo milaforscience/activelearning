@@ -124,10 +124,11 @@ application layer and reuse
 which already handles frozen-backbone extraction, pooling, projection, and
 caching.
 
-### **Add configuration in the owning application**
+### **Add configuration in the surrogate layer**
 
-The runtime contract lives in the core interface, but the concrete Pydantic
-config belongs to the application that composes the run. Each config needs a
+Concrete encoder configs live in
+`activelearning.surrogate.encoder_config` alongside the core surrogate
+interfaces. Add each config to the `EncoderConfig` discriminated union with a
 unique `type` discriminator and a `build()` method.
 
 Hugging Face models can subclass
@@ -150,11 +151,12 @@ class MySequenceEncoderConfig(HuggingFaceEncoderConfig):
 ```
 
 Any other model type uses a plain `BaseModel` config that builds its tokenizer
-and encoder inside `build()`. Keep optional imports in the application layer,
-then add the config to that application's discriminated union. The built-in
-molecular workflow keeps its union in
-`activelearning.applications.molecules.config.EncoderConfig`, and other
-applications should do the same within their own package.
+and encoder inside `build()`. Keep implementation imports inside `build()` or
+`_encoder_class()` so importing `activelearning.surrogate` does not import
+`activelearning.applications` or optional dependencies. This follows the
+existing `oracle/config.py` and `sampler/config.py` convention: core-layer
+configs own the runtime contract while application implementations are loaded
+lazily.
 
 Add an `input_representation` `ClassVar` such as `"smiles"` if the run needs
 representation checks. It is metadata for the composition layer rather than

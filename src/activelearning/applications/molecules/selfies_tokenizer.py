@@ -172,29 +172,32 @@ class SelfiesTokenizer(SequenceTokenizer):
     def batch_from_selfies(
         self,
         selfies_list: Sequence[str],
-        max_mol_tokens: int,
+        max_tokens: int,
         device: Optional[torch.device] = None,
     ) -> Tensor:
-        """Tokenize and transform a list of SELFIES strings into a batched tensor.
+        """Tokenize SELFIES through the generic string-batch interface.
+
+        This SELFIES-named alias is kept for callers that use the concrete
+        tokenizer directly. Prefer :meth:`batch_from_strings` in generic code.
 
         Parameters
         ----------
         selfies_list : Sequence[str]
             SELFIES strings to tokenize.
-        max_mol_tokens : int
+        max_tokens : int
             Total number of token positions per sequence, including the
-            ``[CLS]`` and ``[EOS]`` special tokens.
+            ``[CLS]`` and ``[EOS]`` special tokens and padding.
         device : torch.device, optional
             Target device for the output tensor.
 
         Returns
         -------
         Tensor
-            Shape ``(len(selfies_list), max_mol_tokens)`` of dtype ``torch.long``.
+            Shape ``(len(selfies_list), max_tokens)`` of dtype ``torch.long``.
         """
         return self.batch_from_strings(
             selfies_list,
-            max_tokens=max_mol_tokens,
+            max_tokens=max_tokens,
             device=device,
         )
 

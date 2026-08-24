@@ -8,7 +8,7 @@
 # - GFlowNetSampler trains a generative policy to propose (SELFIES, fidelity) pairs;
 #   fidelity_action: any lets the policy choose any of the three fidelity levels.
 # - ExactDKLSurrogate fits an exact GP that conditions on both molecule features
-#   and a fidelity confidence embedding (is_multi_fidelity: true, target_fidelity: 3).
+#   and a fidelity confidence embedding at target fidelity 3.
 # - QMultiFidelityLowerBoundMaxValueEntropy (MF-MES) scores each (molecule, fidelity)
 #   pair by expected information gain about the optimum at target fidelity 3. This score
 #   is used directly as the GFlowNet reward, so the policy trades off information gain
@@ -24,7 +24,6 @@ dataset:
 
 surrogate:
   type: ExactDKLSurrogate
-  is_multi_fidelity: true
   target_fidelity: 3
   encoder:
     type: SelfiesTransformerEncoder

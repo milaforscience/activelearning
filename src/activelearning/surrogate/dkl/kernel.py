@@ -6,7 +6,7 @@ to the resulting latent vectors.
 When ``include_fidelity=True`` the **last column** of each input tensor is
 treated as a fidelity scalar (e.g. 1.0, 2.0, 3.0) that is concatenated to
 the encoder's latent output before the base kernel is applied. This mirrors
-the reference ``DeepKernelRegressor.build_features()`` design.
+the feature construction used by the variational DKL surrogate.
 
 This design means the exact DKL surrogate can be used with *any* BoTorch
 acquisition function without modification.
@@ -24,20 +24,6 @@ class EncoderKernel(gpytorch.kernels.Kernel):
 
     Computes ``k(x1, x2)`` by encoding inputs and then applying a base kernel
     on the resulting latent feature vectors.
-
-    Parameters
-    ----------
-    encoder : torch.nn.Module
-        Shared encoder module whose parameters are optimized jointly with the
-        GP hyperparameters during surrogate training.
-    base_kernel : gpytorch.kernels.Kernel
-        Stationary kernel (e.g. ``ScaleKernel(MaternKernel(...))``) applied
-        in latent feature space.
-    include_fidelity : bool
-        If ``True``, the **last column** of each input is treated as a fidelity
-        scalar and concatenated to the latent encoding before the base kernel.
-        The base kernel must have ``ard_num_dims`` set to
-        ``encoder.latent_dim + 1`` in this case.
     """
 
     def __init__(

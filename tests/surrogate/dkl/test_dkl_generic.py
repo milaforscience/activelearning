@@ -11,9 +11,9 @@ from torch import Tensor, nn
 from activelearning.surrogate.dkl.config import DKLTrainingConfig
 from activelearning.surrogate.dkl import (
     ExactDKLSurrogate,
-    LatentEncoder,
     VariationalDKLSurrogate,
 )
+from activelearning.surrogate.encoder import LatentEncoder
 from activelearning.utils.types import Candidate, Observation
 
 

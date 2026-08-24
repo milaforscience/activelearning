@@ -30,17 +30,7 @@ __all__ = [
 
 
 class PositionalEncoding(nn.Module):
-    """Sinusoidal positional encoding added to token embeddings.
-
-    Parameters
-    ----------
-    embed_dim : int
-        Embedding dimensionality.
-    max_len : int
-        Maximum sequence length the encoder will ever see.
-    dropout : float
-        Dropout rate applied after adding positional encodings.
-    """
+    """Sinusoidal positional encoding added to token embeddings."""
 
     def __init__(self, embed_dim: int, max_len: int, dropout: float = 0.0) -> None:
         """Initialize sinusoidal encodings for a fixed maximum sequence length.
@@ -87,15 +77,7 @@ class PositionalEncoding(nn.Module):
 
 
 class MaskedMeanPool(nn.Module):
-    """Pool token features into one vector per sequence via masked mean + projection.
-
-    Parameters
-    ----------
-    input_dim : int
-        Dimensionality of per-token features.
-    output_dim : int
-        Dimensionality of the output (latent) vector.
-    """
+    """Pool token features into one vector per sequence via masked mean + projection."""
 
     def __init__(self, input_dim: int, output_dim: int) -> None:
         """Initialize the projection applied after masked mean pooling.
@@ -141,25 +123,6 @@ class TransformerSequenceEncoder(SequenceEncoder):
     The encoder also exposes an MLM head (``mlm_loss``) so it can be trained
     jointly with a GP loss inside a DKL surrogate.
 
-    Parameters
-    ----------
-    tokenizer : SequenceTokenizer
-        Tokenizer providing vocabulary and special-token indices.
-    max_tokens : int
-        Total number of sequence positions, including ``[CLS]`` and ``[EOS]``
-        specials. Stored as ``max_seq_len = max_tokens``.
-    embed_dim : int
-        Embedding and Transformer hidden dimensionality.
-    ff_dim : int
-        Feedforward hidden size inside each Transformer layer.
-    num_heads : int
-        Number of attention heads.
-    num_layers : int
-        Number of Transformer encoder layers.
-    latent_dim : int
-        Output dimensionality of the pooled sequence vector.
-    dropout : float
-        Dropout rate applied throughout.
     """
 
     def __init__(
@@ -204,7 +167,7 @@ class TransformerSequenceEncoder(SequenceEncoder):
             embed_dim,
             padding_idx=tokenizer.padding_idx,
         )
-        self.positional = PositionalEncoding(embed_dim, self.max_seq_len, dropout)
+        self.positional = PositionalEncoding(embed_dim, self.max_tokens, dropout)
         self.encoder_layers = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(
                 d_model=embed_dim,
@@ -242,8 +205,8 @@ class TransformerSequenceEncoder(SequenceEncoder):
             the pooled vector.
         """
         token_batch = token_batch.long()
-        if token_batch.size(1) > self.max_seq_len:
-            token_batch = token_batch[:, : self.max_seq_len]
+        if token_batch.size(1) > self.max_tokens:
+            token_batch = token_batch[:, : self.max_tokens]
 
         x = self.embedding(token_batch) * math.sqrt(self.embed_dim)
         x = self.positional(x)
@@ -290,8 +253,8 @@ class TransformerSequenceEncoder(SequenceEncoder):
             Shape ``(B, seq_len, vocab_size)``.
         """
         token_batch = token_batch.long()
-        if token_batch.size(1) > self.max_seq_len:
-            token_batch = token_batch[:, : self.max_seq_len]
+        if token_batch.size(1) > self.max_tokens:
+            token_batch = token_batch[:, : self.max_tokens]
 
         x = self.embedding(token_batch) * math.sqrt(self.embed_dim)
         x = self.positional(x)

@@ -8,12 +8,12 @@ Two variants are provided, both inheriting from :class:`BoTorchGPSurrogate`:
     Training minimises ``ExactMarginalLogLikelihood + MLM loss`` via Adam.
 
 ``VariationalDKLSurrogate``
-    Uses a sparse variational GP head, following the reference
-    ``DeepKernelRegressor``.  Training minimises
+    Uses a separate sparse variational GP head. Training minimises
     ``VariationalELBO + MLM loss`` via Adam.
 
 **Multi-fidelity** is controlled via the ``is_multi_fidelity`` constructor
-argument (and the ``is_multi_fidelity`` key in the YAML config). When enabled,
+argument. In config-driven runs it is derived from the oracle's fidelity set.
+When enabled,
 the surrogate appends the BoTorch-facing **fidelity confidence** from
 ``set_fidelity_confidences()`` as the last column of the feature tensor before
 the GP. This keeps the fidelity coordinate in the continuous space used by
@@ -28,7 +28,6 @@ re-applied inside the GP or kernel. Floating-point tensors follow
 from __future__ import annotations
 
 from abc import abstractmethod
-from operator import index
 from typing import Any, Iterable, Optional
 from warnings import warn
 
@@ -52,28 +51,6 @@ class DeepKernelSurrogate(BoTorchGPSurrogate):
 
     Not intended to be instantiated directly. Use :class:`ExactDKLSurrogate`
     or :class:`VariationalDKLSurrogate`.
-
-    Parameters
-    ----------
-    encoder : LatentEncoder
-        Feature encoder jointly optimised with the GP where its parameters
-        are trainable. It must expose a callable ``prepare_inputs()`` method
-        and an integer ``latent_dim`` attribute.
-    training_params : object
-        Training hyper-parameters (epochs, lr, mask_ratio, pretrain_epochs).
-        The masking parameters are used only when the encoder exposes an
-        optional ``mlm_loss`` method.
-    is_multi_fidelity : bool
-        Whether to append the encoded fidelity confidence to each feature
-        vector. Should match the ``is_multi_fidelity`` key in the YAML run config.
-    target_fidelity : int, optional
-        The target (highest) fidelity level.  **Required when
-        ``is_multi_fidelity=True``**; tells BoTorch's ``project_to_target_fidelity``
-        which encoded fidelity value to project to. Typically this is the
-        highest fidelity level, and it is mapped to its configured confidence
-        internally.
-    **botorch_kwargs
-        Forwarded to :class:`BoTorchGPSurrogate`.
 
     Subclass contract
     -----------------
@@ -140,13 +117,9 @@ class DeepKernelSurrogate(BoTorchGPSurrogate):
         latent_dim = getattr(encoder, "latent_dim", None)
         if isinstance(latent_dim, bool):
             raise TypeError("encoder must define an integer latent_dim attribute.")
-        try:
-            usable_latent_dim = index(latent_dim)
-        except TypeError as error:
-            raise TypeError(
-                "encoder must define an integer latent_dim attribute."
-            ) from error
-        if usable_latent_dim < 1:
+        if not isinstance(latent_dim, int):
+            raise TypeError("encoder must define an integer latent_dim attribute.")
+        if latent_dim < 1:
             raise TypeError("encoder.latent_dim must be a positive integer.")
         self._encoder = encoder
         self._training = training_params
@@ -207,9 +180,7 @@ class DeepKernelSurrogate(BoTorchGPSurrogate):
         obs_list = list(observations)
         if not obs_list:
             return
-        self._train_X, self._train_Y, self._is_multi_fidelity = (
-            self._parse_observations(obs_list)
-        )
+        self._train_X, self._train_Y = self._parse_observations(obs_list)
         self._train_Y = self._prepare_targets(self._train_Y)
         self._build_model(self._train_X, self._train_Y)
         self._apply_runtime_context()
@@ -283,11 +254,9 @@ class DeepKernelSurrogate(BoTorchGPSurrogate):
             mlm_tokens = (
                 train_X[:, :-1].long() if self._is_multi_fidelity else train_X.long()
             )
-            self._warn_if_mlm_configuration_is_ignored()
             self._run_mlm_pretraining(optimizer, all_params, mlm_tokens)
 
-        if not has_mlm_loss:
-            self._warn_if_mlm_configuration_is_ignored()
+        self._warn_if_mlm_configuration_is_ignored()
 
         for _ in range(self._training.epochs):
             self._set_train_mode()
@@ -322,12 +291,19 @@ class DeepKernelSurrogate(BoTorchGPSurrogate):
         """Warn when explicit MLM settings target an encoder without MLM loss."""
         if self._has_mlm_loss:
             return
-        fields_set = getattr(self._training, "model_fields_set", set())
-        explicitly_configured = (
-            ({"mask_ratio", "pretrain_epochs"} & set(fields_set))
-            or self._training.pretrain_epochs > 0
-            or self._training.mask_ratio != 0.125
-        )
+        fields_set = getattr(self._training, "model_fields_set", None)
+        if fields_set is not None:
+            explicitly_configured = bool(
+                {"mask_ratio", "pretrain_epochs"} & set(fields_set)
+            )
+        else:
+            from activelearning.surrogate.dkl.config import DKLTrainingConfig
+
+            defaults = DKLTrainingConfig.model_fields
+            explicitly_configured = (
+                self._training.pretrain_epochs != defaults["pretrain_epochs"].default
+                or self._training.mask_ratio != defaults["mask_ratio"].default
+            )
         if explicitly_configured:
             warn(
                 "The configured encoder does not expose mlm_loss; "
@@ -339,17 +315,16 @@ class DeepKernelSurrogate(BoTorchGPSurrogate):
     # Domain input conversion
 
     def _parse_observations(
-        self, observations: Iterable[Observation]
-    ) -> tuple[torch.Tensor, torch.Tensor, bool]:
+        self, observations: list[Observation]
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Convert observations to model-space inputs and runtime-dtype targets."""
-        obs_list = list(observations)
-        if not obs_list:
+        if not observations:
             raise ValueError("Cannot parse an empty observation iterable.")
-        inputs = self._encode_inputs_with_fidelity(obs_list)
-        train_Y = torch.as_tensor([o.y for o in obs_list], dtype=self.dtype).unsqueeze(
-            -1
-        )
-        return inputs, train_Y, self._is_multi_fidelity
+        inputs = self._encode_inputs_with_fidelity(observations)
+        train_Y = torch.as_tensor(
+            [o.y for o in observations], dtype=self.dtype
+        ).unsqueeze(-1)
+        return inputs, train_Y
 
     def encode_candidates(self, candidates: Iterable[Candidate]) -> torch.Tensor:
         """Convert candidates to model-space inputs.

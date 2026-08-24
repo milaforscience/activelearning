@@ -13,20 +13,10 @@ from activelearning.surrogate.sequence.tokenizer import SequenceTokenizer
 
 
 class SequenceEncoder(LatentEncoder):
-    """Base class for encoders backed by a sequence tokenizer.
-
-    Parameters
-    ----------
-    tokenizer : SequenceTokenizer
-        Tokenizer used to convert raw strings into token-ID tensors.
-    max_tokens : int
-        Total number of token positions consumed by the encoder, including
-        special tokens and padding.
-    """
+    """Base class for encoders backed by a sequence tokenizer."""
 
     tokenizer: SequenceTokenizer
     max_tokens: int
-    max_seq_len: int
 
     def __init__(self, tokenizer: SequenceTokenizer, max_tokens: int) -> None:
         """Initialize a tokenizer-backed sequence encoder.
@@ -44,7 +34,6 @@ class SequenceEncoder(LatentEncoder):
             raise ValueError("max_tokens must be at least two.")
         self.tokenizer = tokenizer
         self.max_tokens = max_tokens
-        self.max_seq_len = max_tokens
 
     def prepare_inputs(
         self,

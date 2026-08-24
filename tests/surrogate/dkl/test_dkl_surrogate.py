@@ -4,7 +4,7 @@ import math
 import pytest
 import torch
 
-from activelearning.applications.molecules.config import (
+from activelearning.surrogate.encoder_config import (
     SelfiesTransformerEncoderConfig,
 )
 from activelearning.surrogate.dkl.config import DKLTrainingConfig
@@ -181,7 +181,7 @@ class TestExactDKLSurrogate:
         assert exact_mf_surrogate.is_fitted()
         # Token IDs + fidelity column
         X, _ = exact_mf_surrogate.get_train_data()
-        assert X.shape == (3, exact_mf_surrogate._encoder.max_seq_len + 1)
+        assert X.shape == (3, exact_mf_surrogate._encoder.max_tokens + 1)
 
     def test_multi_fidelity_encode_candidates(
         self, exact_mf_surrogate: ExactDKLSurrogate
@@ -192,7 +192,7 @@ class TestExactDKLSurrogate:
         candidates = _make_mf_candidates([BENZENE, ALANINE], [2, 3])
         tokens = exact_mf_surrogate.encode_candidates(candidates)
         # Shape: (2, seq_len + 1 for fidelity)
-        assert tokens.shape == (2, exact_mf_surrogate._encoder.max_seq_len + 1)
+        assert tokens.shape == (2, exact_mf_surrogate._encoder.max_tokens + 1)
         # Last column should contain encoded confidence values.
         assert tokens[:, -1].tolist() == pytest.approx([0.5, 1.0])
 
@@ -566,7 +566,7 @@ class TestEncoderKernelBatchDims:
         base_kernel = gpytorch.kernels.RBFKernel()
         kernel = EncoderKernel(encoder, base_kernel, include_fidelity=False)
 
-        seq_len = encoder.max_seq_len
+        seq_len = encoder.max_tokens
         # BoTorch-style: (batch=2, q=1, seq_len)
         x = torch.zeros(2, 1, seq_len, dtype=torch.float64)
         result = kernel(x, x).evaluate()
@@ -581,7 +581,7 @@ class TestEncoderKernelBatchDims:
         base_kernel = gpytorch.kernels.RBFKernel(ard_num_dims=gp_input_dim)
         kernel = EncoderKernel(encoder, base_kernel, include_fidelity=True)
 
-        seq_len = encoder.max_seq_len
+        seq_len = encoder.max_tokens
         # Last column = encoded fidelity value; shape (batch=2, q=1, seq_len+1)
         x = torch.zeros(2, 1, seq_len + 1, dtype=torch.float64)
         x[..., -1] = 1.0  # encoded target fidelity confidence
@@ -598,7 +598,7 @@ class TestEncoderKernelBatchDims:
             gpytorch.kernels.RBFKernel(),
             include_fidelity=False,
         )
-        x = torch.zeros(3, encoder.max_seq_len, dtype=torch.float64)
+        x = torch.zeros(3, encoder.max_tokens, dtype=torch.float64)
 
         diagonal = kernel(x, x, diag=True).to_dense()
         dense_diagonal = kernel(x, x).to_dense().diagonal()
@@ -615,7 +615,7 @@ class TestEncoderKernelBatchDims:
             gpytorch.kernels.RBFKernel(ard_num_dims=encoder.latent_dim + 1),
             include_fidelity=True,
         )
-        x = torch.zeros(3, encoder.max_seq_len + 1, dtype=torch.float64)
+        x = torch.zeros(3, encoder.max_tokens + 1, dtype=torch.float64)
         x[:, -1] = 1.0
 
         diagonal = kernel(x, x, diag=True).to_dense()
@@ -650,13 +650,12 @@ class TestDKLSurrogateConfigs:
         """Top-level derivation is unavailable when a DKL config is built alone."""
         from activelearning.surrogate.dkl.config import ExactDKLSurrogateConfig
 
-        cfg = ExactDKLSurrogateConfig(
-            encoder=ENCODER_CFG,
-            is_multi_fidelity=True,
-        )
+        cfg = ExactDKLSurrogateConfig(encoder=ENCODER_CFG)
+        cfg = cfg.resolve_fidelity_confidences({1: 0.1, 2: 1.0})
 
-        with pytest.raises(ValueError, match="target_fidelity must be set"):
-            cfg.build()
+        surrogate = cfg.build()
+
+        assert surrogate.is_multi_fidelity
 
 
 class TestSurrogatePredictionCorrectness:

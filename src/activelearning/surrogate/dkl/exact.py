@@ -21,19 +21,6 @@ class ExactDKLSurrogate(DeepKernelSurrogate):
     its covar_module, making all BoTorch acquisition functions work out of the
     box. Training jointly optimises encoder, GP kernel, and likelihood noise
     via Adam (ExactMarginalLogLikelihood + MLM loss).
-
-    Parameters
-    ----------
-    encoder : LatentEncoder
-    training_params : object
-    is_multi_fidelity : bool
-    target_fidelity : int, optional
-        Required when ``is_multi_fidelity=True``.
-    standardize_outputs : bool
-        Normalise GP outputs to mean 0 / variance 1.
-    scale_inputs : bool
-        Whether BoTorch should normalize the model-space inputs. Defaults to
-        ``False`` because tokenized sequence inputs are not continuous features.
     """
 
     def __init__(

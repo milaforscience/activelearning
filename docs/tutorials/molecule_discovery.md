@@ -335,13 +335,22 @@ Start with the exact config to confirm the full MF-GFN loop works, then graduate
 
 ## **Configuration reference**
 
+!!! warning "Breaking configuration changes"
+    `max_mol_tokens` now counts every sequence position, including `[CLS]`,
+    `[EOS]`, and padding. The example configurations therefore use `66`
+    instead of `64`. External configurations must increase this value if they
+    need to preserve the previous number of content-token positions.
+
+    The DKL surrogate discriminators were renamed from
+    `ExactSelfiesDKLSurrogate` and `VariationalSelfiesDKLSurrogate` to
+    `ExactDKLSurrogate` and `VariationalDKLSurrogate`.
+
 The main molecule-specific fields are:
 
 | Field | Meaning |
 |-------|---------|
 | `surrogate.encoder.max_mol_tokens` | Total sequence positions, including special tokens and padding, for sequence-based encoders that expose this setting. |
 | `surrogate.encoder.latent_dim` | Size of the representation passed to the GP after the encoder's projection or feature head. |
-| `surrogate.is_multi_fidelity` | Whether to append fidelity to the surrogate features. |
 | `surrogate.target_fidelity` | Fidelity level used when MF acquisitions project candidates to the target objective. |
 | `surrogate.num_inducing` | Number of inducing points for the sparse variational GP in `VariationalDKLSurrogate`. |
 | `sampler.candidate_pool_file` | SELFIES pool used by `PoolFileSampler`. |

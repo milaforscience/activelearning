@@ -20,7 +20,6 @@ dataset:
 
 surrogate:
   type: VariationalDKLSurrogate
-  is_multi_fidelity: true
   target_fidelity: 3
   encoder:
     type: MiniMolSmilesEncoder

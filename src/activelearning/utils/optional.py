@@ -25,9 +25,11 @@ def missing_optional_dependency_error(
     ImportError
         Error with installation instructions for the requested extra.
     """
-    return ImportError(
+    actionable_error = ImportError(
         f"{component} requires optional {extra} dependencies that are not "
         "installed.\n"
         f"Install them with:  uv sync --extra {extra}\n"
         f"or:                 pip install activelearning[{extra}]"
     )
+    actionable_error.__cause__ = error
+    return actionable_error

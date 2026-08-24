@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from collections.abc import Sequence
 from typing import Any
 
@@ -43,6 +44,7 @@ class HuggingFaceTokenizer(SequenceTokenizer):
         tokenizer: Any | None = None,
         trust_remote_code: bool = False,
         cache_dir: str | None = None,
+        cache_size: int = 4096,
     ) -> None:
         """Load or wrap the Hugging Face tokenizer used for tokenization.
 
@@ -70,6 +72,9 @@ class HuggingFaceTokenizer(SequenceTokenizer):
             model repository.
         cache_dir : str, optional
             Directory in which Hugging Face stores or looks up cached files.
+        cache_size : int, default=4096
+            Maximum number of tokenizer attention masks retained in the LRU
+            cache. Zero disables caching.
 
         Raises
         ------
@@ -79,6 +84,8 @@ class HuggingFaceTokenizer(SequenceTokenizer):
         ImportError
             If the optional ``transformers`` dependency is not installed.
         """
+        if cache_size < 0:
+            raise ValueError("cache_size must be non-negative.")
         if tokenizer is None and tokenizer_name_or_path is None:
             raise ValueError(
                 "Provide tokenizer_name_or_path or an already-loaded tokenizer."
@@ -91,7 +98,10 @@ class HuggingFaceTokenizer(SequenceTokenizer):
                 cache_dir=cache_dir,
             )
         self._tokenizer = tokenizer
-        self._attention_masks: dict[tuple[int, ...], tuple[int, ...]] = {}
+        self.cache_size = cache_size
+        self._attention_masks: OrderedDict[tuple[int, ...], tuple[int, ...]] = (
+            OrderedDict()
+        )
         self.padding_idx = self._require_token_id("pad_token_id", "padding")
         self.eos_idx = self._require_token_id("eos_token_id", "EOS")
         self.cls_idx = self._first_token_id(
@@ -220,8 +230,13 @@ class HuggingFaceTokenizer(SequenceTokenizer):
                 "The Hugging Face tokenizer must return an attention_mask with "
                 "the same shape as input_ids."
             )
-        for row, mask in zip(input_ids, attention_mask):
-            self._attention_masks[tuple(row.tolist())] = tuple(mask.tolist())
+        if self.cache_size:
+            for row, mask in zip(input_ids, attention_mask):
+                key = tuple(row.tolist())
+                self._attention_masks[key] = tuple(mask.tolist())
+                self._attention_masks.move_to_end(key)
+                while len(self._attention_masks) > self.cache_size:
+                    self._attention_masks.popitem(last=False)
         return input_ids.to(device=device, dtype=torch.long)
 
     def attention_mask_from_batch(self, token_batch: Tensor) -> Tensor:
@@ -259,6 +274,8 @@ class HuggingFaceTokenizer(SequenceTokenizer):
         for row in token_batch.detach().to(device="cpu", dtype=torch.long):
             key = tuple(row.tolist())
             mask = self._attention_masks.get(key)
+            if mask is not None:
+                self._attention_masks.move_to_end(key)
             if mask is None:
                 if self.padding_idx == self.eos_idx:
                     raise ValueError(

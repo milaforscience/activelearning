@@ -5,7 +5,7 @@ import torch
 from torch import nn
 
 import activelearning.applications.molecules.smiles_transformer_encoder as encoder_module
-from activelearning.applications.molecules.config import (
+from activelearning.surrogate.encoder_config import (
     GPMoLFormerSmilesEncoderConfig,
     MoLFormerSmilesEncoderConfig,
 )
@@ -178,6 +178,20 @@ def test_huggingface_tokenizer_uses_pretrained_ids() -> None:
     assert int(encoded[0, 0]) == tokenizer.cls_idx
     assert int(encoded[0, -1]) == tokenizer.padding_idx
     assert tokenizer.vocab_size == 12
+
+
+def test_huggingface_tokenizer_bounds_attention_mask_cache() -> None:
+    """Attention-mask entries are evicted after reaching the configured limit."""
+    tokenizer = HuggingFaceTokenizer(
+        tokenizer=_FakeHuggingFaceTokenizer(),
+        cache_size=2,
+    )
+
+    for string in ["C", "CC", "CCC", "CCCC", "CCCCC"]:
+        tokenizer.batch_from_strings([string], max_tokens=8)
+        assert len(tokenizer._attention_masks) <= 2
+
+    assert len(tokenizer._attention_masks) == 2
 
 
 def test_huggingface_tokenizer_preserves_attention_mask_when_pad_equals_eos() -> None:

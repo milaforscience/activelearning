@@ -45,6 +45,8 @@ def _blocked_imports_prelude() -> str:
 
         def _blocked_import(name, globals=None, locals=None, fromlist=(), level=0):
             if name.split(".", 1)[0] in {
+                "graphium",
+                "minimol",
                 "selfies",
                 "rdkit",
                 "transformers",
@@ -84,7 +86,7 @@ def test_core_config_import_and_branin_parse_work_without_molecule_extras() -> N
 def test_building_molecule_component_raises_helpful_error_without_extras() -> None:
     script = _blocked_imports_prelude() + textwrap.dedent(
         """
-        from activelearning.applications.molecules.config import SelfiesTransformerEncoderConfig
+        from activelearning.surrogate.encoder_config import SelfiesTransformerEncoderConfig
 
         try:
             SelfiesTransformerEncoderConfig().build()
@@ -140,6 +142,27 @@ def test_importing_s3gfn_sampler_stays_lazy_without_molecule_extras() -> None:
             assert "uv sync --extra molecules" in message
         else:
             raise AssertionError("Expected ImportError when molecule extras are blocked")
+        """
+    )
+
+    result = _run_python_snippet_in_subprocess(script)
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_building_minimol_encoder_raises_helpful_error_without_extras() -> None:
+    script = _blocked_imports_prelude() + textwrap.dedent(
+        """
+        from activelearning.surrogate.encoder_config import MiniMolSmilesEncoderConfig
+
+        try:
+            MiniMolSmilesEncoderConfig().build()
+        except ImportError as error:
+            message = str(error)
+            assert "optional molecules dependencies" in message
+            assert "uv sync --extra molecules" in message
+        else:
+            raise AssertionError("Expected ImportError when molecules extras are blocked")
         """
     )
 

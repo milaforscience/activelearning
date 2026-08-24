@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, PrivateAttr
 
-from activelearning.applications.molecules.config import EncoderConfig
+from activelearning.surrogate.encoder_config import EncoderConfig
 from activelearning.surrogate.surrogate import Surrogate
 
 
@@ -37,9 +37,14 @@ class DKLSurrogateConfigBase(BaseModel):
 
     encoder: EncoderConfig
     training_params: DKLTrainingConfig = Field(default_factory=DKLTrainingConfig)
-    is_multi_fidelity: bool = False
     target_fidelity: Optional[int] = None
     standardize_outputs: bool = True
+    _is_multi_fidelity: bool = PrivateAttr(default=False)
+
+    @property
+    def is_multi_fidelity(self) -> bool:
+        """Return the fidelity mode derived from the configured oracle."""
+        return self._is_multi_fidelity
 
     def resolve_fidelity_confidences(
         self,
@@ -77,13 +82,10 @@ class DKLSurrogateConfigBase(BaseModel):
             )
 
         data = self.model_dump()
-        data.update(
-            {
-                "is_multi_fidelity": is_multi_fidelity,
-                "target_fidelity": target_fidelity,
-            }
-        )
-        return type(self).model_validate(data)
+        data["target_fidelity"] = target_fidelity
+        resolved = type(self).model_validate(data)
+        resolved._is_multi_fidelity = is_multi_fidelity
+        return resolved
 
     def build(self) -> Surrogate:
         """Build the configured DKL surrogate.

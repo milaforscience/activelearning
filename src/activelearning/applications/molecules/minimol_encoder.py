@@ -13,6 +13,9 @@ from typing import Iterator
 import torch
 from torch import Tensor, nn
 
+from activelearning.applications.molecules._optional import (
+    missing_molecules_dependency_error,
+)
 from activelearning.surrogate.encoder import LatentEncoder
 
 __all__ = ["MiniMolSmilesEncoder"]
@@ -111,7 +114,13 @@ def _build_compatible_minimol(
 
 def _load_minimol() -> Callable[..., Any]:
     """Load a MiniMol constructor on demand."""
-    from minimol import Minimol
+    try:
+        from minimol import Minimol
+    except ImportError as error:  # pragma: no cover - optional dependency
+        raise missing_molecules_dependency_error(
+            "MiniMol SMILES encoder",
+            error,
+        ) from error
 
     return partial(_build_compatible_minimol, Minimol)
 
@@ -124,18 +133,6 @@ class MiniMolSmilesEncoder(LatentEncoder):
     passed through a trainable linear projection so the DKL surrogate can
     adapt the representation during fitting.
 
-    Parameters
-    ----------
-    batch_size : int, default=100
-        Maximum number of SMILES passed to MiniMol at once.
-    latent_dim : int, default=32
-        Width of the trainable projected representation.
-    cache_size : int, default=4096
-        Maximum number of CPU fingerprints retained in the LRU cache. Set to
-        zero to disable caching.
-    checkpoint_path : Path or str, optional
-        Optional predictor state-dict checkpoint. It is loaded over MiniMol's
-        bundled pretrained weights before fingerprint extraction.
     """
 
     def __init__(

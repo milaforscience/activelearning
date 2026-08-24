@@ -1,7 +1,8 @@
-"""Configuration classes for molecule-specific components.
+"""Configuration classes for built-in DKL encoder components.
 
-Encoder configs are declared here (not inside surrogate/config.py) so they can
-be shared by both DKL surrogate variants without circular imports.
+The encoder configuration union lives with the core surrogate interfaces so
+the surrogate package does not import application implementations eagerly.
+Concrete ``build()`` methods keep application imports lazy.
 """
 
 from __future__ import annotations
@@ -11,24 +12,25 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Union
 
 from pydantic import BaseModel, Field
 
-from activelearning.applications.molecules.constants import SELFIES_VOCAB_SMALL
 from activelearning.surrogate.sequence.config import HuggingFaceEncoderConfig
 
 if TYPE_CHECKING:
-    from activelearning.surrogate.sequence.transformer_encoder import (
-        TransformerSequenceEncoder,
-    )
     from activelearning.surrogate.sequence.huggingface_encoder import (
         HuggingFaceSequenceEncoder,
+    )
+    from activelearning.surrogate.sequence.transformer_encoder import (
+        TransformerSequenceEncoder,
     )
     from activelearning.applications.molecules.minimol_encoder import (
         MiniMolSmilesEncoder,
     )
 
 
-# ---------------------------------------------------------------------------
-# Encoder configs
-# ---------------------------------------------------------------------------
+def _default_selfies_vocab() -> list[str]:
+    """Load the default SELFIES vocabulary without an eager app import."""
+    from activelearning.applications.molecules.constants import SELFIES_VOCAB_SMALL
+
+    return list(SELFIES_VOCAB_SMALL)
 
 
 class SelfiesTransformerEncoderConfig(BaseModel):
@@ -61,7 +63,7 @@ class SelfiesTransformerEncoderConfig(BaseModel):
 
     type: Literal["SelfiesTransformerEncoder"] = "SelfiesTransformerEncoder"
     input_representation: ClassVar[str] = "selfies"
-    vocab: list[str] = Field(default_factory=lambda: list(SELFIES_VOCAB_SMALL))
+    vocab: list[str] = Field(default_factory=_default_selfies_vocab)
     max_mol_tokens: int = 66
     embed_dim: int = 64
     ff_dim: int = 256

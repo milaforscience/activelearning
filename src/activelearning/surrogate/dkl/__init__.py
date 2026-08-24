@@ -8,7 +8,6 @@ from activelearning.surrogate.dkl.config import (
 )
 from activelearning.surrogate.dkl.surrogate import DeepKernelSurrogate
 from activelearning.surrogate.dkl.kernel import EncoderKernel
-from activelearning.surrogate.encoder import LatentEncoder
 from activelearning.surrogate.dkl.exact import ExactDKLSurrogate
 from activelearning.surrogate.dkl.variational import VariationalDKLSurrogate
 
@@ -19,7 +18,6 @@ __all__ = [
     "EncoderKernel",
     "ExactDKLSurrogate",
     "ExactDKLSurrogateConfig",
-    "LatentEncoder",
     "VariationalDKLSurrogate",
     "VariationalDKLSurrogateConfig",
 ]

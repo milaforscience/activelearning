@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from activelearning.applications.molecules.config import (
+from activelearning.surrogate.encoder_config import (
     EncoderConfig,
     GPMoLFormerSmilesEncoderConfig,
     MiniMolSmilesEncoderConfig,

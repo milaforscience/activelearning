@@ -8,6 +8,7 @@ from typing import Any, Optional
 import gpytorch
 import torch
 from botorch.models.model import Model
+from botorch.posteriors.gpytorch import GPyTorchPosterior
 from gpytorch.mlls import VariationalELBO
 from torch.optim import Adam
 
@@ -94,13 +95,6 @@ class _VariationalBoTorchAdapter(Model):
     The adapter operates in **latent feature space**: ``X`` passed to
     :meth:`posterior` must already be encoded latent vectors (+ optional fidelity
     column), matching the input that ``_VariationalDKLGP.forward`` expects.
-
-    Parameters
-    ----------
-    gp_model : _VariationalDKLGP
-        The trained variational GP head.
-    likelihood : gpytorch.likelihoods.GaussianLikelihood
-        The GP likelihood used for observation noise during prediction.
     """
 
     def __init__(
@@ -171,8 +165,6 @@ class _VariationalBoTorchAdapter(Model):
         GPyTorchPosterior
             BoTorch posterior backed by the variational GP distribution.
         """
-        from botorch.posteriors.gpytorch import GPyTorchPosterior
-
         if output_indices is not None and list(output_indices) != [0]:
             raise NotImplementedError(
                 "Variational DKL supports only the single output index [0]."
@@ -189,28 +181,15 @@ class _VariationalBoTorchAdapter(Model):
 
 
 class VariationalDKLSurrogate(DeepKernelSurrogate):
-    """DKL surrogate with a sparse variational GP head — paper-faithful variant.
+    """DKL surrogate with a sparse variational GP head.
 
-    Reproduces the architecture from the reference ``DeepKernelRegressor``:
+    The encoder and sparse GP are separate components:
 
     - Encoder and GP are **separate** components; encoding is explicit.
     - Training minimises ``VariationalELBO + MLM loss`` via Adam (ELBO, not MLL).
     - GP operates in **latent feature space** (encoder output + optional fidelity).
     - Compatible with all BoTorch acquisition functions via
       :class:`_VariationalBoTorchAdapter`, including qMF-MES.
-
-    Parameters
-    ----------
-    encoder : LatentEncoder
-    training_params : object
-    is_multi_fidelity : bool
-        Append fidelity scalar to latent feature vectors.
-    target_fidelity : int, optional
-        Required when ``is_multi_fidelity=True``.
-    num_inducing : int
-        Number of variational inducing points.
-    standardize_outputs : bool
-        Normalise targets before training and denormalise predictions.
     """
 
     def __init__(
