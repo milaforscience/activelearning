@@ -13,22 +13,75 @@ further reference.
 
 from pydantic import BaseModel, Field, model_validator
 
-from activelearning.acquisition.config import AcquisitionConfig
+from activelearning.acquisition.config import (
+    AcquisitionConfig,
+    ExpectedImprovementConfig,
+    LogExpectedImprovementConfig,
+    LogProbabilityOfImprovementConfig,
+    PosteriorMeanConfig,
+    ProbabilityOfImprovementConfig,
+    QMultiFidelityKnowledgeGradientConfig,
+    QMultiFidelityLowerBoundMaxValueEntropyConfig,
+    QMultiFidelityMaxValueEntropyConfig,
+    UpperConfidenceBoundConfig,
+)
 from activelearning.budget.config import BudgetConfig
 from activelearning.dataset.config import DatasetConfig
 from activelearning.logger.config import LoggerConfig
 from activelearning.oracle.config import OracleConfig
 from activelearning.run_writer import RunWriterConfig
 from activelearning.runtime import RuntimeContextConfig
-from activelearning.sampler.config import SamplerConfig
+from activelearning.sampler.config import (
+    SamplerConfig,
+)
 from activelearning.selector.config import SelectorConfig
 from activelearning.surrogate.config import (
+    DummyMeanSurrogateConfig,
     FidelityAwareSurrogateConfig,
     SurrogateConfig,
 )
 
 
+_BOTORCH_ACQUISITION_CONFIG_TYPES = (
+    UpperConfidenceBoundConfig,
+    ExpectedImprovementConfig,
+    LogExpectedImprovementConfig,
+    ProbabilityOfImprovementConfig,
+    LogProbabilityOfImprovementConfig,
+    PosteriorMeanConfig,
+    QMultiFidelityMaxValueEntropyConfig,
+    QMultiFidelityLowerBoundMaxValueEntropyConfig,
+    QMultiFidelityKnowledgeGradientConfig,
+)
+
+
 class ActiveLearningConfig(BaseModel):
+    """Validated composition of one active-learning experiment.
+
+    Parameters
+    ----------
+    runtime : RuntimeContextConfig
+        Device and floating-point runtime settings.
+    dataset : DatasetConfig
+        Initial observations and dataset persistence settings.
+    surrogate : SurrogateConfig
+        Model used to approximate the oracle objective.
+    acquisition : AcquisitionConfig
+        Rule used to score candidate queries.
+    sampler : SamplerConfig
+        Candidate-generation strategy.
+    selector : SelectorConfig
+        Rule used to select candidates for evaluation.
+    oracle : OracleConfig
+        Objective evaluator and fidelity metadata source.
+    budget : BudgetConfig
+        Query and round budget.
+    logger : LoggerConfig, optional
+        Logging configuration.
+    run_writer : RunWriterConfig, optional
+        Persistent run-output configuration.
+    """
+
     runtime: RuntimeContextConfig = Field(default_factory=RuntimeContextConfig)
     dataset: DatasetConfig
     surrogate: SurrogateConfig
@@ -47,7 +100,9 @@ class ActiveLearningConfig(BaseModel):
         The oracle defines the authoritative fidelity levels and their
         confidences. Missing sampler levels are filled from that set, explicit
         sampler levels are validated against it, and fidelity-aware surrogate
-        configs resolve their settings from the resulting metadata.
+        configs resolve their settings from the resulting metadata. Known
+        incompatible sampler, surrogate, acquisition, and oracle combinations
+        are rejected after that resolution.
 
         Returns
         -------
@@ -59,7 +114,8 @@ class ActiveLearningConfig(BaseModel):
         ------
         ValueError
             If the oracle declares no fidelity levels, or if the sampler
-            or surrogate references a fidelity not declared by the oracle.
+            or surrogate references a fidelity not declared by the oracle, or
+            if built-in component contracts are incompatible.
         """
         fidelity_confidences = _extract_oracle_fidelity_confidences(self.oracle)
         if not fidelity_confidences:
@@ -72,6 +128,12 @@ class ActiveLearningConfig(BaseModel):
         self.surrogate = _resolve_surrogate_config_fidelities(
             self.surrogate,
             fidelity_confidences,
+        )
+        _validate_component_compatibility(
+            sampler=self.sampler,
+            surrogate=self.surrogate,
+            acquisition=self.acquisition,
+            oracle=self.oracle,
         )
         return self
 
@@ -300,3 +362,163 @@ def _resolve_surrogate_config_fidelities(
             "oracles. Implement FidelityAwareSurrogateConfig to opt in."
         )
     return surrogate
+
+
+def _extract_molecule_representation(oracle: BaseModel) -> str | None:
+    """Return one molecular representation shared by an oracle configuration.
+
+    Direct molecular oracles expose ``mol_repr``. Composite oracles are
+    considered molecular only when every sub-oracle exposes the same
+    representation. Returning ``None`` means that the oracle is not known to
+    accept one consistent molecular string representation.
+
+    Parameters
+    ----------
+    oracle : BaseModel
+        Parsed oracle configuration.
+
+    Returns
+    -------
+    str or None
+        The shared molecular representation, or ``None`` when it cannot be
+        established from the configuration.
+    """
+    representation = getattr(oracle, "mol_repr", None)
+    if representation is not None:
+        return str(representation)
+
+    sub_oracles = getattr(oracle, "sub_oracles", None)
+    if sub_oracles is None:
+        return None
+
+    representations = [
+        _extract_molecule_representation(sub_oracle) for sub_oracle in sub_oracles
+    ]
+    if not representations or any(item is None for item in representations):
+        return None
+    if len(set(representations)) != 1:
+        return None
+    return representations[0]
+
+
+def _encoder_molecule_representation(encoder: object) -> str | None:
+    """Return the representation declared by an encoder config.
+
+    Parameters
+    ----------
+    encoder : object
+        Parsed encoder configuration, if the surrogate declares one.
+
+    Returns
+    -------
+    str or None
+        Declared representation, or ``None`` when no representation is known.
+    """
+    if not isinstance(encoder, BaseModel):
+        return None
+    representation = getattr(encoder, "input_representation", None)
+    return representation if isinstance(representation, str) else None
+
+
+def _validate_component_compatibility(
+    *,
+    sampler: BaseModel,
+    surrogate: BaseModel,
+    acquisition: BaseModel,
+    oracle: BaseModel,
+) -> None:
+    """Reject parsed component combinations with incompatible contracts.
+
+    This validator handles only incompatibilities that are knowable from the
+    built-in configuration types. Candidate contents in pool files and opaque
+    custom GFlowNet environments remain runtime concerns.
+
+    Parameters
+    ----------
+    sampler : BaseModel
+        Parsed sampler configuration.
+    surrogate : BaseModel
+        Parsed surrogate configuration.
+    acquisition : BaseModel
+        Parsed acquisition configuration.
+    oracle : BaseModel
+        Parsed oracle configuration.
+
+    Raises
+    ------
+    ValueError
+        If a known sampler, surrogate, acquisition, or oracle contract is
+        incompatible with another configured component.
+    """
+    encoder = getattr(surrogate, "encoder", None)
+    encoder_representation = _encoder_molecule_representation(encoder)
+    oracle_representation = _extract_molecule_representation(oracle)
+
+    sampler_representation = getattr(sampler, "output_representation", None)
+    surrogate_representation = getattr(surrogate, "input_representation", None)
+
+    if sampler_representation == "smiles":
+        if encoder_representation == "selfies":
+            raise ValueError(
+                "S3GFNSampler generates canonical SMILES, but the configured "
+                "SelfiesTransformerEncoder expects SELFIES strings. Use "
+                "a SMILES encoder with S3-GFN or choose a "
+                "SELFIES-producing sampler."
+            )
+        if oracle_representation != "smiles":
+            configured = (
+                repr(oracle_representation)
+                if oracle_representation is not None
+                else "no consistent molecular representation"
+            )
+            raise ValueError(
+                "S3GFNSampler generates canonical SMILES and requires a "
+                "molecular oracle with mol_repr='smiles'; got "
+                f"{configured}."
+            )
+
+    if sampler_representation == "numeric":
+        if encoder_representation is not None:
+            raise ValueError(
+                f"{type(sampler).__name__} generates numeric candidates, but "
+                f"{type(encoder).__name__} expects "
+                f"{encoder_representation.upper()} strings."
+            )
+        if oracle_representation is not None:
+            raise ValueError(
+                f"{type(sampler).__name__} generates numeric candidates, but "
+                f"{type(oracle).__name__} expects molecular strings with "
+                f"mol_repr={oracle_representation!r}."
+            )
+
+    if encoder_representation is not None:
+        if oracle_representation is None:
+            raise ValueError(
+                f"{type(encoder).__name__} expects "
+                f"{encoder_representation.upper()} strings, but the configured "
+                f"{type(oracle).__name__} does not expose one consistent "
+                "molecular representation."
+            )
+        if oracle_representation != encoder_representation:
+            raise ValueError(
+                f"{type(encoder).__name__} expects "
+                f"{encoder_representation.upper()} strings, but the oracle is "
+                f"configured with mol_repr={oracle_representation!r}."
+            )
+
+    if surrogate_representation == "numeric" and (
+        sampler_representation == "smiles" or oracle_representation is not None
+    ):
+        raise ValueError(
+            "BoTorchGPSurrogateConfig expects numeric tensor inputs, but the "
+            "configured components use molecular strings. Use a molecular DKL "
+            "surrogate with an appropriate encoder."
+        )
+
+    if isinstance(acquisition, _BOTORCH_ACQUISITION_CONFIG_TYPES) and isinstance(
+        surrogate, DummyMeanSurrogateConfig
+    ):
+        raise ValueError(
+            f"{type(acquisition).__name__} requires a BoTorch-compatible "
+            "surrogate, but DummyMeanSurrogateConfig is not one."
+        )
