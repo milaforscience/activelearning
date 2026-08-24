@@ -1,8 +1,8 @@
-# **Molecule Discovery with SELFIES and xTB**
+# **Molecule Discovery with SMILES, SELFIES, and xTB**
 
 This tutorial assumes you are already comfortable with the previous tutorials: running experiments from YAML, composing logger overlays, interpreting multi-fidelity budgets, and configuring the GFlowNet sampler. We will focus on what changes when the search space is **molecules** rather than real-valued vectors.
 
-The molecule examples follow the same budget-constrained active-learning loop introduced earlier, but the candidate \(x\) is now a molecular string. The objective is a molecular property such as **electron affinity** (EA) or **ionisation potential** (IP) computed by [xTB](https://xtb-docs.readthedocs.io/en/latest/) (a family of tight-binding quantum-chemistry methods available as the open-source `xtb` program), and the sampler proposes SELFIES strings instead of points in a box.
+The molecule examples follow the same budget-constrained active-learning loop introduced earlier, but the candidate \(x\) is now a molecular string. The objective is a molecular property such as **electron affinity** (EA) or **ionisation potential** (IP) computed by [xTB](https://xtb-docs.readthedocs.io/en/latest/) (a family of tight-binding quantum-chemistry methods available as the open-source `xtb` program). The sampler can propose either SELFIES or canonical SMILES strings.
 
 !!! note "Reference"
     The molecule workflow mirrors the molecular discovery setting in [Hernandez-Garcia et al., 2023](https://arxiv.org/abs/2306.11715): multi-fidelity active learning over a structured molecular search space, with GFlowNets used to discover diverse high-scoring candidates under a limited oracle budget.
@@ -12,21 +12,21 @@ The molecule examples follow the same budget-constrained active-learning loop in
 At a high level, the framework models molecules as:
 
 ```text
-SELFIES string
-  -> tokenize into SELFIES tokens
+Molecular string (SELFIES or canonical SMILES)
+  -> tokenize into sequence tokens
   -> embed with a Transformer encoder
   -> fit a deep-kernel GP surrogate
   -> score candidate molecules with an acquisition function
-  -> sample candidates from a pool or a SELFIES GFlowNet environment
+  -> sample candidates from a pool, SELFIES GFlowNet, or S3-GFN environment
   -> query xTB for IP/EA at the requested fidelity
 ```
 
-The important distinction from Branin or Hartmann is that the input space is no longer a fixed-dimensional vector space. Instead, each molecule is a discrete structured object represented as a SELFIES string. The surrogate model operates on learned latent vectors derived from the SELFIES strings via the [`SelfiesTransformerEncoder`](../reference/activelearning/applications/molecules/selfies_transformer_encoder/#activelearning.applications.molecules.selfies_transformer_encoder.SelfiesTransformerEncoder), and the sampler generates new SELFIES strings either from a finite pool or by constructing them token by token in a GFlowNet environment. The oracle evaluates the molecular properties using xTB, which can be computationally expensive, hence the need for careful active learning and multi-fidelity strategies.
+The important distinction from Branin or Hartmann is that the input space is no longer a fixed-dimensional vector space. Each molecule is a discrete structured object represented by a molecular string. The representation-independent DKL surrogate operates on learned latent vectors from either the [`TransformerSequenceEncoder`](../reference/activelearning/surrogate/sequence/transformer_encoder/#activelearning.surrogate.sequence.transformer_encoder.TransformerSequenceEncoder) or a frozen Hugging Face encoder such as GP-MoLFormer. The oracle evaluates molecular properties using xTB, which can be computationally expensive, hence the need for careful active learning and multi-fidelity strategies.
 
 The repository includes five example molecule configs arranged as an incremental progression. They combine three kinds of building blocks:
 
-- **Sampler — pool file or SELFIES GFlowNet.** The [`PoolFileSampler`](../reference/activelearning/sampler/pool_file_sampler/#activelearning.sampler.pool_file_sampler.PoolFileSampler) draws candidate SELFIES strings from a pre-defined pool. The GFlowNet sampler constructs SELFIES strings token by token, training a policy to propose diverse, high-scoring molecule-fidelity pairs.
-- **Surrogate — Deep Kernel Learning (DKL).** Instead of a GP over raw input coordinates, DKL places a GP on *learned* latent representations. Here the [`SelfiesTransformerEncoder`](../reference/activelearning/applications/molecules/selfies_transformer_encoder/#activelearning.applications.molecules.selfies_transformer_encoder.SelfiesTransformerEncoder) encodes each SELFIES string into a fixed-size vector, and a [`SelfiesKernel`](../reference/activelearning/applications/molecules/selfies_kernel/#activelearning.applications.molecules.selfies_kernel.SelfiesKernel) wraps that encoder inside a GPyTorch kernel so the feature map is trained jointly with the GP. The two surrogate variants are [`ExactSelfiesDKLSurrogate`](../reference/activelearning/applications/molecules/dkl_surrogate/#activelearning.applications.molecules.dkl_surrogate.ExactSelfiesDKLSurrogate) (exact GP, suitable for smaller datasets) and [`VariationalSelfiesDKLSurrogate`](../reference/activelearning/applications/molecules/dkl_surrogate/#activelearning.applications.molecules.dkl_surrogate.VariationalSelfiesDKLSurrogate) (sparse variational GP, scales to larger candidate pools).
+- **Sampler — pool file, SELFIES GFlowNet, or S3-GFN.** The [`PoolFileSampler`](../reference/activelearning/sampler/pool_file_sampler/#activelearning.sampler.pool_file_sampler.PoolFileSampler) draws candidate strings from a pre-defined pool. GFlowNet samplers construct strings token by token, while S3-GFN emits canonical SMILES.
+- **Surrogate — Deep Kernel Learning (DKL).** Instead of a GP over raw input coordinates, DKL places a GP on *learned* latent representations. [`EncoderKernel`](../reference/activelearning/surrogate/dkl/kernel/#activelearning.surrogate.dkl.kernel.EncoderKernel) wraps the sequence encoder inside a GPyTorch kernel. The two generic surrogate variants are [`ExactDKLSurrogate`](../reference/activelearning/surrogate/dkl/exact/#activelearning.surrogate.dkl.exact.ExactDKLSurrogate) (exact GP, suitable for smaller datasets) and [`VariationalDKLSurrogate`](../reference/activelearning/surrogate/dkl/variational/#activelearning.surrogate.dkl.variational.VariationalDKLSurrogate) (sparse variational GP, scales to larger candidate pools).
 - **Acquisition — UCB and MF-MES.** [`UpperConfidenceBound`](../reference/activelearning/acquisition/botorch/botorch_analytic/#activelearning.acquisition.botorch.botorch_analytic.UpperConfidenceBound) (UCB) scores each candidate by its posterior mean plus a confidence-weighted uncertainty bonus — a simple and effective single-fidelity strategy. [`QMultiFidelityMaxValueEntropy`](../reference/activelearning/acquisition/botorch/botorch_multifidelity/#activelearning.acquisition.botorch.botorch_multifidelity.QMultiFidelityMaxValueEntropy) (MF-MES) generalises max-value entropy search to the multi-fidelity setting, scoring candidates by how much information they provide about the optimal high-fidelity value relative to their query cost.
 
 | Config | Sampler | Surrogate | Acquisition | Fidelity setting | Purpose |
@@ -36,9 +36,33 @@ The repository includes five example molecule configs arranged as an incremental
 | `config/molecules/gflownet_exact.yaml` | SELFIES GFlowNet | Exact SELFIES DKL | UCB | fixed fidelity `1` | Stage 3: swap the pool sampler for a GFlowNet |
 | `config/molecules/gflownet_exact_multi_fidelity.yaml` | SELFIES GFlowNet | Exact SELFIES DKL | MF-MES with cost utility | learned fidelity `1 / 2 / 3` | Stage 4: let the GFlowNet learn molecule-fidelity pairs |
 | `config/molecules/gflownet_variational_multi_fidelity.yaml` | SELFIES GFlowNet | Variational SELFIES DKL | MF-MES with cost utility | learned fidelity `1 / 2 / 3` | Stage 5: keep the MF GFlowNet and swap in the scalable variational surrogate |
+| `config/molecules/s3gfn_exact.yaml` | S3-GFN | Exact GP-MoLFormer SMILES DKL | UCB | fixed fidelity `1` | Canonical SMILES single-fidelity run |
+| `config/molecules/s3gfn_exact_multi_fidelity.yaml` | S3-GFN | Exact GP-MoLFormer SMILES DKL | MF-MES | learned fidelity `1 / 2 / 3` | Canonical SMILES multi-fidelity run |
 
 !!! note "Small defaults for fast checks"
     These examples are tuned to be runnable tutorial setups, not fully optimized molecule-discovery runs. The short command overrides below keep the active-learning budget small enough for a quick functional check, and the provided GFlowNet examples also use relatively short training schedules in the exact-surrogate stages so you can verify the full loop quickly. For better learning, increase both the oracle budget so the surrogate sees more observations and the GFlowNet optimization steps so the policy can better approximate reward-proportional sampling.
+
+## **S3-GFN with SMILES**
+
+S3-GFN emits canonical connected SMILES, so it can be paired directly with the
+frozen GP-MoLFormer encoder and the generic exact DKL surrogate. The repository
+provides single- and multi-fidelity examples:
+
+```sh
+uv run activelearning config/molecules/s3gfn_exact.yaml
+uv run activelearning config/molecules/s3gfn_exact_multi_fidelity.yaml
+```
+
+Both configurations require the molecules extra and an `xtb` executable on
+`PATH`. The sampler and surrogate deliberately repeat the Hugging Face model
+identifiers: S3-GFN fine-tunes its policy, while the surrogate keeps a frozen
+feature prior. They therefore load separate model instances and require
+additional memory.
+
+In the multi-fidelity example, S3-GFN chooses among fidelity levels `1`, `2`,
+and `3`; the oracle supplies their confidence values, and the DKL surrogate
+maps the configured `target_fidelity` to the corresponding continuous value
+used by BoTorch.
 
 ## **What are SELFIES?**
 
@@ -272,14 +296,14 @@ The main molecule-specific fields are:
 
 | Field | Meaning |
 |-------|---------|
-| `surrogate.encoder.max_mol_tokens` | Maximum number of molecular (SELFIES) tokens before special tokens. |
+| `surrogate.encoder.max_mol_tokens` | Total sequence positions, including special tokens and padding, for the configured molecular representation. |
 | `surrogate.encoder.latent_dim` | Size of the learned molecule embedding passed to the GP. |
 | `surrogate.is_multi_fidelity` | Whether to append fidelity to the surrogate features. |
 | `surrogate.target_fidelity` | Fidelity level used when MF acquisitions project candidates to the target objective. |
 | `sampler.candidate_pool_file` | SELFIES pool used by `PoolFileSampler`. |
 | `sampler.conf.env._target_` | GFlowNet environment class for generated SELFIES. |
 | `sampler.fidelities` | Fidelity levels available to the GFlowNet policy. `[1]` restricts the policy to fidelity 1 only (single-fidelity); `[1, 2, 3]` enables joint molecule-fidelity sampling (multi-fidelity). |
-| `surrogate.num_inducing` | Number of inducing points for the sparse variational GP in `VariationalSelfiesDKLSurrogate`. More inducing points improve approximation quality at higher compute cost. Only used by the variational surrogate. |
+| `surrogate.num_inducing` | Number of inducing points for the sparse variational GP in `VariationalDKLSurrogate`. More inducing points improve approximation quality at higher compute cost. Only used by the variational surrogate. |
 | `sampler.fidelity_action` | Where the fidelity choice appears in the trajectory; `"any"` lets the policy interleave fidelity selection with token actions. |
 | `acquisition.type` | `UpperConfidenceBound` in stages 1 and 3, or `QMultiFidelityLowerBoundMaxValueEntropy` in stages 2, 4, and 5. |
 | `acquisition.cost_aware_utility` | Cost model baked into the BoTorch multi-fidelity acquisition during `acquisition.update(...)`. In the GFlowNet multi-fidelity configs this makes the sampler reward proxy cost-aware before top-k selection. |

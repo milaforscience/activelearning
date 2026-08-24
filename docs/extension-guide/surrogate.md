@@ -37,20 +37,37 @@ Review the built-in surrogates as concrete examples before writing your own:
 
 Source: `src/activelearning/surrogate/`.
 
-## **Config model and registration**
+## **Config model and explicit union**
 
-Add a Pydantic config model in `src/activelearning/surrogate/config.py` and extend the `SurrogateConfig` union. See the existing models in that file as reference.
+Add a Pydantic config model in `src/activelearning/surrogate/config.py` and
+add it to the explicit `SurrogateConfig` discriminated union. The union is the
+single visible catalog of built-in surrogate configurations, which gives
+Pydantic, generated schemas, and static type checkers the complete set of
+supported discriminators.
 
 ```python
+from typing import Annotated, ClassVar, Literal, Union
+
+from pydantic import BaseModel, Field
+
 class MySurrogateConfig(BaseModel):
     type: Literal["MySurrogate"] = "MySurrogate"
+    input_representation: ClassVar[str | None] = "numeric"
     # your parameters here
 
     def build(self) -> Surrogate:
         return MySurrogate(...)
 
+
 SurrogateConfig = Annotated[
-    Union[..., MySurrogateConfig],
+    Union[
+        # Keep the existing built-in config classes here as well.
+        DummyMeanSurrogateConfig,
+        BoTorchGPSurrogateConfig,
+        ExactDKLSurrogateConfig,
+        VariationalDKLSurrogateConfig,
+        MySurrogateConfig,
+    ],
     Field(discriminator="type"),
 ]
 ```
@@ -61,6 +78,92 @@ Then in your YAML:
 surrogate:
   type: MySurrogate
 ```
+
+## **Adding a sequence encoder**
+
+A DKL surrogate works with any encoder that maps a raw input to a fixed-width
+latent feature vector. That input can be a molecular string, a protein
+sequence, a text prompt, or any other domain-specific sequence.
+
+```text
+raw values -> prepare_inputs() -> model-space tensor -> forward() -> latent features
+```
+
+The surrogate interacts with the encoder through this interface and does not
+need to know how tokenization works. For string inputs, a sequence encoder
+handles tokenization internally: `prepare_inputs()` converts strings to token
+IDs, and `forward()` maps those IDs to latent features.
+
+!!! note "Choose the smallest applicable abstraction"
+    Use [`LatentEncoder`](../reference/activelearning/surrogate/encoder/#activelearning.surrogate.encoder.LatentEncoder)
+    for numeric or already-prepared inputs. Subclass
+    [`SequenceEncoder`](../reference/activelearning/surrogate/sequence/base/#activelearning.surrogate.sequence.base.SequenceEncoder)
+    when raw values are strings that need tokenization.
+
+### **Implement the encoder**
+
+Every DKL encoder exposes a positive integer `latent_dim` and implements two
+methods: `prepare_inputs(values, *, device)`, which batches raw values into a
+tensor, and `forward(model_inputs)`, which returns features whose last
+dimension is `latent_dim`.
+
+For tokenized strings, subclass `SequenceEncoder` and give it a
+[`SequenceTokenizer`](../reference/activelearning/surrogate/sequence/tokenizer/#activelearning.surrogate.sequence.tokenizer.SequenceTokenizer).
+The tokenizer exposes the vocabulary and special-token IDs, converts strings
+through `batch_from_strings(strings, max_tokens, device)`, and returns a
+matching mask from `attention_mask_from_batch(token_batch)`. Note that
+`max_tokens` counts special tokens and padding, not just content tokens.
+
+Encoders built on a pretrained backbone should load their model in the
+application layer and reuse
+[`HuggingFaceSequenceEncoder`](../reference/activelearning/surrogate/sequence/huggingface_encoder/#activelearning.surrogate.sequence.huggingface_encoder.HuggingFaceSequenceEncoder),
+which already handles frozen-backbone extraction, pooling, projection, and
+caching.
+
+### **Add configuration in the owning application**
+
+The runtime contract lives in the core interface, but the concrete Pydantic
+config belongs to the application that composes the run. Each config needs a
+unique `type` discriminator and a `build()` method.
+
+Hugging Face models can subclass
+[`HuggingFaceEncoderConfig`](../reference/activelearning/surrogate/sequence/config/#activelearning.surrogate.sequence.config.HuggingFaceEncoderConfig),
+which already carries the shared loading and feature settings:
+
+```python
+from typing import ClassVar, Literal
+
+from activelearning.surrogate.sequence.config import HuggingFaceEncoderConfig
+
+
+class MySequenceEncoderConfig(HuggingFaceEncoderConfig):
+    type: Literal["MySequenceEncoder"] = "MySequenceEncoder"
+    # Optional metadata for application-level representation checks.
+    input_representation: ClassVar[str | None] = None
+
+    def _encoder_class(self) -> type[MySequenceEncoder]:
+        return MySequenceEncoder
+```
+
+Any other model type uses a plain `BaseModel` config that builds its tokenizer
+and encoder inside `build()`. Keep optional imports in the application layer,
+then add the config to that application's discriminated union. The built-in
+molecular workflow keeps its union in
+`activelearning.applications.molecules.config.EncoderConfig`, and other
+applications should do the same within their own package.
+
+Add an `input_representation` `ClassVar` such as `"smiles"` if the run needs
+representation checks. It is metadata for the composition layer rather than
+part of the encoder contract.
+
+### **Check the integration**
+
+Both DKL variants rely on this same contract: exact DKL calls the encoder
+inside `EncoderKernel`, while variational DKL calls it before the sparse GP
+head.
+
+Cover input preparation, both DKL variants, candidate prediction, and config
+parsing in tests, using fake components instead of downloaded model weights.
 
 ## **The `is_fitted()` contract**
 

@@ -29,7 +29,7 @@ nav = [
         {"Running Experiments" = "tutorials/running_experiments.md"},
         {"Branin Benchmark" = "tutorials/branin_benchmark.md"},
         {"Sampling using GFlowNets" = "tutorials/gflownet_sampler.md"},
-        {"Molecule Discovery with SELFIES and xTB" = "tutorials/molecule_discovery.md"},
+        {"Molecule Discovery with SMILES, SELFIES, and xTB" = "tutorials/molecule_discovery.md"},
     ]},
     {"Extension Guide" = [
         {"Overview" = "extension-guide/overview.md"},
