@@ -13,17 +13,16 @@ At a high level, the framework models molecules as:
 
 ```text
 Molecular string (SELFIES or canonical SMILES)
-  -> tokenize into sequence tokens
-  -> embed with a Transformer encoder
+  -> encode with a sequence model or molecular feature extractor
   -> fit a deep-kernel GP surrogate
   -> score candidate molecules with an acquisition function
   -> sample candidates from a pool, SELFIES GFlowNet, or S3-GFN environment
   -> query xTB for IP/EA at the requested fidelity
 ```
 
-The important distinction from Branin or Hartmann is that the input space is no longer a fixed-dimensional vector space. Each molecule is a discrete structured object represented by a molecular string. The representation-independent DKL surrogate operates on learned latent vectors from either the [`TransformerSequenceEncoder`](../reference/activelearning/surrogate/sequence/transformer_encoder/#activelearning.surrogate.sequence.transformer_encoder.TransformerSequenceEncoder) or a frozen Hugging Face encoder such as GP-MoLFormer. The oracle evaluates molecular properties using xTB, which can be computationally expensive, hence the need for careful active learning and multi-fidelity strategies.
+The important distinction from Branin or Hartmann is that the input space is no longer a fixed-dimensional vector space. Each molecule is a discrete structured object represented by a molecular string. The representation-independent DKL surrogate operates on learned latent vectors from either the [`TransformerSequenceEncoder`](../reference/activelearning/surrogate/sequence/transformer_encoder/#activelearning.surrogate.sequence.transformer_encoder.TransformerSequenceEncoder), a frozen Hugging Face encoder such as GP-MoLFormer, or the [`MiniMolSmilesEncoder`](../reference/activelearning/applications/molecules/minimol_encoder/#activelearning.applications.molecules.minimol_encoder.MiniMolSmilesEncoder). The oracle evaluates molecular properties using xTB, which can be computationally expensive, hence the need for careful active learning and multi-fidelity strategies.
 
-The repository includes five example molecule configs arranged as an incremental progression. They combine three kinds of building blocks:
+The repository includes several example molecule configs arranged as an incremental progression. They combine three kinds of building blocks:
 
 - **Sampler — pool file, SELFIES GFlowNet, or S3-GFN.** The [`PoolFileSampler`](../reference/activelearning/sampler/pool_file_sampler/#activelearning.sampler.pool_file_sampler.PoolFileSampler) draws candidate strings from a pre-defined pool. GFlowNet samplers construct strings token by token, while S3-GFN emits canonical SMILES.
 - **Surrogate — Deep Kernel Learning (DKL).** Instead of a GP over raw input coordinates, DKL places a GP on *learned* latent representations. [`EncoderKernel`](../reference/activelearning/surrogate/dkl/kernel/#activelearning.surrogate.dkl.kernel.EncoderKernel) wraps the sequence encoder inside a GPyTorch kernel. The two generic surrogate variants are [`ExactDKLSurrogate`](../reference/activelearning/surrogate/dkl/exact/#activelearning.surrogate.dkl.exact.ExactDKLSurrogate) (exact GP, suitable for smaller datasets) and [`VariationalDKLSurrogate`](../reference/activelearning/surrogate/dkl/variational/#activelearning.surrogate.dkl.variational.VariationalDKLSurrogate) (sparse variational GP, scales to larger candidate pools).
@@ -38,15 +37,18 @@ The repository includes five example molecule configs arranged as an incremental
 | `config/molecules/gflownet_variational_multi_fidelity.yaml` | SELFIES GFlowNet | Variational SELFIES DKL | MF-MES with cost utility | learned fidelity `1 / 2 / 3` | Stage 5: keep the MF GFlowNet and swap in the scalable variational surrogate |
 | `config/molecules/s3gfn_exact.yaml` | S3-GFN | Exact GP-MoLFormer SMILES DKL | UCB | fixed fidelity `1` | Canonical SMILES single-fidelity run |
 | `config/molecules/s3gfn_exact_multi_fidelity.yaml` | S3-GFN | Exact GP-MoLFormer SMILES DKL | MF-MES | learned fidelity `1 / 2 / 3` | Canonical SMILES multi-fidelity run |
+| `config/molecules/s3gfn_minimol_exact.yaml` | S3-GFN | Exact MiniMol SMILES DKL | UCB | fixed fidelity `1` | Canonical SMILES run with frozen graph fingerprints |
+| `config/molecules/s3gfn_minimol_variational_multi_fidelity.yaml` | S3-GFN | Variational MiniMol SMILES DKL | MF-MES | learned fidelity `1 / 2 / 3` | Canonical SMILES multi-fidelity run with a sparse GP head |
 
 !!! note "Small defaults for fast checks"
     These examples are tuned to be runnable tutorial setups, not fully optimized molecule-discovery runs. The short command overrides below keep the active-learning budget small enough for a quick functional check, and the provided GFlowNet examples also use relatively short training schedules in the exact-surrogate stages so you can verify the full loop quickly. For better learning, increase both the oracle budget so the surrogate sees more observations and the GFlowNet optimization steps so the policy can better approximate reward-proportional sampling.
 
 ## **S3-GFN with SMILES**
 
-S3-GFN emits canonical connected SMILES, so it can be paired directly with the
-frozen GP-MoLFormer encoder and the generic exact DKL surrogate. The repository
-provides single- and multi-fidelity examples:
+S3-GFN emits canonical connected SMILES, so it can be paired with any
+SMILES-compatible encoder. The sampler and surrogate are independent
+components: S3-GFN uses its GP-MoLFormer policy to generate candidates, while
+the DKL surrogate uses its configured encoder to represent them.
 
 ```sh
 uv run activelearning config/molecules/s3gfn_exact.yaml
@@ -59,10 +61,51 @@ identifiers: S3-GFN fine-tunes its policy, while the surrogate keeps a frozen
 feature prior. They therefore load separate model instances and require
 additional memory.
 
-In the multi-fidelity example, S3-GFN chooses among fidelity levels `1`, `2`,
-and `3`; the oracle supplies their confidence values, and the DKL surrogate
-maps the configured `target_fidelity` to the corresponding continuous value
-used by BoTorch.
+### **Choosing an encoder for DKL**
+
+An encoder maps each raw molecule to features that the GP can model. A common
+design for a pretrained or non-differentiable feature extractor is:
+
+```text
+canonical SMILES
+  -> feature extractor
+  -> fixed-width feature vector
+  -> trainable projection to latent_dim
+  -> GP surrogate
+```
+
+The feature extractor can be frozen while the projection is trained jointly
+with the GP. If the encoder itself is trainable, its parameters can be updated
+through the same path. This keeps the DKL implementation independent of how
+the molecular features are produced: a tokenizer-backed sequence model,
+fingerprint generator, or another domain-specific encoder can all implement
+the same encoder contract.
+
+MiniMol is one example of this pattern. It produces a frozen 512-dimensional
+fingerprint for each SMILES, and `MiniMolSmilesEncoder` projects it into the
+configured `latent_dim`. The exact and variational examples use the same
+encoder with different GP heads:
+
+```sh
+uv run activelearning config/molecules/s3gfn_minimol_exact.yaml
+uv run activelearning config/molecules/s3gfn_minimol_variational_multi_fidelity.yaml
+```
+
+The second configuration is multi-fidelity: S3-GFN chooses among fidelity
+levels `1`, `2`, and `3`, while the variational surrogate uses MF-MES and
+`target_fidelity: 3`. Its `num_inducing` setting controls the number of
+inducing points in the sparse GP. To use fine-tuned MiniMol weights, set the
+MiniMol-specific `checkpoint_path` option:
+
+```yaml
+surrogate:
+  encoder:
+    type: MiniMolSmilesEncoder
+    checkpoint_path: checkpoints/minimol_finetuned.pth
+```
+
+The checkpoint must contain either the predictor state dict directly or under
+a `state_dict` key, and must use the same MiniMol architecture.
 
 ## **What are SELFIES?**
 
@@ -296,17 +339,22 @@ The main molecule-specific fields are:
 
 | Field | Meaning |
 |-------|---------|
-| `surrogate.encoder.max_mol_tokens` | Total sequence positions, including special tokens and padding, for the configured molecular representation. |
-| `surrogate.encoder.latent_dim` | Size of the learned molecule embedding passed to the GP. |
+| `surrogate.encoder.max_mol_tokens` | Total sequence positions, including special tokens and padding, for sequence-based encoders that expose this setting. |
+| `surrogate.encoder.latent_dim` | Size of the representation passed to the GP after the encoder's projection or feature head. |
 | `surrogate.is_multi_fidelity` | Whether to append fidelity to the surrogate features. |
 | `surrogate.target_fidelity` | Fidelity level used when MF acquisitions project candidates to the target objective. |
+| `surrogate.num_inducing` | Number of inducing points for the sparse variational GP in `VariationalDKLSurrogate`. |
 | `sampler.candidate_pool_file` | SELFIES pool used by `PoolFileSampler`. |
 | `sampler.conf.env._target_` | GFlowNet environment class for generated SELFIES. |
 | `sampler.fidelities` | Fidelity levels available to the GFlowNet policy. `[1]` restricts the policy to fidelity 1 only (single-fidelity); `[1, 2, 3]` enables joint molecule-fidelity sampling (multi-fidelity). |
-| `surrogate.num_inducing` | Number of inducing points for the sparse variational GP in `VariationalDKLSurrogate`. More inducing points improve approximation quality at higher compute cost. Only used by the variational surrogate. |
 | `sampler.fidelity_action` | Where the fidelity choice appears in the trajectory; `"any"` lets the policy interleave fidelity selection with token actions. |
 | `acquisition.type` | `UpperConfidenceBound` in stages 1 and 3, or `QMultiFidelityLowerBoundMaxValueEntropy` in stages 2, 4, and 5. |
 | `acquisition.cost_aware_utility` | Cost model baked into the BoTorch multi-fidelity acquisition during `acquisition.update(...)`. In the GFlowNet multi-fidelity configs this makes the sampler reward proxy cost-aware before top-k selection. |
+
+Encoders may expose additional settings for their own feature-extraction
+backend. For example, MiniMol supports `batch_size`, `cache_size`, and
+`checkpoint_path`; these options are specific to `MiniMolSmilesEncoder`, not
+requirements of the DKL API.
 | `oracle.task` | `ea` for electron affinity or `ip` for ionisation potential. The active-learning loop maximises the objective, so IP runs should negate the physical value — set `oracle.task: ip` and the oracle returns `-IP`, which MES then maximises. |
 | `oracle.fidelity_costs` | Query costs used by the budget and the cost-aware utility. |
 | `oracle.num_conformers` | Global default for the number of RDKit conformers generated before the xTB geometry step. More conformers improve starting-geometry quality at the cost of additional RDKit time. |
@@ -324,5 +372,5 @@ You now have the same active-learning loop running on structured molecular strin
 - swap `oracle.task` between `ea` and `ip` and compare the selected molecules in Aim,
 - replace `config/data/molecules.txt` with a domain-specific SELFIES pool,
 - increase GFlowNet training steps once the short run works,
-- compare the five staged examples under the same total budget,
+- compare the staged examples under the same total budget,
 - or adapt the xTB oracle for a different computational chemistry target using the [Oracle extension guide](../extension-guide/oracle.md).

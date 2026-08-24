@@ -44,7 +44,11 @@ def _blocked_imports_prelude() -> str:
         _real_import = builtins.__import__
 
         def _blocked_import(name, globals=None, locals=None, fromlist=(), level=0):
-            if name.split(".", 1)[0] in {"selfies", "rdkit", "transformers"}:
+            if name.split(".", 1)[0] in {
+                "selfies",
+                "rdkit",
+                "transformers",
+            }:
                 raise ModuleNotFoundError(f"blocked optional dependency: {name}")
             return _real_import(name, globals, locals, fromlist, level)
 

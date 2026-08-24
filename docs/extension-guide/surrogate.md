@@ -52,7 +52,6 @@ from pydantic import BaseModel, Field
 
 class MySurrogateConfig(BaseModel):
     type: Literal["MySurrogate"] = "MySurrogate"
-    input_representation: ClassVar[str | None] = "numeric"
     # your parameters here
 
     def build(self) -> Surrogate:
@@ -96,9 +95,9 @@ IDs, and `forward()` maps those IDs to latent features.
 
 !!! note "Choose the smallest applicable abstraction"
     Use [`LatentEncoder`](../reference/activelearning/surrogate/encoder/#activelearning.surrogate.encoder.LatentEncoder)
-    for numeric or already-prepared inputs. Subclass
+    for numeric, already-prepared, or non-tokenizer feature inputs. Subclass
     [`SequenceEncoder`](../reference/activelearning/surrogate/sequence/base/#activelearning.surrogate.sequence.base.SequenceEncoder)
-    when raw values are strings that need tokenization.
+    when raw strings need tokenization.
 
 ### **Implement the encoder**
 
@@ -113,6 +112,11 @@ The tokenizer exposes the vocabulary and special-token IDs, converts strings
 through `batch_from_strings(strings, max_tokens, device)`, and returns a
 matching mask from `attention_mask_from_batch(token_batch)`. Note that
 `max_tokens` counts special tokens and padding, not just content tokens.
+
+Models that accept raw values directly, such as graph or fingerprint
+extractors, can implement `LatentEncoder` without a tokenizer. In that case,
+`prepare_inputs()` performs the model-specific extraction and `forward()`
+maps the resulting tensor to the latent features used by DKL.
 
 Encoders built on a pretrained backbone should load their model in the
 application layer and reuse

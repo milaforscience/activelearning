@@ -6,6 +6,7 @@ be shared by both DKL surrogate variants without circular imports.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Union
 
 from pydantic import BaseModel, Field
@@ -19,6 +20,9 @@ if TYPE_CHECKING:
     )
     from activelearning.surrogate.sequence.huggingface_encoder import (
         HuggingFaceSequenceEncoder,
+    )
+    from activelearning.applications.molecules.minimol_encoder import (
+        MiniMolSmilesEncoder,
     )
 
 
@@ -134,11 +138,64 @@ class MoLFormerSmilesEncoderConfig(HuggingFaceEncoderConfig):
         return MoLFormerSmilesEncoder
 
 
+class MiniMolSmilesEncoderConfig(BaseModel):
+    """Configuration for a frozen MiniMol SMILES fingerprint encoder.
+
+    MiniMol produces fixed 512-dimensional graph fingerprints. The encoder
+    trains a projection from those fingerprints to ``latent_dim`` for DKL.
+
+    Parameters
+    ----------
+    batch_size : int, default=100
+        Maximum number of SMILES processed by MiniMol per extraction batch.
+    latent_dim : int, default=32
+        Width of the projected latent representation.
+    cache_size : int, default=4096
+        Maximum number of fingerprints retained in the encoder cache. Set to
+        zero to disable caching.
+    checkpoint_path : Path, optional
+        Optional predictor state-dict checkpoint loaded over MiniMol's bundled
+        pretrained weights.
+    """
+
+    type: Literal["MiniMolSmilesEncoder"] = "MiniMolSmilesEncoder"
+    input_representation: ClassVar[str] = "smiles"
+    batch_size: int = Field(default=100, ge=1)
+    latent_dim: int = Field(default=32, ge=1)
+    cache_size: int = Field(default=4096, ge=0)
+    checkpoint_path: Path | None = None
+
+    def build(self) -> "MiniMolSmilesEncoder":
+        """Instantiate the configured MiniMol SMILES encoder.
+
+        Returns
+        -------
+        MiniMolSmilesEncoder
+            Frozen MiniMol fingerprint extraction with a trainable projection.
+
+        Raises
+        ------
+        ImportError
+            If the optional MiniMol dependency is not installed.
+        """
+        from activelearning.applications.molecules.minimol_encoder import (
+            MiniMolSmilesEncoder,
+        )
+
+        return MiniMolSmilesEncoder(
+            batch_size=self.batch_size,
+            latent_dim=self.latent_dim,
+            cache_size=self.cache_size,
+            checkpoint_path=self.checkpoint_path,
+        )
+
+
 EncoderConfig = Annotated[
     Union[
         SelfiesTransformerEncoderConfig,
         GPMoLFormerSmilesEncoderConfig,
         MoLFormerSmilesEncoderConfig,
+        MiniMolSmilesEncoderConfig,
     ],
     Field(discriminator="type"),
 ]
