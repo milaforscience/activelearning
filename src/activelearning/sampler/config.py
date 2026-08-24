@@ -1,12 +1,12 @@
 """Pydantic models of samplers.
 
 Changes in the interface of existing samplers should be reflected in this
-configuration. New samplers should define their corresponding pydantic model here and
-be added to ``SamplerConfig``.
+configuration. New built-in samplers should be added to the explicit
+discriminated union below.
 """
 
 from pathlib import Path
-from typing import Annotated, Any, Literal, Union, overload
+from typing import Annotated, Any, ClassVar, Literal, Union, overload
 
 from pydantic import BaseModel, Field, PositiveFloat, StrictInt
 
@@ -48,13 +48,36 @@ def _resolve_fidelities(
 
 
 class HypercubeSamplerConfig(BaseModel):
+    """Configuration for uniform or Latin-hypercube numeric sampling.
+
+    Parameters
+    ----------
+    bounds : list[tuple[float, float]]
+        Inclusive lower and upper bounds for each numeric dimension.
+    num_samples : int
+        Number of candidates to generate.
+    fidelities : list[int] or dict[int, float] or None
+        Fidelity levels or cost mapping used to assign candidate fidelities.
+        ``None`` selects the default single fidelity.
+    point_strategy : {"uniform", "lhs"}
+        Numeric point-generation strategy.
+    """
+
     type: Literal["HypercubeSampler"] = "HypercubeSampler"
+    output_representation: ClassVar[str] = "numeric"
     bounds: list[tuple[float, float]]
     num_samples: int = Field(gt=0)
     fidelities: _Fidelities = None
     point_strategy: Literal["uniform", "lhs"] = "uniform"
 
     def build(self) -> Sampler:
+        """Build the configured numeric sampler.
+
+        Returns
+        -------
+        Sampler
+            A configured :class:`~activelearning.sampler.hypercube_sampler.HypercubeSampler`.
+        """
         return HypercubeSampler(
             bounds=self.bounds,
             num_samples=self.num_samples,
@@ -64,7 +87,26 @@ class HypercubeSamplerConfig(BaseModel):
 
 
 class ExactGridSamplerConfig(BaseModel):
+    """Configuration for exhaustive or acquisition-guided grid sampling.
+
+    Parameters
+    ----------
+    bounds : list[tuple[float, float]]
+        Inclusive lower and upper bounds for each numeric dimension.
+    points_per_dimension : list[int]
+        Number of grid points for each dimension.
+    fidelities : list[int] or dict[int, float] or None
+        Fidelity levels or cost mapping used to assign candidate fidelities.
+    num_samples : int, optional
+        Maximum number of candidates returned per sampling call.
+    use_acquisition_scores : bool
+        Whether to rank grid points with acquisition scores.
+    with_replacement : bool
+        Whether previously selected points may be sampled again.
+    """
+
     type: Literal["ExactGridSampler"] = "ExactGridSampler"
+    output_representation: ClassVar[str] = "numeric"
     bounds: list[tuple[float, float]]
     points_per_dimension: list[int]
     fidelities: _Fidelities = None
@@ -73,6 +115,13 @@ class ExactGridSamplerConfig(BaseModel):
     with_replacement: bool = False
 
     def build(self) -> Sampler:
+        """Build the configured grid sampler.
+
+        Returns
+        -------
+        Sampler
+            A configured :class:`~activelearning.sampler.exact_grid_sampler.ExactGridSampler`.
+        """
         return ExactGridSampler(
             bounds=self.bounds,
             points_per_dimension=self.points_per_dimension,
@@ -100,11 +149,25 @@ class PoolFileSamplerConfig(BaseModel):
     """
 
     type: Literal["PoolFileSampler"] = "PoolFileSampler"
+    output_representation: ClassVar[str | None] = None
     candidate_pool_file: Path
     num_samples: int = Field(gt=0)
     fidelities: _Fidelities = None
 
     def build(self, runtime=None) -> Sampler:
+        """Build the configured pool-file sampler.
+
+        Parameters
+        ----------
+        runtime : object, optional
+            Runtime context accepted by the sampler configuration interface.
+            The pool-file sampler does not use it.
+
+        Returns
+        -------
+        Sampler
+            A configured :class:`~activelearning.sampler.pool_file_sampler.PoolFileSampler`.
+        """
         return PoolFileSampler(
             candidate_pool_file=self.candidate_pool_file,
             num_samples=self.num_samples,
@@ -146,6 +209,7 @@ class GFlowNetSamplerConfig(BaseModel):
     """
 
     type: Literal["GFlowNetSampler"] = "GFlowNetSampler"
+    output_representation: ClassVar[str | None] = None
     n_samples: int = Field(gt=0)
     fidelities: _FidelityLevels | None = None
     fidelity_action: _FidelityAction = "any"
@@ -153,6 +217,13 @@ class GFlowNetSamplerConfig(BaseModel):
     conf: dict[str, Any] | None = None
 
     def build(self) -> Sampler:
+        """Build the configured GFlowNet sampler.
+
+        Returns
+        -------
+        Sampler
+            A configured :class:`~activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler`.
+        """
         return GFlowNetSampler(
             n_samples=self.n_samples,
             conf=compose_gflownet_conf(conf_overrides=self.conf, log_dir=self.log_dir),
@@ -182,6 +253,13 @@ class GFlowNetGridSamplerConfig(GFlowNetSamplerConfig):
     domain_bounds: list[list[float]] | None = None
 
     def build(self) -> Sampler:
+        """Build the configured grid-specialized GFlowNet sampler.
+
+        Returns
+        -------
+        Sampler
+            A configured :class:`~activelearning.sampler.gflownet.grid_sampler.GFlowNetGridSampler`.
+        """
         return GFlowNetGridSampler(
             n_samples=self.n_samples,
             conf=compose_gflownet_conf(conf_overrides=self.conf, log_dir=self.log_dir),
@@ -201,9 +279,57 @@ class S3GFNSamplerConfig(BaseModel):
     this sampler. ``trust_remote_code`` defaults to ``True`` because the
     default GP-MoLFormer checkpoint requires custom Hugging Face model code;
     only enable it for trusted model repositories.
+
+    Parameters
+    ----------
+    n_samples : int
+    Number of candidates generated per sampling call.
+    fidelities : list[int], optional
+    Fidelity levels assigned to generated candidates.
+    model_name_or_path : str, default="ibm-research/GP-MoLFormer-Uniq"
+    Hugging Face policy model identifier or local path.
+    tokenizer_name_or_path : str, default="ibm-research/MoLFormer-XL-both-10pct"
+    Hugging Face tokenizer identifier or local path.
+    trust_remote_code : bool, default=True
+    Whether loading may execute repository-provided model code.
+    deterministic_eval : bool, optional
+    Whether policy evaluation uses deterministic random features.
+    cache_dir : str, optional
+    Directory for Hugging Face model and tokenizer files.
+    max_length : int, default=140
+    Maximum generated sequence length.
+    batch_size : int, default=64
+    Number of trajectories evaluated per batch.
+    replay_batch_size : int, default=64
+    Replay-buffer batch size used during training.
+    n_train_steps : int, default=5000
+    Number of policy training steps.
+    num_warmup_steps : int, default=100
+    Number of learning-rate warm-up steps.
+    learning_rate : float, default=1e-4
+    Policy learning rate.
+    log_z_learning_rate : float, default=1e-3
+    Learning rate for the log-partition estimate.
+    beta : float, default=50.0
+    GFlowNet loss temperature parameter.
+    aux_coefficient : float, default=1e-4
+    Weight of the auxiliary loss.
+    buffer_size : int, default=6400
+    Maximum replay-buffer size.
+    sa_threshold : float, default=4.0
+    Synthetic-accessibility threshold.
+    sampling_temperature : float, default=1.0
+    Sampling temperature applied during generation.
+    gradient_clip_norm : float, default=10.0
+    Maximum gradient norm during policy training.
+    max_generation_attempts : int, optional
+    Maximum attempts to produce the requested number of valid candidates.
+    seed : int, default=42
+    Random seed for policy training and sampling.
     """
 
     type: Literal["S3GFNSampler"] = "S3GFNSampler"
+    output_representation: ClassVar[str] = "smiles"
     n_samples: int = Field(gt=0)
     fidelities: _FidelityLevels | None = None
     model_name_or_path: str = Field(
@@ -237,7 +363,18 @@ class S3GFNSamplerConfig(BaseModel):
     seed: int = Field(default=42, ge=0)
 
     def build(self) -> Sampler:
-        """Build the sampler lazily so base installs need no Transformers."""
+        """Build the sampler lazily so base installs need no Transformers.
+
+        Returns
+        -------
+        Sampler
+            A configured :class:`~activelearning.sampler.s3gfn.sampler.S3GFNSampler`.
+
+        Raises
+        ------
+        ImportError
+            If the optional molecules dependencies are not installed.
+        """
         from activelearning.sampler.s3gfn.sampler import S3GFNSampler
 
         return S3GFNSampler(

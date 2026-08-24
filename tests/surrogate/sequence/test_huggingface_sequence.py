@@ -9,19 +9,19 @@ from activelearning.applications.molecules.config import (
     GPMoLFormerSmilesEncoderConfig,
     MoLFormerSmilesEncoderConfig,
 )
-from activelearning.applications.molecules.input_adapter import (
-    MoleculeStringInputAdapter,
-)
 from activelearning.surrogate.dkl.config import DKLTrainingConfig
-from activelearning.surrogate.dkl.dkl_surrogate import (
+from activelearning.surrogate.dkl import (
     ExactDKLSurrogate,
     VariationalDKLSurrogate,
 )
-from activelearning.surrogate.sequence.huggingface import HuggingFaceTokenizer
+from activelearning.surrogate.sequence.huggingface_tokenizer import HuggingFaceTokenizer
 from activelearning.surrogate.sequence.huggingface_encoder import (
     HuggingFaceSequenceEncoder,
 )
 from activelearning.surrogate.sequence.tokenizer import SequenceTokenizer
+from activelearning.surrogate.sequence.transformer_encoder import (
+    TransformerSequenceEncoder,
+)
 from activelearning.applications.molecules.smiles_transformer_encoder import (
     GPMoLFormerSmilesEncoder,
     MoLFormerSmilesEncoder,
@@ -65,12 +65,35 @@ class _FakeHuggingFaceTokenizer:
         return self.vocab_size
 
 
+class _FakePadEqualsEosTokenizer(_FakeHuggingFaceTokenizer):
+    pad_token_id = 2
+    eos_token_id = 2
+
+    def __call__(self, strings, **kwargs):
+        encoded = super().__call__(strings, **kwargs)
+        attention_masks = []
+        for string in strings:
+            valid_length = min(len(string) + 2, kwargs["max_length"])
+            attention_masks.append(
+                [1] * valid_length + [0] * (kwargs["max_length"] - valid_length)
+            )
+        encoded["attention_mask"] = torch.tensor(attention_masks, dtype=torch.long)
+        return encoded
+
+
+class _FakeNoMaskTokenizer(_FakeHuggingFaceTokenizer):
+    mask_token_id = None
+    unk_token_id = None
+
+
 class _FakeGPMoLFormerBase(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.scale = nn.Parameter(torch.ones(()))
+        self.forward_calls = 0
 
     def forward(self, input_ids, attention_mask, use_cache, return_dict):
+        self.forward_calls += 1
         assert use_cache is False
         assert return_dict is True
         hidden = input_ids.to(dtype=self.scale.dtype).unsqueeze(-1)
@@ -97,8 +120,10 @@ class _FakeMoLFormerModel(nn.Module):
         super().__init__()
         self.config = type("FakeConfig", (), {"hidden_size": 4})()
         self.scale = nn.Parameter(torch.ones(()))
+        self.forward_calls = 0
 
     def forward(self, input_ids, attention_mask, return_dict):
+        self.forward_calls += 1
         assert return_dict is True
         hidden = input_ids.to(dtype=self.scale.dtype).unsqueeze(-1)
         hidden = hidden * self.scale
@@ -155,6 +180,34 @@ def test_huggingface_tokenizer_uses_pretrained_ids() -> None:
     assert tokenizer.vocab_size == 12
 
 
+def test_huggingface_tokenizer_preserves_attention_mask_when_pad_equals_eos() -> None:
+    """The EOS position must remain attended when it shares the pad ID."""
+    tokenizer = HuggingFaceTokenizer(tokenizer=_FakePadEqualsEosTokenizer())
+    encoded = tokenizer.batch_from_strings(["C"], max_tokens=8)
+
+    attention_mask = tokenizer.attention_mask_from_batch(encoded)
+
+    assert attention_mask.tolist() == [[1, 1, 1, 0, 0, 0, 0, 0]]
+
+
+def test_mlm_rejects_tokenizer_without_distinct_mask_token() -> None:
+    """MLM must not silently replace tokens with padding."""
+    tokenizer = HuggingFaceTokenizer(tokenizer=_FakeNoMaskTokenizer())
+    encoder = TransformerSequenceEncoder(
+        tokenizer=tokenizer,
+        max_tokens=4,
+        embed_dim=4,
+        ff_dim=8,
+        num_heads=2,
+        num_layers=1,
+        latent_dim=2,
+    )
+
+    assert tokenizer.mask_idx is None
+    with pytest.raises(ValueError, match="mask token"):
+        encoder.mlm_loss(torch.tensor([[2, 5, 1, 2]]), mask_ratio=1.0)
+
+
 def test_gpmolformer_encoder_freezes_backbone_and_trains_projection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -180,6 +233,74 @@ def test_gpmolformer_encoder_freezes_backbone_and_trains_projection(
     )
     assert encoder.projection.weight.grad is not None
     assert encoder.backbone.base.scale.grad is None
+
+
+def test_huggingface_encoder_caches_frozen_backbone_features(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Repeated token batches should not rerun a frozen backbone."""
+    _patch_transformers(monkeypatch)
+    encoder = GPMoLFormerSmilesEncoder(
+        model_name_or_path="model",
+        tokenizer_name_or_path="tokenizer",
+        max_mol_tokens=8,
+        latent_dim=2,
+        trust_remote_code=True,
+    )
+    token_batch = encoder.tokenizer.batch_from_strings(["C[Si]"], max_tokens=8)
+
+    first = encoder(token_batch)
+    second = encoder(token_batch)
+
+    torch.testing.assert_close(first, second)
+    assert encoder.backbone.base.forward_calls == 1
+
+
+def test_huggingface_encoder_cache_opt_out_matches_cached_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Disabling the cache must preserve the encoder's numerical result."""
+    _patch_transformers(monkeypatch)
+    encoder = GPMoLFormerSmilesEncoder(
+        model_name_or_path="model",
+        tokenizer_name_or_path="tokenizer",
+        max_mol_tokens=8,
+        latent_dim=2,
+        trust_remote_code=True,
+    )
+    token_batch = encoder.tokenizer.batch_from_strings(["C[Si]"], max_tokens=8)
+
+    cached = encoder(token_batch)
+    encoder.cache_size = 0
+    uncached = encoder(token_batch)
+
+    torch.testing.assert_close(cached, uncached)
+    assert encoder.backbone.base.forward_calls == 2
+
+
+def test_huggingface_encoder_reprojects_cached_features_after_update(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Updating the trainable projection must affect cached-backbone outputs."""
+    _patch_transformers(monkeypatch)
+    encoder = GPMoLFormerSmilesEncoder(
+        model_name_or_path="model",
+        tokenizer_name_or_path="tokenizer",
+        max_mol_tokens=8,
+        latent_dim=2,
+        trust_remote_code=True,
+    )
+    token_batch = encoder.tokenizer.batch_from_strings(["C[Si]"], max_tokens=8)
+    optimizer = torch.optim.SGD(encoder.projection.parameters(), lr=0.1)
+
+    first = encoder(token_batch)
+    first.sum().backward()
+    optimizer.step()
+    optimizer.zero_grad()
+    second = encoder(token_batch)
+
+    assert not torch.equal(first, second)
+    assert encoder.backbone.base.forward_calls == 1
 
 
 def test_gpmolformer_encoder_defaults_to_last_non_padding_pooling(
@@ -343,7 +464,6 @@ def test_gpmolformer_encoder_works_with_exact_dkl_without_mlm(
     backbone_before = encoder.backbone.base.scale.detach().clone()
     surrogate = ExactDKLSurrogate(
         encoder=encoder,
-        input_adapter=MoleculeStringInputAdapter(encoder.tokenizer, encoder.max_tokens),
         training_params=DKLTrainingConfig(
             epochs=1,
             pretrain_epochs=2,
@@ -381,7 +501,6 @@ def test_gpmolformer_encoder_works_with_variational_dkl_without_mlm(
     backbone_before = encoder.backbone.base.scale.detach().clone()
     surrogate = VariationalDKLSurrogate(
         encoder=encoder,
-        input_adapter=MoleculeStringInputAdapter(encoder.tokenizer, encoder.max_tokens),
         training_params=DKLTrainingConfig(
             epochs=1,
             pretrain_epochs=2,

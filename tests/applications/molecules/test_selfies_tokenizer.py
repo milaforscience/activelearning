@@ -128,14 +128,14 @@ class TestSelfiesTokenizer:
 
     def test_batch_from_selfies_shape(self, tokenizer: SelfiesTokenizer):
         batch = tokenizer.batch_from_selfies([BENZENE, ALANINE], max_mol_tokens=64)
-        assert batch.shape == (2, 66)  # 64 + 2
+        assert batch.shape == (2, 64)
         assert batch.dtype == torch.long
 
     def test_batch_from_selfies_mixed_short_and_long_sequences(
         self, tokenizer: SelfiesTokenizer
     ) -> None:
         batch = tokenizer.batch_from_selfies([BENZENE, LONG_SELFIES], max_mol_tokens=16)
-        assert batch.shape == (2, 18)
+        assert batch.shape == (2, 16)
         assert batch.dtype == torch.long
 
     @pytest.mark.parametrize(
@@ -158,7 +158,7 @@ class TestSelfiesTokenizer:
         assert int(row[eos_index]) == tokenizer.eos_idx
         assert torch.all(row[eos_index + 1 :] == tokenizer.padding_idx)
         assert int((row == tokenizer.padding_idx).sum().item()) == (
-            max_mol_tokens - real_token_count
+            max_mol_tokens - real_token_count - 2
         )
 
     def test_batch_from_selfies_device(self, tokenizer: SelfiesTokenizer):

@@ -7,12 +7,9 @@ import torch
 from activelearning.applications.molecules.config import (
     SelfiesTransformerEncoderConfig,
 )
-from activelearning.applications.molecules.input_adapter import (
-    MoleculeStringInputAdapter,
-)
 from activelearning.surrogate.dkl.config import DKLTrainingConfig
 from activelearning.surrogate.dkl.kernel import EncoderKernel
-from activelearning.surrogate.dkl.dkl_surrogate import (
+from activelearning.surrogate.dkl import (
     DeepKernelSurrogate,
     ExactDKLSurrogate,
     VariationalDKLSurrogate,
@@ -61,13 +58,6 @@ def _make_mf_candidates(
     return [Candidate(x=s, fidelity=f) for s, f in zip(selfies_strings, fidelities)]
 
 
-def _adapter(encoder: torch.nn.Module) -> MoleculeStringInputAdapter:
-    return MoleculeStringInputAdapter(
-        tokenizer=encoder.tokenizer,
-        max_tokens=encoder.max_tokens,
-    )
-
-
 # ---------------------------------------------------------------------------
 # ExactDKLSurrogate
 # ---------------------------------------------------------------------------
@@ -78,7 +68,6 @@ def exact_surrogate() -> ExactDKLSurrogate:
     encoder = ENCODER_CFG.build()
     return ExactDKLSurrogate(
         encoder=encoder,
-        input_adapter=_adapter(encoder),
         training_params=TRAINING,
     )
 
@@ -88,7 +77,6 @@ def exact_mf_surrogate() -> ExactDKLSurrogate:
     encoder = ENCODER_CFG.build()
     surrogate = ExactDKLSurrogate(
         encoder=encoder,
-        input_adapter=_adapter(encoder),
         training_params=TRAINING,
         is_multi_fidelity=True,
         target_fidelity=3,
@@ -106,12 +94,10 @@ def molecule_dkl_surrogate(
     if request.param == "exact":
         return ExactDKLSurrogate(
             encoder=encoder,
-            input_adapter=_adapter(encoder),
             training_params=TRAINING,
         )
     return VariationalDKLSurrogate(
         encoder=encoder,
-        input_adapter=_adapter(encoder),
         training_params=TRAINING,
         num_inducing=8,
     )
@@ -214,7 +200,6 @@ class TestExactDKLSurrogate:
         encoder = ENCODER_CFG.build()
         surrogate = ExactDKLSurrogate(
             encoder=encoder,
-            input_adapter=_adapter(encoder),
             training_params=TRAINING,
             is_multi_fidelity=True,
             target_fidelity=3,
@@ -250,7 +235,6 @@ def var_surrogate() -> VariationalDKLSurrogate:
     encoder = ENCODER_CFG.build()
     return VariationalDKLSurrogate(
         encoder=encoder,
-        input_adapter=_adapter(encoder),
         training_params=TRAINING,
         num_inducing=8,
     )
@@ -261,7 +245,6 @@ def var_mf_surrogate() -> VariationalDKLSurrogate:
     encoder = ENCODER_CFG.build()
     surrogate = VariationalDKLSurrogate(
         encoder=encoder,
-        input_adapter=_adapter(encoder),
         training_params=TRAINING,
         num_inducing=8,
         is_multi_fidelity=True,
@@ -335,7 +318,7 @@ class TestVariationalDKLSurrogate:
         self, var_surrogate: VariationalDKLSurrogate
     ):
         """get_model() must return the BoTorch-compatible adapter after fitting."""
-        from activelearning.surrogate.dkl.dkl_surrogate import (
+        from activelearning.surrogate.dkl.variational import (
             _VariationalBoTorchAdapter,
         )
 
@@ -605,6 +588,41 @@ class TestEncoderKernelBatchDims:
         result = kernel(x, x).evaluate()
         assert result.shape[0] == 2  # no shape error
 
+    def test_kernel_diagonal_without_fidelity(self):
+        """Kernel diagonal must match the dense covariance diagonal."""
+        import gpytorch
+
+        encoder = ENCODER_CFG.build()
+        kernel = EncoderKernel(
+            encoder,
+            gpytorch.kernels.RBFKernel(),
+            include_fidelity=False,
+        )
+        x = torch.zeros(3, encoder.max_seq_len, dtype=torch.float64)
+
+        diagonal = kernel(x, x, diag=True).to_dense()
+        dense_diagonal = kernel(x, x).to_dense().diagonal()
+
+        torch.testing.assert_close(diagonal, dense_diagonal)
+
+    def test_kernel_diagonal_with_fidelity(self):
+        """Kernel diagonal must include the fidelity coordinate."""
+        import gpytorch
+
+        encoder = ENCODER_CFG.build()
+        kernel = EncoderKernel(
+            encoder,
+            gpytorch.kernels.RBFKernel(ard_num_dims=encoder.latent_dim + 1),
+            include_fidelity=True,
+        )
+        x = torch.zeros(3, encoder.max_seq_len + 1, dtype=torch.float64)
+        x[:, -1] = 1.0
+
+        diagonal = kernel(x, x, diag=True).to_dense()
+        dense_diagonal = kernel(x, x).to_dense().diagonal()
+
+        torch.testing.assert_close(diagonal, dense_diagonal)
+
 
 # ---------------------------------------------------------------------------
 # Config round-trip
@@ -613,16 +631,14 @@ class TestEncoderKernelBatchDims:
 
 class TestDKLSurrogateConfigs:
     def test_exact_config_builds(self):
-        from activelearning.applications.molecules.config import (
-            ExactDKLSurrogateConfig,
-        )
+        from activelearning.surrogate.dkl.config import ExactDKLSurrogateConfig
 
         cfg = ExactDKLSurrogateConfig(encoder=ENCODER_CFG)
         surrogate = cfg.build()
         assert isinstance(surrogate, ExactDKLSurrogate)
 
     def test_variational_config_builds(self):
-        from activelearning.applications.molecules.config import (
+        from activelearning.surrogate.dkl.config import (
             VariationalDKLSurrogateConfig,
         )
 
@@ -632,9 +648,7 @@ class TestDKLSurrogateConfigs:
 
     def test_standalone_multi_fidelity_config_requires_target_on_build(self):
         """Top-level derivation is unavailable when a DKL config is built alone."""
-        from activelearning.applications.molecules.config import (
-            ExactDKLSurrogateConfig,
-        )
+        from activelearning.surrogate.dkl.config import ExactDKLSurrogateConfig
 
         cfg = ExactDKLSurrogateConfig(
             encoder=ENCODER_CFG,
@@ -740,7 +754,6 @@ class TestExactSurrogatePredictionCorrectness:
         encoder = ENCODER_CFG.build()
         surrogate = ExactDKLSurrogate(
             encoder=encoder,
-            input_adapter=_adapter(encoder),
             training_params=self.ORDERING_TRAINING,
         )
         training_selfies = [BENZENE, ALANINE, ETHANOL]

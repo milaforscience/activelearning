@@ -39,6 +39,14 @@ class SelfiesTokenizer(SequenceTokenizer):
     """
 
     def __init__(self, selfies_vocab: Sequence[str] = SELFIES_VOCAB_SMALL) -> None:
+        """Initialize lookup tables and special-token IDs for SELFIES.
+
+        Parameters
+        ----------
+        selfies_vocab : Sequence[str], default=SELFIES_VOCAB_SMALL
+            Ordered alphabet used to encode SELFIES labels before special
+            tokens are added.
+        """
         # Base vocabulary used by sf.selfies_to_encoding
         self.base_vocab = list(selfies_vocab) + ["[nop]", "[EOS]"]
         self.base_lookup: dict[str, int] = {
@@ -68,7 +76,13 @@ class SelfiesTokenizer(SequenceTokenizer):
 
     @property
     def vocab_size(self) -> int:
-        """Total vocabulary size including special tokens."""
+        """Return the total vocabulary size, including special tokens.
+
+        Returns
+        -------
+        int
+            Number of token IDs in the full vocabulary.
+        """
         return len(self.full_vocab)
 
     def encode_selfies(self, selfies_string: str, max_mol_tokens: int) -> Tensor:
@@ -121,7 +135,8 @@ class SelfiesTokenizer(SequenceTokenizer):
         """
         if raw_batch.ndim != 2:
             raise ValueError(
-                f"raw_batch must be 2-D (B, seq_len), got shape {tuple(raw_batch.shape)}"
+                "raw_batch must be 2-D (B, seq_len), got shape "
+                f"{tuple(raw_batch.shape)}"
             )
 
         batch = raw_batch.clone().long()
@@ -167,16 +182,15 @@ class SelfiesTokenizer(SequenceTokenizer):
         selfies_list : Sequence[str]
             SELFIES strings to tokenize.
         max_mol_tokens : int
-            Maximum number of molecular tokens per sequence, not counting the
-            ``[CLS]`` and ``[EOS]`` special tokens added by
-            :meth:`transform_batch`.
+            Total number of token positions per sequence, including the
+            ``[CLS]`` and ``[EOS]`` special tokens.
         device : torch.device, optional
             Target device for the output tensor.
 
         Returns
         -------
         Tensor
-            Shape ``(len(selfies_list), max_mol_tokens + 2)`` of dtype ``torch.long``.
+            Shape ``(len(selfies_list), max_mol_tokens)`` of dtype ``torch.long``.
         """
         return self.batch_from_strings(
             selfies_list,
@@ -190,12 +204,63 @@ class SelfiesTokenizer(SequenceTokenizer):
         max_tokens: int,
         device: Optional[torch.device] = None,
     ) -> Tensor:
-        """Encode and transform a batch through the generic tokenizer interface."""
+        """Encode and transform strings through the generic tokenizer interface.
+
+        Parameters
+        ----------
+        strings : Sequence[str]
+            SELFIES strings to encode in input order.
+        max_tokens : int
+            Total number of output positions, including ``[CLS]``, ``[EOS]``,
+            and padding.
+        device : torch.device, optional
+            Device for the returned tensor.
+
+        Returns
+        -------
+        Tensor
+            ``torch.long`` tensor of shape ``(len(strings), max_tokens)``.
+
+        Raises
+        ------
+        ValueError
+            If ``max_tokens`` is smaller than two.
+        """
+        if max_tokens < 2:
+            raise ValueError("max_tokens must be at least two.")
+        if not strings:
+            return torch.empty((0, max_tokens), dtype=torch.long, device=device)
         raw = torch.stack(
-            [self.encode_selfies(string, max_tokens) for string in strings],
+            [self.encode_selfies(string, max_tokens - 2) for string in strings],
             dim=0,
         )
         batch = self.transform_batch(raw)
         if device is not None:
             batch = batch.to(device)
         return batch
+
+    def attention_mask_from_batch(self, token_batch: Tensor) -> Tensor:
+        """Return one for every non-padding SELFIES token position.
+
+        Parameters
+        ----------
+        token_batch : Tensor
+            Two-dimensional token-ID tensor.
+
+        Returns
+        -------
+        Tensor
+            ``torch.long`` mask with one at non-padding positions and zero at
+            padding positions.
+
+        Raises
+        ------
+        ValueError
+            If ``token_batch`` is not two-dimensional.
+        """
+        if token_batch.ndim != 2:
+            raise ValueError(
+                "token_batch must be 2-D (B, seq_len), got shape "
+                f"{tuple(token_batch.shape)}"
+            )
+        return token_batch.ne(self.padding_idx).long()

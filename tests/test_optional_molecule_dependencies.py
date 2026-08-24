@@ -102,6 +102,7 @@ def test_shared_surrogate_imports_stay_lazy_without_molecule_extras() -> None:
     script = _blocked_imports_prelude() + textwrap.dedent(
         """
         from activelearning.surrogate.dkl import ExactDKLSurrogate
+        from activelearning.surrogate.sequence.config import HuggingFaceEncoderConfig
         from activelearning.surrogate.sequence import (
             HuggingFaceSequenceEncoder,
             HuggingFaceTokenizer,
@@ -109,6 +110,7 @@ def test_shared_surrogate_imports_stay_lazy_without_molecule_extras() -> None:
         )
 
         assert ExactDKLSurrogate
+        assert HuggingFaceEncoderConfig
         assert HuggingFaceSequenceEncoder
         assert HuggingFaceTokenizer
         assert TransformerSequenceEncoder

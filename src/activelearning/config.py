@@ -25,11 +25,6 @@ from activelearning.acquisition.config import (
     QMultiFidelityMaxValueEntropyConfig,
     UpperConfidenceBoundConfig,
 )
-from activelearning.applications.molecules.config import (
-    GPMoLFormerSmilesEncoderConfig,
-    MoLFormerSmilesEncoderConfig,
-    SelfiesTransformerEncoderConfig,
-)
 from activelearning.budget.config import BudgetConfig
 from activelearning.dataset.config import DatasetConfig
 from activelearning.logger.config import LoggerConfig
@@ -37,16 +32,10 @@ from activelearning.oracle.config import OracleConfig
 from activelearning.run_writer import RunWriterConfig
 from activelearning.runtime import RuntimeContextConfig
 from activelearning.sampler.config import (
-    ExactGridSamplerConfig,
-    GFlowNetGridSamplerConfig,
-    HypercubeSamplerConfig,
-    PoolFileSamplerConfig,
-    S3GFNSamplerConfig,
     SamplerConfig,
 )
 from activelearning.selector.config import SelectorConfig
 from activelearning.surrogate.config import (
-    BoTorchGPSurrogateConfig,
     DummyMeanSurrogateConfig,
     FidelityAwareSurrogateConfig,
     SurrogateConfig,
@@ -64,18 +53,35 @@ _BOTORCH_ACQUISITION_CONFIG_TYPES = (
     QMultiFidelityLowerBoundMaxValueEntropyConfig,
     QMultiFidelityKnowledgeGradientConfig,
 )
-_NUMERIC_SAMPLER_CONFIG_TYPES = (
-    HypercubeSamplerConfig,
-    ExactGridSamplerConfig,
-    GFlowNetGridSamplerConfig,
-)
-_STRING_SAMPLER_CONFIG_TYPES = (
-    PoolFileSamplerConfig,
-    S3GFNSamplerConfig,
-)
 
 
 class ActiveLearningConfig(BaseModel):
+    """Validated composition of one active-learning experiment.
+
+    Parameters
+    ----------
+    runtime : RuntimeContextConfig
+        Device and floating-point runtime settings.
+    dataset : DatasetConfig
+        Initial observations and dataset persistence settings.
+    surrogate : SurrogateConfig
+        Model used to approximate the oracle objective.
+    acquisition : AcquisitionConfig
+        Rule used to score candidate queries.
+    sampler : SamplerConfig
+        Candidate-generation strategy.
+    selector : SelectorConfig
+        Rule used to select candidates for evaluation.
+    oracle : OracleConfig
+        Objective evaluator and fidelity metadata source.
+    budget : BudgetConfig
+        Query and round budget.
+    logger : LoggerConfig, optional
+        Logging configuration.
+    run_writer : RunWriterConfig, optional
+        Persistent run-output configuration.
+    """
+
     runtime: RuntimeContextConfig = Field(default_factory=RuntimeContextConfig)
     dataset: DatasetConfig
     surrogate: SurrogateConfig
@@ -396,7 +402,7 @@ def _extract_molecule_representation(oracle: BaseModel) -> str | None:
 
 
 def _encoder_molecule_representation(encoder: object) -> str | None:
-    """Return the molecular string representation expected by a DKL encoder.
+    """Return the representation declared by an encoder config.
 
     Parameters
     ----------
@@ -406,17 +412,12 @@ def _encoder_molecule_representation(encoder: object) -> str | None:
     Returns
     -------
     str or None
-        ``"selfies"`` or ``"smiles"`` for the built-in molecular encoders;
-        ``None`` for encoders without a known string representation.
+        Declared representation, or ``None`` when no representation is known.
     """
-    if isinstance(encoder, SelfiesTransformerEncoderConfig):
-        return "selfies"
-    if isinstance(
-        encoder,
-        (GPMoLFormerSmilesEncoderConfig, MoLFormerSmilesEncoderConfig),
-    ):
-        return "smiles"
-    return None
+    if not isinstance(encoder, BaseModel):
+        return None
+    representation = getattr(encoder, "input_representation", None)
+    return representation if isinstance(representation, str) else None
 
 
 def _validate_component_compatibility(
@@ -453,8 +454,11 @@ def _validate_component_compatibility(
     encoder_representation = _encoder_molecule_representation(encoder)
     oracle_representation = _extract_molecule_representation(oracle)
 
-    if isinstance(sampler, S3GFNSamplerConfig):
-        if isinstance(encoder, SelfiesTransformerEncoderConfig):
+    sampler_representation = getattr(sampler, "output_representation", None)
+    surrogate_representation = getattr(surrogate, "input_representation", None)
+
+    if sampler_representation == "smiles":
+        if encoder_representation == "selfies":
             raise ValueError(
                 "S3GFNSampler generates canonical SMILES, but the configured "
                 "SelfiesTransformerEncoder expects SELFIES strings. Use "
@@ -473,7 +477,7 @@ def _validate_component_compatibility(
                 f"{configured}."
             )
 
-    if isinstance(sampler, _NUMERIC_SAMPLER_CONFIG_TYPES):
+    if sampler_representation == "numeric":
         if encoder_representation is not None:
             raise ValueError(
                 f"{type(sampler).__name__} generates numeric candidates, but "
@@ -502,9 +506,8 @@ def _validate_component_compatibility(
                 f"configured with mol_repr={oracle_representation!r}."
             )
 
-    if isinstance(surrogate, BoTorchGPSurrogateConfig) and (
-        isinstance(sampler, _STRING_SAMPLER_CONFIG_TYPES)
-        or oracle_representation is not None
+    if surrogate_representation == "numeric" and (
+        sampler_representation == "smiles" or oracle_representation is not None
     ):
         raise ValueError(
             "BoTorchGPSurrogateConfig expects numeric tensor inputs, but the "

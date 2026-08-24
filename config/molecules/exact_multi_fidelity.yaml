@@ -30,7 +30,7 @@ surrogate:
   target_fidelity: 3
   encoder:
     type: SelfiesTransformerEncoder
-    max_mol_tokens: 64
+    max_mol_tokens: 66
     embed_dim: 64
     ff_dim: 256
     num_heads: 8

@@ -63,7 +63,14 @@ class EncoderKernel(gpytorch.kernels.Kernel):
         self.base_kernel = base_kernel
         self.include_fidelity = include_fidelity
 
-    def forward(self, x1: Tensor, x2: Tensor, **params) -> Tensor:
+    def forward(
+        self,
+        x1: Tensor,
+        x2: Tensor,
+        diag: bool = False,
+        last_dim_is_batch: bool = False,
+        **params,
+    ) -> Tensor:
         """Compute the kernel matrix between two sets of encoded inputs.
 
         Parameters
@@ -73,12 +80,21 @@ class EncoderKernel(gpytorch.kernels.Kernel):
             fidelity scalar in the last column when ``include_fidelity=True``.
         x2 : Tensor
             Shape ``(M, input_dim)`` or ``(M, input_dim+1)`` — same convention.
+        diag : bool, default=False
+            If ``True``, return only the diagonal entries of the covariance
+            instead of the full pairwise covariance matrix.
+        last_dim_is_batch : bool, default=False
+            If ``True``, interpret the final input dimension as a batch of
+            independent dimensions, as supported by the wrapped kernel.
+        **params
+            Additional keyword arguments forwarded to ``base_kernel``.
 
         Returns
         -------
         Tensor
-            Kernel matrix of shape ``(N, M)`` or a ``gpytorch.lazy.LazyTensor``
-            from the base kernel.
+            Kernel matrix of shape ``(N, M)`` or a diagonal tensor of shape
+            ``(N,)``, depending on ``diag``. The concrete return type is
+            provided by the base kernel.
         """
         if self.include_fidelity:
             # Peel off the fidelity column before encoding.
@@ -99,7 +115,13 @@ class EncoderKernel(gpytorch.kernels.Kernel):
             f1 = torch.cat([f1, fid1.to(f1.dtype)], dim=-1)
             f2 = torch.cat([f2, fid2.to(f2.dtype)], dim=-1)
 
-        return self.base_kernel(f1.to(x1.dtype), f2.to(x1.dtype))
+        return self.base_kernel(
+            f1.to(x1.dtype),
+            f2.to(x1.dtype),
+            diag=diag,
+            last_dim_is_batch=last_dim_is_batch,
+            **params,
+        )
 
     def _encode_flat(self, inputs: torch.Tensor) -> torch.Tensor:
         """Encode inputs with any leading batch dimensions.

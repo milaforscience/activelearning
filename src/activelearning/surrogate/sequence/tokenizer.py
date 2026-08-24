@@ -30,16 +30,16 @@ class SequenceTokenizer(Protocol):
     cls_idx : int
         ID of the start-of-sequence token, which is placed before sequence
         tokens when required by the encoder.
-    mask_idx : int
+    mask_idx : int or None
         ID of the mask token, which replaces selected tokens during masked
-        token training.
+        token training. ``None`` means masked-token training is unavailable.
     """
 
     vocab_size: int
     padding_idx: int
     eos_idx: int
     cls_idx: int
-    mask_idx: int
+    mask_idx: int | None
 
     def batch_from_strings(
         self,
@@ -53,17 +53,16 @@ class SequenceTokenizer(Protocol):
         rows retain the input order, and unused positions contain
         :attr:`padding_idx`. The tokenizer adds the start- and end-of-sequence
         tokens required by its encoder and truncates inputs that exceed the
-        configured limit. Whether special-token positions count toward
-        ``max_tokens`` is defined by the concrete tokenizer.
+        configured limit. ``max_tokens`` is the total output length, including
+        special-token and padding positions.
 
         Parameters
         ----------
         strings : Sequence[str]
             Strings to convert into token IDs.
         max_tokens : int
-            Maximum number of token positions to encode. The concrete
-            tokenizer determines whether positions for special tokens are
-            included in this limit.
+            Total number of token positions to encode, including special
+            tokens and padding.
         device : torch.device, optional
             Device for the returned tensor. If ``None``, the tokenizer's
             default device is used.
@@ -72,9 +71,24 @@ class SequenceTokenizer(Protocol):
         -------
         Tensor
             Two-dimensional tensor of dtype ``torch.long`` with shape
-            ``(len(strings), sequence_length)``. It contains token IDs,
-            special tokens, and padding in the format expected by the
-            sequence encoder. ``sequence_length`` is fixed for the batch and may
-            include positions reserved for special tokens.
+            ``(len(strings), max_tokens)``. It contains token IDs, special
+            tokens, and padding in the format expected by the sequence
+            encoder.
+        """
+        ...
+
+    def attention_mask_from_batch(self, token_batch: Tensor) -> Tensor:
+        """Return a binary attention mask aligned with a token-ID batch.
+
+        Parameters
+        ----------
+        token_batch : Tensor
+            Two-dimensional token-ID tensor.
+
+        Returns
+        -------
+        Tensor
+            A ``torch.long`` tensor with the same first two dimensions as
+            ``token_batch``. Non-padding positions contain one.
         """
         ...

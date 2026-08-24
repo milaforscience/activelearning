@@ -18,6 +18,8 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
+from activelearning.surrogate.sequence.base import SequenceEncoder
+from activelearning.surrogate.sequence.pooling import masked_mean
 from activelearning.surrogate.sequence.tokenizer import SequenceTokenizer
 
 __all__ = [
@@ -41,6 +43,17 @@ class PositionalEncoding(nn.Module):
     """
 
     def __init__(self, embed_dim: int, max_len: int, dropout: float = 0.0) -> None:
+        """Initialize sinusoidal encodings for a fixed maximum sequence length.
+
+        Parameters
+        ----------
+        embed_dim : int
+            Embedding dimensionality.
+        max_len : int
+            Maximum sequence length represented by the encoding table.
+        dropout : float, default=0.0
+            Dropout rate applied after adding positional encodings.
+        """
         super().__init__()
         self.dropout = nn.Dropout(dropout)
         positional_dtype = torch.get_default_dtype()
@@ -85,6 +98,15 @@ class MaskedMeanPool(nn.Module):
     """
 
     def __init__(self, input_dim: int, output_dim: int) -> None:
+        """Initialize the projection applied after masked mean pooling.
+
+        Parameters
+        ----------
+        input_dim : int
+            Dimensionality of each token feature vector.
+        output_dim : int
+            Dimensionality of the projected pooled vector.
+        """
         super().__init__()
         self.proj = nn.Linear(input_dim, output_dim)
 
@@ -104,13 +126,11 @@ class MaskedMeanPool(nn.Module):
         Tensor
             Shape ``(B, output_dim)``.
         """
-        weights = mask.unsqueeze(-1).to(token_features.dtype)
-        # Weighted mean; +1e-6 avoids division by zero for fully-masked inputs
-        pooled = (weights * token_features).sum(dim=1) / (weights.sum(dim=1) + 1e-6)
+        pooled = masked_mean(token_features, mask)
         return self.proj(pooled)
 
 
-class TransformerSequenceEncoder(nn.Module):
+class TransformerSequenceEncoder(SequenceEncoder):
     """Sequence encoder used by the DKL surrogate.
 
     Architecture:
@@ -126,8 +146,8 @@ class TransformerSequenceEncoder(nn.Module):
     tokenizer : SequenceTokenizer
         Tokenizer providing vocabulary and special-token indices.
     max_tokens : int
-        Maximum number of sequence tokens, not counting the ``[CLS]`` and
-        ``[EOS]`` specials. Stored as ``max_seq_len = max_tokens + 2``.
+        Total number of sequence positions, including ``[CLS]`` and ``[EOS]``
+        specials. Stored as ``max_seq_len = max_tokens``.
     embed_dim : int
         Embedding and Transformer hidden dimensionality.
     ff_dim : int
@@ -153,10 +173,29 @@ class TransformerSequenceEncoder(nn.Module):
         latent_dim: int = 64,
         dropout: float = 0.0,
     ) -> None:
-        super().__init__()
-        self.tokenizer = tokenizer
-        self.max_tokens: int = max_tokens
-        self.max_seq_len: int = max_tokens + 2  # CLS + sequence tokens + EOS
+        """Initialize a tokenizer-backed Transformer sequence encoder.
+
+        Parameters
+        ----------
+        tokenizer : SequenceTokenizer
+            Tokenizer providing vocabulary and special-token indices.
+        max_tokens : int, default=64
+            Total number of sequence positions, including special tokens and
+            padding.
+        embed_dim : int, default=64
+            Embedding and Transformer hidden dimensionality.
+        ff_dim : int, default=256
+            Feedforward hidden size inside each Transformer layer.
+        num_heads : int, default=8
+            Number of self-attention heads.
+        num_layers : int, default=8
+            Number of Transformer encoder layers.
+        latent_dim : int, default=64
+            Width of the pooled sequence representation.
+        dropout : float, default=0.0
+            Dropout rate used by the Transformer and positional encoding.
+        """
+        super().__init__(tokenizer=tokenizer, max_tokens=max_tokens)
         self.embed_dim = embed_dim
         self.latent_dim = latent_dim
 
@@ -318,6 +357,12 @@ class TransformerSequenceEncoder(nn.Module):
         """
         mask = self.sample_mask_positions(token_batch, mask_ratio)
         masked = token_batch.clone()
+        if self.tokenizer.mask_idx is None or (
+            self.tokenizer.mask_idx == self.tokenizer.padding_idx
+        ):
+            raise ValueError(
+                "MLM training requires a mask token distinct from the padding token."
+            )
         masked[mask] = self.tokenizer.mask_idx
 
         logits = self.logits_from_tokens(masked)

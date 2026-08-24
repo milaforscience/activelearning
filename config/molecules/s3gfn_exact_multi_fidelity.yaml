@@ -1,5 +1,12 @@
 # S3-GFN molecule experiment: one SMILES policy with an explicit terminal
 # fidelity action.
+#
+# The sampler and frozen surrogate intentionally repeat the model and tokenizer
+# identifiers: the sampler owns a trainable policy while the surrogate owns a
+# frozen prior. Each component therefore loads its own weights; plan for the
+# corresponding additional memory during a real run.
+# `sampler.max_length` and `surrogate.encoder.max_mol_tokens` are kept equal
+# here for comparable tokenization, but control independent components.
 
 runtime:
   device: cpu
@@ -15,13 +22,13 @@ surrogate:
   target_fidelity: 3
   encoder:
     type: GPMoLFormerSmilesEncoder
+    model_name_or_path: ibm-research/GP-MoLFormer-Uniq
+    tokenizer_name_or_path: ibm-research/MoLFormer-XL-both-10pct
     max_mol_tokens: 140
     latent_dim: 32
   training_params:
     epochs: 10
     lr: 1.0e-3
-    mask_ratio: 0.125
-    pretrain_epochs: 0
   standardize_outputs: true
 
 acquisition:

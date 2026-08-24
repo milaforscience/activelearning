@@ -32,7 +32,7 @@ surrogate:
   type: ExactDKLSurrogate
   encoder:
     type: SelfiesTransformerEncoder
-    max_mol_tokens: 16
+    max_mol_tokens: 18
     embed_dim: 32
     ff_dim: 64
     num_heads: 4

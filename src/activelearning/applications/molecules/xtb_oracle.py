@@ -87,12 +87,30 @@ class ConformerConfig:
     prune_rms_thresh: float = 1.5
 
     def __post_init__(self) -> None:
+        """Validate that at least one conformer will be generated.
+
+        Raises
+        ------
+        ValueError
+            If ``num_conformers`` is smaller than one.
+        """
         if self.num_conformers < 1:
             raise ValueError("num_conformers must be at least 1.")
 
 
 def hartree_to_ev(hartree: float) -> float:
-    """Convert energy from Hartree to electronvolt."""
+    """Convert an energy from Hartree to electronvolts.
+
+    Parameters
+    ----------
+    hartree : float
+        Energy in Hartree.
+
+    Returns
+    -------
+    float
+        Equivalent energy in electronvolts.
+    """
     return hartree * _HARTREE_TO_EV
 
 
@@ -512,6 +530,45 @@ class XTBIPEAOracle(MultiFidelityOracle):
         log_molecule_visualizations: bool = False,
         molecule_visualization_limit: int = 25,
     ) -> None:
+        """Initialize the xTB-backed molecular oracle.
+
+        Parameters
+        ----------
+        task : {"ea", "ip"}
+            Molecular property to evaluate: electron affinity or ionisation
+            potential.
+        fidelity_costs : dict[int, float]
+            Computational cost per sample for each declared fidelity.
+        fidelity_confidences : dict[int, float], optional
+            Confidence value for each fidelity. If omitted, values are derived
+            by normalizing fidelity costs.
+        gfn_version : int, default=2
+            GFN-xTB parametrisation passed to ``--gfn``.
+        ff : {"mmff", "uff"}, default="mmff"
+            RDKit force field used for initial conformer optimization.
+        correction_factor : float, default=4.8455
+            Empirical correction subtracted from adiabatic IP/EA values.
+        conformer_cfg : ConformerConfig, optional
+            Default RDKit conformer generation settings.
+        per_fidelity_num_conformers : dict[int, int], optional
+            Per-fidelity overrides for the default conformer count.
+        mol_repr : {"selfies", "smiles"}, default="selfies"
+            Representation expected in each candidate's ``x`` value.
+        negate_score : bool, optional
+            Whether to negate the raw property value before returning it.
+            Defaults to ``True`` for IP and ``False`` for EA.
+        log_molecule_visualizations : bool, default=False
+            Whether to log RDKit molecule grids after queries.
+        molecule_visualization_limit : int, default=25
+            Maximum number of molecules included in each logged grid.
+
+        Raises
+        ------
+        ValueError
+            If the task or molecular representation is unsupported, no
+            fidelities are declared, an unsupported fidelity is configured, or
+            the visualization limit is not positive.
+        """
         if task not in {"ea", "ip"}:
             raise ValueError(f"task must be 'ea' or 'ip', got {task!r}")
         if mol_repr not in {"selfies", "smiles"}:

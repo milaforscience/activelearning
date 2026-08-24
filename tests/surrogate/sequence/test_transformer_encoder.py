@@ -6,7 +6,7 @@ import pytest
 import selfies as sf
 import torch
 
-from activelearning.surrogate.sequence.transformer import (
+from activelearning.surrogate.sequence.transformer_encoder import (
     MaskedMeanPool,
     PositionalEncoding,
     TransformerSequenceEncoder,
@@ -239,8 +239,8 @@ class TestTransformerSequenceEncoder:
             assert not mask[row, padding_positions].any()
 
     def test_max_seq_len_attribute(self, encoder: TransformerSequenceEncoder):
-        # max_seq_len = max_mol_tokens + 2
-        assert encoder.max_seq_len == 32 + 2
+        # max_seq_len includes the CLS and EOS positions.
+        assert encoder.max_seq_len == 32
         assert encoder.max_tokens == 32
 
     def test_latent_dim_attribute(self, encoder: TransformerSequenceEncoder):

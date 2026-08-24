@@ -9,7 +9,7 @@ from torch import Tensor, nn
 from activelearning.applications.molecules._optional import (
     missing_molecules_dependency_error,
 )
-from activelearning.surrogate.sequence.huggingface import HuggingFaceTokenizer
+from activelearning.surrogate.sequence.huggingface_tokenizer import HuggingFaceTokenizer
 from activelearning.surrogate.sequence.huggingface_encoder import (
     HuggingFaceSequenceEncoder,
 )
@@ -44,7 +44,78 @@ def _load_smiles_tokenizer(
     return HuggingFaceTokenizer(tokenizer=tokenizer)
 
 
-class GPMoLFormerSmilesEncoder(HuggingFaceSequenceEncoder):
+class _PretrainedSmilesEncoder(HuggingFaceSequenceEncoder):
+    """Shared loader for frozen pretrained SMILES transformer encoders."""
+
+    def __init__(
+        self,
+        model_name_or_path: str,
+        tokenizer_name_or_path: str,
+        *,
+        max_mol_tokens: int,
+        latent_dim: int,
+        pooling: Literal["last", "mean"],
+        trust_remote_code: bool,
+        cache_dir: str | None,
+        cache_size: int,
+        use_causal_lm: bool,
+    ) -> None:
+        """Load a pretrained backbone and initialize the shared feature head.
+
+        Parameters
+        ----------
+        model_name_or_path : str
+            Hugging Face model identifier or local model path.
+        tokenizer_name_or_path : str
+            Hugging Face tokenizer identifier or local tokenizer path.
+        max_mol_tokens : int
+            Total number of token positions consumed per sequence.
+        latent_dim : int
+            Width of the projected latent representation.
+        pooling : {"last", "mean"}
+            Strategy used to pool the backbone hidden states.
+        trust_remote_code : bool
+            Whether Hugging Face may execute repository-provided model code.
+        cache_dir : str, optional
+            Directory used for downloaded model and tokenizer files.
+        cache_size : int
+            Maximum number of pooled backbone rows retained in the cache.
+        use_causal_lm : bool
+            Whether to load the causal-language-model wrapper.
+
+        Raises
+        ------
+        ImportError
+            If the optional Transformers dependency is not installed.
+        ValueError
+            If the tokenizer or model configuration is missing required
+            special tokens or hidden-dimension metadata.
+        """
+        auto_model, auto_model_for_causal_lm, auto_tokenizer = _load_transformers()
+        tokenizer = _load_smiles_tokenizer(
+            auto_tokenizer,
+            tokenizer_name_or_path,
+            trust_remote_code=trust_remote_code,
+            cache_dir=cache_dir,
+        )
+        model_loader = auto_model_for_causal_lm if use_causal_lm else auto_model
+        backbone = model_loader.from_pretrained(
+            model_name_or_path,
+            trust_remote_code=trust_remote_code,
+            deterministic_eval=True,
+            cache_dir=cache_dir,
+        )
+        super().__init__(
+            backbone=backbone,
+            tokenizer=tokenizer,
+            max_tokens=max_mol_tokens,
+            latent_dim=latent_dim,
+            pooling=pooling,
+            cache_size=cache_size,
+        )
+
+
+class GPMoLFormerSmilesEncoder(_PretrainedSmilesEncoder):
     """Encode SMILES with a frozen causal GP-MoLFormer backbone.
 
     GP-MoLFormer is loaded through ``AutoModelForCausalLM``. Its causal
@@ -64,47 +135,47 @@ class GPMoLFormerSmilesEncoder(HuggingFaceSequenceEncoder):
         pooling: Literal["last", "mean"] = "last",
         trust_remote_code: bool = False,
         cache_dir: str | None = None,
+        cache_size: int = 4096,
     ) -> None:
         """Load GP-MoLFormer and initialize its frozen feature encoder.
 
         Parameters
         ----------
         model_name_or_path : str
-            Hugging Face model identifier or local path for GP-MoLFormer.
+            Hugging Face model identifier or local model path.
         tokenizer_name_or_path : str
-            Hugging Face model identifier or local path for its tokenizer.
+            Hugging Face tokenizer identifier or local tokenizer path.
         max_mol_tokens : int, default=140
-            Maximum number of token positions consumed for each SMILES.
+            Total number of token positions consumed per sequence.
         latent_dim : int, default=64
-            Size of the projected latent molecular representation.
+            Width of the projected latent representation.
         pooling : {"last", "mean"}, default="last"
-            Sequence pooling strategy. ``"last"`` selects the last non-padding
-            state, while ``"mean"`` computes a masked mean.
+            Strategy used to pool the backbone hidden states.
         trust_remote_code : bool, default=False
-            Whether loading from Hugging Face may execute repository-supplied
-            model code.
+            Whether Hugging Face may execute repository-provided model code.
         cache_dir : str, optional
-            Directory used for Hugging Face model and tokenizer files.
+            Directory used for downloaded model and tokenizer files.
+        cache_size : int, default=4096
+            Maximum number of pooled backbone rows retained in the cache.
+
+        Raises
+        ------
+        ImportError
+            If the optional Transformers dependency is not installed.
+        ValueError
+            If the tokenizer or model configuration is missing required
+            special tokens or hidden-dimension metadata.
         """
-        _, auto_model_for_causal_lm, auto_tokenizer = _load_transformers()
-        tokenizer = _load_smiles_tokenizer(
-            auto_tokenizer,
-            tokenizer_name_or_path,
-            trust_remote_code=trust_remote_code,
-            cache_dir=cache_dir,
-        )
-        backbone = auto_model_for_causal_lm.from_pretrained(
-            model_name_or_path,
-            trust_remote_code=trust_remote_code,
-            deterministic_eval=True,
-            cache_dir=cache_dir,
-        )
         super().__init__(
-            backbone=backbone,
-            tokenizer=tokenizer,
-            max_tokens=max_mol_tokens,
+            model_name_or_path=model_name_or_path,
+            tokenizer_name_or_path=tokenizer_name_or_path,
+            max_mol_tokens=max_mol_tokens,
             latent_dim=latent_dim,
             pooling=pooling,
+            trust_remote_code=trust_remote_code,
+            cache_dir=cache_dir,
+            cache_size=cache_size,
+            use_causal_lm=True,
         )
 
     def _base_model(self) -> nn.Module:
@@ -134,7 +205,7 @@ class GPMoLFormerSmilesEncoder(HuggingFaceSequenceEncoder):
         )
 
 
-class MoLFormerSmilesEncoder(HuggingFaceSequenceEncoder):
+class MoLFormerSmilesEncoder(_PretrainedSmilesEncoder):
     """Encode SMILES with the frozen bidirectional MoLFormer backbone.
 
     The BERT-style MoLFormer is loaded through ``AutoModel`` rather than a
@@ -152,45 +223,45 @@ class MoLFormerSmilesEncoder(HuggingFaceSequenceEncoder):
         pooling: Literal["last", "mean"] = "mean",
         trust_remote_code: bool = False,
         cache_dir: str | None = None,
+        cache_size: int = 4096,
     ) -> None:
-        """Load the encoder-style MoLFormer and initialize its feature head.
+        """Load MoLFormer and initialize its frozen feature encoder.
 
         Parameters
         ----------
         model_name_or_path : str
-            Hugging Face model identifier or local path for MoLFormer.
+            Hugging Face model identifier or local model path.
         tokenizer_name_or_path : str
-            Hugging Face model identifier or local path for its tokenizer.
+            Hugging Face tokenizer identifier or local tokenizer path.
         max_mol_tokens : int, default=140
-            Maximum number of token positions consumed for each SMILES.
+            Total number of token positions consumed per sequence.
         latent_dim : int, default=64
-            Size of the projected latent molecular representation.
+            Width of the projected latent representation.
         pooling : {"last", "mean"}, default="mean"
-            Sequence pooling strategy. ``"mean"`` matches the model's native
-            masked-mean pooler; ``"last"`` is available as an alternative.
+            Strategy used to pool the backbone hidden states.
         trust_remote_code : bool, default=False
-            Whether loading from Hugging Face may execute repository-supplied
-            model code.
+            Whether Hugging Face may execute repository-provided model code.
         cache_dir : str, optional
-            Directory used for Hugging Face model and tokenizer files.
+            Directory used for downloaded model and tokenizer files.
+        cache_size : int, default=4096
+            Maximum number of pooled backbone rows retained in the cache.
+
+        Raises
+        ------
+        ImportError
+            If the optional Transformers dependency is not installed.
+        ValueError
+            If the tokenizer or model configuration is missing required
+            special tokens or hidden-dimension metadata.
         """
-        auto_model, _, auto_tokenizer = _load_transformers()
-        tokenizer = _load_smiles_tokenizer(
-            auto_tokenizer,
-            tokenizer_name_or_path,
-            trust_remote_code=trust_remote_code,
-            cache_dir=cache_dir,
-        )
-        backbone = auto_model.from_pretrained(
-            model_name_or_path,
-            trust_remote_code=trust_remote_code,
-            deterministic_eval=True,
-            cache_dir=cache_dir,
-        )
         super().__init__(
-            backbone=backbone,
-            tokenizer=tokenizer,
-            max_tokens=max_mol_tokens,
+            model_name_or_path=model_name_or_path,
+            tokenizer_name_or_path=tokenizer_name_or_path,
+            max_mol_tokens=max_mol_tokens,
             latent_dim=latent_dim,
             pooling=pooling,
+            trust_remote_code=trust_remote_code,
+            cache_dir=cache_dir,
+            cache_size=cache_size,
+            use_causal_lm=False,
         )

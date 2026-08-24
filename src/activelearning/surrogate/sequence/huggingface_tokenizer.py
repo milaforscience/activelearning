@@ -8,12 +8,10 @@ from typing import Any
 import torch
 from torch import Tensor
 
-from activelearning.surrogate.sequence.huggingface_encoder import (
-    HuggingFaceSequenceEncoder,
-)
 from activelearning.surrogate.sequence.tokenizer import SequenceTokenizer
+from activelearning.utils.optional import missing_optional_dependency_error
 
-__all__ = ["HuggingFaceSequenceEncoder", "HuggingFaceTokenizer"]
+__all__ = ["HuggingFaceTokenizer"]
 
 
 def _load_tokenizer() -> Any:
@@ -21,9 +19,10 @@ def _load_tokenizer() -> Any:
     try:
         from transformers import AutoTokenizer
     except ImportError as error:  # pragma: no cover - optional dependency
-        raise ImportError(
-            "Hugging Face tokenization requires the transformers package. "
-            "Install it with: uv sync --extra molecules"
+        raise missing_optional_dependency_error(
+            component="Hugging Face tokenization",
+            extra="molecules",
+            error=error,
         ) from error
     return AutoTokenizer
 
@@ -54,8 +53,8 @@ class HuggingFaceTokenizer(SequenceTokenizer):
         and special-token insertion are delegated to the wrapped tokenizer.
         The tokenizer must define a padding token, an end-of-sequence token,
         and either a CLS or BOS token. For the mask token, the adapter uses
-        the tokenizer's mask token, then its unknown token, and finally its
-        padding token as fallbacks.
+        the tokenizer's mask token or unknown token when available. If neither
+        exists, masked-token training is unavailable.
 
         Parameters
         ----------
@@ -92,6 +91,7 @@ class HuggingFaceTokenizer(SequenceTokenizer):
                 cache_dir=cache_dir,
             )
         self._tokenizer = tokenizer
+        self._attention_masks: dict[tuple[int, ...], tuple[int, ...]] = {}
         self.padding_idx = self._require_token_id("pad_token_id", "padding")
         self.eos_idx = self._require_token_id("eos_token_id", "EOS")
         self.cls_idx = self._first_token_id(
@@ -99,9 +99,12 @@ class HuggingFaceTokenizer(SequenceTokenizer):
             "CLS/BOS",
         )
         self.mask_idx = self._first_token_id(
-            ("mask_token_id", "unk_token_id", "pad_token_id"),
+            ("mask_token_id", "unk_token_id"),
             "MASK",
+            required=False,
         )
+        if self.mask_idx == self.padding_idx:
+            self.mask_idx = None
 
     @property
     def vocab_size(self) -> int:
@@ -125,13 +128,21 @@ class HuggingFaceTokenizer(SequenceTokenizer):
             raise ValueError(f"Hugging Face tokenizer must define a {name} token.")
         return int(token_id)
 
-    def _first_token_id(self, attributes: Sequence[str], name: str) -> int:
+    def _first_token_id(
+        self,
+        attributes: Sequence[str],
+        name: str,
+        *,
+        required: bool = True,
+    ) -> int | None:
         """Return the first available id from a list of tokenizer attributes."""
         for attribute in attributes:
             token_id = getattr(self._tokenizer, attribute, None)
             if token_id is not None:
                 return int(token_id)
-        raise ValueError(f"Hugging Face tokenizer must define a {name} token.")
+        if required:
+            raise ValueError(f"Hugging Face tokenizer must define a {name} token.")
+        return None
 
     def batch_from_strings(
         self,
@@ -170,8 +181,9 @@ class HuggingFaceTokenizer(SequenceTokenizer):
         Raises
         ------
         ValueError
-            If ``max_tokens`` is smaller than two or if the wrapped
-            tokenizer does not return two-dimensional ``input_ids``.
+            If ``max_tokens`` is smaller than two, if the wrapped tokenizer
+            does not return two-dimensional ``input_ids``, or if it reuses the
+            EOS ID for padding without returning an attention mask.
         """
         if max_tokens < 2:
             raise ValueError("max_tokens must be at least two.")
@@ -195,4 +207,64 @@ class HuggingFaceTokenizer(SequenceTokenizer):
             raise ValueError(
                 "The Hugging Face tokenizer must return two-dimensional input_ids."
             )
+        attention_mask = encoded.get("attention_mask")
+        if attention_mask is None:
+            if self.padding_idx == self.eos_idx:
+                raise ValueError(
+                    "The Hugging Face tokenizer must return attention_mask when "
+                    "padding and EOS share an ID."
+                )
+            attention_mask = input_ids.ne(self.padding_idx).long()
+        if attention_mask.shape != input_ids.shape:
+            raise ValueError(
+                "The Hugging Face tokenizer must return an attention_mask with "
+                "the same shape as input_ids."
+            )
+        for row, mask in zip(input_ids, attention_mask):
+            self._attention_masks[tuple(row.tolist())] = tuple(mask.tolist())
         return input_ids.to(device=device, dtype=torch.long)
+
+    def attention_mask_from_batch(self, token_batch: Tensor) -> Tensor:
+        """Return the tokenizer-produced attention mask for token IDs.
+
+        Batches returned by :meth:`batch_from_strings` retain the exact mask
+        produced by Hugging Face, including checkpoints whose padding and EOS
+        IDs are equal. Unknown batches fall back to padding-ID detection.
+
+        Parameters
+        ----------
+        token_batch : Tensor
+            Two-dimensional token-ID tensor whose rows should be masked.
+
+        Returns
+        -------
+        Tensor
+            ``torch.long`` attention mask with the same shape and device as
+            ``token_batch``.
+
+        Raises
+        ------
+        ValueError
+            If ``token_batch`` is not two-dimensional, or if a batch with
+            shared padding/EOS IDs has no tokenizer-produced mask.
+        """
+        if token_batch.ndim != 2:
+            raise ValueError(
+                "token_batch must be 2-D (B, seq_len), got shape "
+                f"{tuple(token_batch.shape)}"
+            )
+        if token_batch.shape[0] == 0:
+            return torch.empty_like(token_batch, dtype=torch.long)
+        rows: list[tuple[int, ...]] = []
+        for row in token_batch.detach().to(device="cpu", dtype=torch.long):
+            key = tuple(row.tolist())
+            mask = self._attention_masks.get(key)
+            if mask is None:
+                if self.padding_idx == self.eos_idx:
+                    raise ValueError(
+                        "An attention mask is required for token batches whose "
+                        "padding and EOS IDs are equal."
+                    )
+                mask = tuple(row.ne(self.padding_idx).long().tolist())
+            rows.append(mask)
+        return torch.tensor(rows, dtype=torch.long, device=token_batch.device)
