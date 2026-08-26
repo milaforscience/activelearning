@@ -589,10 +589,21 @@ def resolve_profile(
 
 def plan_runs(args: argparse.Namespace) -> list[RunSpec]:
     """Build the cross-product run plan for the selected stages and profiles."""
+    if (
+        args.rollout_stop_check_interval is not None
+        and args.rollout_stop_check_interval < 0
+    ):
+        raise ValueError("--rollout-stop-check-interval must be nonnegative.")
     stage_names = _parse_stage_names(args.stages)
     run_specs: list[RunSpec] = []
     for stage_name in stage_names:
         stage = STAGE_REGISTRY[stage_name]
+        ablations = dict(stage["ablations"])
+        if (
+            args.rollout_stop_check_interval is not None
+            and ablations["parallel_cuda_rollout"]
+        ):
+            ablations["stop_check_interval"] = args.rollout_stop_check_interval
         for profile_name in args.profiles:
             profile = resolve_profile(
                 profile_name,
@@ -627,7 +638,7 @@ def plan_runs(args: argparse.Namespace) -> list[RunSpec]:
                             hidden_size=args.hidden_size,
                             vocabulary_size=args.vocabulary_size,
                             gpu_utilization_trace=args.gpu_utilization_trace,
-                            ablations=dict(stage["ablations"]),
+                            ablations=ablations,
                         )
                     )
     return run_specs
@@ -1701,6 +1712,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--seeds", nargs="+", type=int, default=[0])
     parser.add_argument("--batch-sizes", nargs="+", type=int, default=[64])
+    parser.add_argument(
+        "--rollout-stop-check-interval",
+        type=int,
+        default=None,
+        help=(
+            "Override EOS host-synchronization frequency for parallel CUDA "
+            "rollout stages; zero disables early-stop checks."
+        ),
+    )
     parser.add_argument("--warmup", type=int, default=None)
     parser.add_argument("--iterations", type=int, default=None)
     parser.add_argument("--sequence-length", type=int, default=None)

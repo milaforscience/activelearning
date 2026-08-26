@@ -287,13 +287,19 @@ class _BenchmarkAcquisition:
 class _ProfileSampler(S3GFNSampler):
     """Reference sampler subclass that times each training-step boundary."""
 
-    def __init__(self, recorder: _PhaseRecorder) -> None:
+    def __init__(
+        self,
+        recorder: _PhaseRecorder,
+        *,
+        batch_size: int,
+        max_length: int,
+    ) -> None:
         super().__init__(
-            n_samples=4,
+            n_samples=batch_size,
             fidelities=(1, 2, 3),
-            max_length=8,
-            batch_size=4,
-            replay_batch_size=2,
+            max_length=max_length,
+            batch_size=batch_size,
+            replay_batch_size=batch_size,
             n_train_steps=2,
             num_warmup_steps=0,
             aux_coefficient=0.0,
@@ -328,14 +334,17 @@ class _ProfileOptimizedSampler(OptimizedS3GFNSampler):
         self,
         recorder: _PhaseRecorder,
         optimized_options: Mapping[str, Any],
+        *,
+        batch_size: int,
+        max_length: int,
     ) -> None:
         """Initialize the profiling sampler with one ablation configuration."""
         super().__init__(
-            n_samples=4,
+            n_samples=batch_size,
             fidelities=(1, 2, 3),
-            max_length=8,
-            batch_size=4,
-            replay_batch_size=2,
+            max_length=max_length,
+            batch_size=batch_size,
+            replay_batch_size=batch_size,
             n_train_steps=2,
             num_warmup_steps=0,
             aux_coefficient=0.1,
@@ -964,6 +973,8 @@ def _create_train_step_state(
     model: S3GFNModel | OptimizedS3GFNModel,
     *,
     device: torch.device,
+    batch_size: int,
+    max_length: int,
     optimized_options: Mapping[str, Any] | None = None,
 ) -> _TrainStepState:
     """Create reusable train-step state for one implementation."""
@@ -972,15 +983,21 @@ def _create_train_step_state(
         sampler = _ProfileOptimizedSampler(
             recorder,
             optimized_options or _DEFAULT_OPTIMIZED_OPTIONS,
+            batch_size=batch_size,
+            max_length=max_length,
         )
         positive_buffer, negative_buffer = sampler._create_replay_buffers(
             pad_token_id=model.pad_token_id,
         )
     else:
-        sampler = _ProfileSampler(recorder)
+        sampler = _ProfileSampler(
+            recorder,
+            batch_size=batch_size,
+            max_length=max_length,
+        )
         positive_buffer = ReplayBuffer(
             pad_token_id=model.pad_token_id,
-            capacity=8,
+            capacity=max(8, batch_size),
             policy="fifo",
         )
         negative_buffer = None
@@ -1240,6 +1257,8 @@ def _benchmark_training_step(
     model: S3GFNModel | OptimizedS3GFNModel,
     *,
     device: torch.device,
+    batch_size: int,
+    max_length: int,
     optimized_options: Mapping[str, Any] | None = None,
     warmup: int,
     iterations: int,
@@ -1249,6 +1268,8 @@ def _benchmark_training_step(
     state = _create_train_step_state(
         model,
         device=device,
+        batch_size=batch_size,
+        max_length=max_length,
         optimized_options=optimized_options,
     )
 
@@ -1279,6 +1300,9 @@ def _benchmark_training_step(
             state.sampler._collect_deferred_metrics = False
     summary = _summarize_timed_operation(samples, units_per_iteration=1)
     summary["units"] = "steps"
+    summary["batch_size"] = batch_size
+    summary["replay_batch_size"] = batch_size
+    summary["max_length"] = max_length
     recorders = [sample.payload for sample in samples]
     phase_summary = _summarize_recorder_payloads(recorders)
     summary["quality"] = phase_summary.pop("quality")
@@ -1521,6 +1545,8 @@ def _benchmark_implementation(
             "training_step": _benchmark_training_step(
                 model,
                 device=device,
+                batch_size=batch_size,
+                max_length=max_length,
                 optimized_options=optimized_options,
                 warmup=warmup,
                 iterations=iterations,
@@ -1704,7 +1730,7 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
         else (args.implementation,)
     )
     result: dict[str, Any] = {
-        "benchmark_version": 1,
+        "benchmark_version": 2,
         "implementation_mode": args.implementation,
         "config": {
             "real_model": bool(args.real_model),
