@@ -6,6 +6,7 @@ be added to ``SamplerConfig``.
 """
 
 from pathlib import Path
+import inspect
 from typing import Annotated, Any, Literal, Union, overload
 
 from pydantic import BaseModel, Field, PositiveFloat, StrictInt
@@ -266,6 +267,117 @@ class S3GFNSamplerConfig(BaseModel):
         )
 
 
+class OptimizedS3GFNSamplerConfig(BaseModel):
+    """Configuration for the experimental optimized S3-GFN sampler.
+
+    Stage 0 keeps the optimized sampler behavior identical to the current
+    implementation. The optimization and ablation fields below are declared
+    explicitly so experiment configs and benchmark registries can reference
+    them without changing the reference sampler defaults or eagerly importing
+    Transformers.
+    """
+
+    type: Literal["OptimizedS3GFNSampler"] = "OptimizedS3GFNSampler"
+    n_samples: int = Field(gt=0)
+    fidelities: _FidelityLevels | None = None
+    model_name_or_path: str = Field(
+        default="ibm-research/GP-MoLFormer-Uniq",
+        min_length=1,
+    )
+    tokenizer_name_or_path: str = Field(
+        default="ibm-research/MoLFormer-XL-both-10pct",
+        min_length=1,
+    )
+    trust_remote_code: bool = True
+    deterministic_eval: bool | None = True
+    cache_dir: str | None = None
+    max_length: int = Field(default=140, ge=2)
+    batch_size: int = Field(default=64, gt=0)
+    replay_batch_size: int = Field(default=64, gt=0)
+    n_train_steps: int = Field(default=5000, gt=0)
+    num_warmup_steps: int = Field(default=100, ge=0)
+    learning_rate: PositiveFloat = 1.0e-4
+    log_z_learning_rate: PositiveFloat = 1.0e-3
+    beta: PositiveFloat = 50.0
+    aux_coefficient: float = Field(default=1.0e-4, ge=0.0)
+    buffer_size: int = Field(default=6400, gt=0)
+    sa_threshold: float = Field(default=4.0, ge=0.0)
+    sampling_temperature: PositiveFloat = 1.0
+    gradient_clip_norm: PositiveFloat = 10.0
+    max_generation_attempts: int | None = Field(default=None, gt=0)
+    seed: int = Field(default=42, ge=0)
+    precision: Literal["fp32", "cuda_auto"] = "fp32"
+    fixed_feature_maps: bool = False
+    parallel_cuda_rollout: bool = False
+    compile_mode: Literal[
+        "eager",
+        "default",
+        "reduce-overhead",
+        "max-autotune-no-cudagraphs",
+        "max-autotune",
+    ] = "eager"
+    deferred_sync: bool = False
+    carried_prior_scores: bool = False
+    overlap_online_prior: bool = False
+    combined_aux_policy_batch: bool = False
+    stop_check_interval: int = Field(default=1, ge=0)
+    prior_cache_enabled: bool = True
+    prior_cache_capacity: int = Field(default=8192, gt=0)
+
+    def build(self) -> Sampler:
+        """Build the optimized sampler lazily so base installs stay light."""
+        from activelearning.sampler.optimized_s3gfn.sampler import OptimizedS3GFNSampler
+
+        constructor_kwargs = {
+            "n_samples": self.n_samples,
+            "fidelities": _resolve_fidelities(self.fidelities),
+            "model_name_or_path": self.model_name_or_path,
+            "tokenizer_name_or_path": self.tokenizer_name_or_path,
+            "trust_remote_code": self.trust_remote_code,
+            "deterministic_eval": self.deterministic_eval,
+            "cache_dir": self.cache_dir,
+            "max_length": self.max_length,
+            "batch_size": self.batch_size,
+            "replay_batch_size": self.replay_batch_size,
+            "n_train_steps": self.n_train_steps,
+            "num_warmup_steps": self.num_warmup_steps,
+            "learning_rate": self.learning_rate,
+            "log_z_learning_rate": self.log_z_learning_rate,
+            "beta": self.beta,
+            "aux_coefficient": self.aux_coefficient,
+            "buffer_size": self.buffer_size,
+            "sa_threshold": self.sa_threshold,
+            "sampling_temperature": self.sampling_temperature,
+            "gradient_clip_norm": self.gradient_clip_norm,
+            "max_generation_attempts": self.max_generation_attempts,
+            "seed": self.seed,
+            "precision": self.precision,
+            "fixed_feature_maps": self.fixed_feature_maps,
+            "parallel_cuda_rollout": self.parallel_cuda_rollout,
+            "compile_mode": self.compile_mode,
+            "deferred_sync": self.deferred_sync,
+            "carried_prior_scores": self.carried_prior_scores,
+            "overlap_online_prior": self.overlap_online_prior,
+            "combined_aux_policy_batch": self.combined_aux_policy_batch,
+            "stop_check_interval": self.stop_check_interval,
+            "prior_cache_enabled": self.prior_cache_enabled,
+            "prior_cache_capacity": self.prior_cache_capacity,
+        }
+        signature = inspect.signature(OptimizedS3GFNSampler)
+        if any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in signature.parameters.values()
+        ):
+            return OptimizedS3GFNSampler(**constructor_kwargs)
+        return OptimizedS3GFNSampler(
+            **{
+                name: value
+                for name, value in constructor_kwargs.items()
+                if name in signature.parameters
+            }
+        )
+
+
 SamplerConfig = Annotated[
     Union[
         HypercubeSamplerConfig,
@@ -274,6 +386,7 @@ SamplerConfig = Annotated[
         GFlowNetSamplerConfig,
         GFlowNetGridSamplerConfig,
         S3GFNSamplerConfig,
+        OptimizedS3GFNSamplerConfig,
     ],
     Field(discriminator="type"),
 ]

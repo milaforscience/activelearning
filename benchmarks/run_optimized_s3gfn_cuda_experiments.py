@@ -728,7 +728,10 @@ def run_worker(
     """Execute one benchmark worker in-process for tests or the hidden CLI."""
     cuda_validator("cuda")
     if benchmark_runner is None:
-        from benchmarks.optimized_s3gfn_benchmark import run_benchmark
+        if __package__:
+            from .optimized_s3gfn_benchmark import run_benchmark
+        else:
+            from optimized_s3gfn_benchmark import run_benchmark
 
         benchmark_runner = run_benchmark
     benchmark = benchmark_runner(
