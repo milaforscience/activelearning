@@ -4,15 +4,28 @@
 #SBATCH --error=s3gfn_cuda_%j.err
 #SBATCH --gpus-per-task=a100:1
 #SBATCH --cpus-per-task=8
+#SBATCH --ntasks=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --time=48:00:00
 #SBATCH --mem=32GB
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+if [[ -n "${REPO_ROOT:-}" ]]; then
+  REPO_ROOT="$(cd -- "${REPO_ROOT}" && pwd)"
+elif [[ -n "${SLURM_SUBMIT_DIR:-}" ]]; then
+  REPO_ROOT="$(cd -- "${SLURM_SUBMIT_DIR}" && pwd)"
+else
+  SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+  REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+fi
 cd "${REPO_ROOT}"
+BENCHMARK_RUNNER="${REPO_ROOT}/benchmarks/run_optimized_s3gfn_cuda_experiments.py"
+if [[ ! -f "${BENCHMARK_RUNNER}" ]]; then
+  echo "Benchmark runner not found: ${BENCHMARK_RUNNER}" >&2
+  echo "Submit from the repository root or set REPO_ROOT explicitly." >&2
+  exit 1
+fi
 
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-${SLURM_CPUS_PER_TASK:-1}}"
 export MKL_NUM_THREADS="${MKL_NUM_THREADS:-${SLURM_CPUS_PER_TASK:-1}}"
@@ -31,7 +44,7 @@ read -r -a seed_args <<< "${SEEDS}"
 read -r -a batch_size_args <<< "${BATCH_SIZES}"
 
 command_args=(
-  uv run python benchmarks/run_optimized_s3gfn_cuda_experiments.py
+  uv run python "${BENCHMARK_RUNNER}"
   --device cuda
   --output-dir "${OUTPUT_DIR}"
   --profile "${PROFILE}"
