@@ -34,6 +34,8 @@ export PYTHONUNBUFFERED=1
 OUTPUT_DIR="${OUTPUT_DIR:-benchmark-results/s3gfn-cuda}"
 PROFILE="${PROFILE:-full}"
 SEEDS="${SEEDS:-0}"
+WARMUP="${WARMUP:-10}"
+ITERATIONS="${ITERATIONS:-100}"
 # These sizes now apply to generation, prior scoring, policy scoring, and the
 # full training rollout/replay workload. Override with a smaller list if a
 # stage exceeds the available accelerator memory.
@@ -54,6 +56,8 @@ command_args=(
   --profile "${PROFILE}"
   --seeds "${seed_args[@]}"
   --batch-sizes "${batch_size_args[@]}"
+  --warmup "${WARMUP}"
+  --iterations "${ITERATIONS}"
   --rollout-stop-check-interval "${ROLLOUT_STOP_CHECK_INTERVAL}"
 )
 
@@ -77,6 +81,8 @@ echo "  job: ${SLURM_JOB_ID:-unknown}"
 echo "  output: ${OUTPUT_DIR}"
 echo "  profile: ${PROFILE}"
 echo "  seeds: ${SEEDS}"
+echo "  warm-up iterations: ${WARMUP}"
+echo "  measured iterations: ${ITERATIONS}"
 echo "  batch sizes: ${BATCH_SIZES}"
 echo "  training batches use the same sizes and profile max length"
 echo "  rollout stop-check interval: ${ROLLOUT_STOP_CHECK_INTERVAL}"

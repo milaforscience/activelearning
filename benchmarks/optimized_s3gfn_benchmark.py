@@ -22,7 +22,7 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -41,6 +41,7 @@ from activelearning.sampler.s3gfn.replay_buffer import ReplayBuffer
 from activelearning.sampler.s3gfn.sampler import S3GFNSampler
 
 _IMPLEMENTATIONS = ("reference", "optimized")
+_TRAINING_AUX_COEFFICIENT = 1.0e-4
 
 
 @dataclass
@@ -81,7 +82,7 @@ class _BenchmarkTokenizer:
         """Return deterministic placeholder strings for generated rows."""
         del skip_special_tokens
         row_sums = input_ids.detach().sum(dim=1).cpu().tolist()
-        smiles = [f"C{int(row_sum)}" for row_sum in row_sums]
+        smiles = ["C" * (1 + int(row_sum) % 16) for row_sum in row_sums]
         if self.recorder is not None:
             self.recorder.generated_smiles.extend(smiles)
         return smiles
@@ -146,8 +147,14 @@ class _TimedTokenizerProxy:
 class _PhaseRecorder:
     """Collect nested wall-clock timings and model-forward counts."""
 
-    def __init__(self, device: torch.device) -> None:
+    def __init__(
+        self,
+        device: torch.device,
+        *,
+        profile_timings: bool = False,
+    ) -> None:
         self.device = device
+        self.profile_timings = profile_timings
         self.times: dict[str, float] = {}
         self.forward_counts: dict[str, int] = {}
         self.forward_times: dict[str, float] = {}
@@ -156,6 +163,8 @@ class _PhaseRecorder:
         self.generated_count = 0
         self.valid_count = 0
         self.synthesizable_count = 0
+        self.online_update_performed = False
+        self.replay_update_performed = False
         self.generated_smiles: list[str] = []
         self.valid_smiles: list[str] = []
         self.acquisition_scores: list[float] = []
@@ -168,6 +177,12 @@ class _PhaseRecorder:
         """Record one phase while restoring any enclosing phase."""
         previous_phase = self._active_phase
         self._active_phase = name
+        if not self.profile_timings:
+            try:
+                yield
+            finally:
+                self._active_phase = previous_phase
+            return
         _synchronize(self.device)
         started = time.perf_counter()
         try:
@@ -187,6 +202,8 @@ class _PhaseRecorder:
     ) -> None:
         """Start timing one policy or prior forward."""
         del args, kwargs
+        if not self.profile_timings:
+            return
         _synchronize(self.device)
         self._forward_starts[id(module)] = time.perf_counter()
 
@@ -199,6 +216,8 @@ class _PhaseRecorder:
     ) -> None:
         """Finish timing one policy or prior forward."""
         del args, kwargs, outputs
+        if not self.profile_timings:
+            return
         _synchronize(self.device)
         module_name = (
             "prior" if getattr(module, "_benchmark_is_prior", False) else "policy"
@@ -293,6 +312,7 @@ class _ProfileSampler(S3GFNSampler):
         *,
         batch_size: int,
         max_length: int,
+        training_steps: int,
     ) -> None:
         super().__init__(
             n_samples=batch_size,
@@ -300,9 +320,9 @@ class _ProfileSampler(S3GFNSampler):
             max_length=max_length,
             batch_size=batch_size,
             replay_batch_size=batch_size,
-            n_train_steps=2,
+            n_train_steps=training_steps,
             num_warmup_steps=0,
-            aux_coefficient=0.0,
+            aux_coefficient=_TRAINING_AUX_COEFFICIENT,
         )
         self.recorder = recorder
 
@@ -337,6 +357,7 @@ class _ProfileOptimizedSampler(OptimizedS3GFNSampler):
         *,
         batch_size: int,
         max_length: int,
+        training_steps: int,
     ) -> None:
         """Initialize the profiling sampler with one ablation configuration."""
         super().__init__(
@@ -345,9 +366,9 @@ class _ProfileOptimizedSampler(OptimizedS3GFNSampler):
             max_length=max_length,
             batch_size=batch_size,
             replay_batch_size=batch_size,
-            n_train_steps=2,
+            n_train_steps=training_steps,
             num_warmup_steps=0,
-            aux_coefficient=0.1,
+            aux_coefficient=_TRAINING_AUX_COEFFICIENT,
             prior_cache_enabled=bool(
                 optimized_options.get("prior_cache_enabled", True)
             ),
@@ -387,7 +408,7 @@ class _ProfileOptimizedSampler(OptimizedS3GFNSampler):
 class _TrainStepState:
     """Reusable state for one implementation's training-step benchmark."""
 
-    sampler: _ProfileSampler
+    sampler: _ProfileSampler | _ProfileOptimizedSampler
     positive_buffer: ReplayBuffer
     negative_buffer: ReplayBuffer | None
     optimizer: torch.optim.Optimizer
@@ -794,6 +815,46 @@ def _measure_iterations(
     return samples
 
 
+def _measure_iteration_blocks(
+    function: Callable[[int], Any],
+    *,
+    device: torch.device,
+    warmup: int,
+    iterations: int,
+    block_size: int = 20,
+) -> list[_IterationSample]:
+    """Measure steady-state iteration time with synchronization between blocks."""
+    if block_size <= 0:
+        raise ValueError("block_size must be positive.")
+    for index in range(warmup):
+        function(-(index + 1))
+    _synchronize(device)
+
+    samples: list[_IterationSample] = []
+    completed = 0
+    while completed < iterations:
+        current_block_size = min(block_size, iterations - completed)
+        if device.type == "cuda":
+            torch.cuda.reset_peak_memory_stats(device)
+        started = time.perf_counter()
+        payloads = [
+            function(completed + offset) for offset in range(current_block_size)
+        ]
+        _synchronize(device)
+        block_wall_ms = (time.perf_counter() - started) * 1000.0
+        peak_allocated, peak_reserved = _extract_memory_sample(device)
+        samples.append(
+            _IterationSample(
+                wall_ms=block_wall_ms / current_block_size,
+                peak_allocated_bytes=peak_allocated,
+                peak_reserved_bytes=peak_reserved,
+                payload=payloads,
+            )
+        )
+        completed += current_block_size
+    return samples
+
+
 def _summarize_timed_operation(
     samples: Sequence[_IterationSample],
     *,
@@ -834,6 +895,8 @@ def _serialize_generated_sequences(generated: GeneratedSequences) -> dict[str, A
 def _serialize_phase_recorder(recorder: _PhaseRecorder) -> dict[str, Any]:
     """Convert one train-step phase recorder into JSON-safe metrics."""
     return {
+        "online_update_performed": recorder.online_update_performed,
+        "replay_update_performed": recorder.replay_update_performed,
         "times_ms": {
             name: seconds * 1000.0 for name, seconds in recorder.times.items()
         },
@@ -918,6 +981,12 @@ def _summarize_recorder_payloads(recorders: Sequence[_PhaseRecorder]) -> dict[st
         "synthesizable_count": _summarize_samples(
             [float(recorder.synthesizable_count) for recorder in recorders]
         ),
+        "online_update_rate": statistics.fmean(
+            float(recorder.online_update_performed) for recorder in recorders
+        ),
+        "replay_update_rate": statistics.fmean(
+            float(recorder.replay_update_performed) for recorder in recorders
+        ),
         "phases_ms": {
             name: _summarize_samples(
                 [recorder.times.get(name, 0.0) * 1000.0 for recorder in recorders]
@@ -975,6 +1044,7 @@ def _create_train_step_state(
     device: torch.device,
     batch_size: int,
     max_length: int,
+    training_steps: int,
     optimized_options: Mapping[str, Any] | None = None,
 ) -> _TrainStepState:
     """Create reusable train-step state for one implementation."""
@@ -985,6 +1055,7 @@ def _create_train_step_state(
             optimized_options or _DEFAULT_OPTIMIZED_OPTIONS,
             batch_size=batch_size,
             max_length=max_length,
+            training_steps=training_steps,
         )
         positive_buffer, negative_buffer = sampler._create_replay_buffers(
             pad_token_id=model.pad_token_id,
@@ -994,31 +1065,24 @@ def _create_train_step_state(
             recorder,
             batch_size=batch_size,
             max_length=max_length,
+            training_steps=training_steps,
         )
-        positive_buffer = ReplayBuffer(
+        positive_buffer, negative_buffer = sampler._create_replay_buffers(
             pad_token_id=model.pad_token_id,
-            capacity=max(8, batch_size),
-            policy="fifo",
         )
-        negative_buffer = None
     sampler.bind_runtime_context(
         RuntimeContext(
             device=device,
             dtype=next(model.policy.parameters()).dtype,
         )
     )
+    policy_parameters = list(model.policy.parameters())
+    if model.fidelity_head is not None:
+        policy_parameters.extend(model.fidelity_head.parameters())
     optimizer = torch.optim.AdamW(
         [
-            {"params": list(model.policy.parameters()), "lr": 1.0e-4},
-            {
-                "params": (
-                    []
-                    if model.fidelity_head is None
-                    else list(model.fidelity_head.parameters())
-                ),
-                "lr": 1.0e-4,
-            },
-            {"params": [model.log_z], "lr": 1.0e-3},
+            {"params": policy_parameters, "lr": sampler.learning_rate},
+            {"params": [model.log_z], "lr": sampler.log_z_learning_rate},
         ]
     )
     return _TrainStepState(
@@ -1035,9 +1099,10 @@ def _run_profiled_train_step(
     device: torch.device,
     state: _TrainStepState,
     seed: int,
+    profile_timings: bool,
 ) -> _PhaseRecorder:
     """Run one actual training-mode step and return its phase recorder."""
-    recorder = _PhaseRecorder(device)
+    recorder = _PhaseRecorder(device, profile_timings=profile_timings)
     state.sampler.recorder = recorder
     original_tokenizer = model.tokenizer
     if isinstance(original_tokenizer, _BenchmarkTokenizer):
@@ -1051,22 +1116,27 @@ def _run_profiled_train_step(
     model.policy._benchmark_is_prior = False
     model.prior._benchmark_is_prior = True
 
-    policy_pre_handle = model.policy.register_forward_pre_hook(
-        recorder.forward_pre_hook,
-        with_kwargs=True,
-    )
-    policy_post_handle = model.policy.register_forward_hook(
-        recorder.forward_hook,
-        with_kwargs=True,
-    )
-    prior_pre_handle = model.prior.register_forward_pre_hook(
-        recorder.forward_pre_hook,
-        with_kwargs=True,
-    )
-    prior_post_handle = model.prior.register_forward_hook(
-        recorder.forward_hook,
-        with_kwargs=True,
-    )
+    policy_pre_handle = None
+    policy_post_handle = None
+    prior_pre_handle = None
+    prior_post_handle = None
+    if profile_timings:
+        policy_pre_handle = model.policy.register_forward_pre_hook(
+            recorder.forward_pre_hook,
+            with_kwargs=True,
+        )
+        policy_post_handle = model.policy.register_forward_hook(
+            recorder.forward_hook,
+            with_kwargs=True,
+        )
+        prior_pre_handle = model.prior.register_forward_pre_hook(
+            recorder.forward_pre_hook,
+            with_kwargs=True,
+        )
+        prior_post_handle = model.prior.register_forward_hook(
+            recorder.forward_hook,
+            with_kwargs=True,
+        )
     original_generate = model.generate
     original_fidelity_sample = (
         None if model.fidelity_head is None else model.fidelity_head.sample
@@ -1101,6 +1171,8 @@ def _run_profiled_train_step(
         recorder.generated_count = int(step_result[0])
         recorder.valid_count = int(step_result[1])
         recorder.synthesizable_count = int(step_result[2])
+        recorder.online_update_performed = step_result[3] is not None
+        recorder.replay_update_performed = step_result[4] is not None
     finally:
         model.generate = original_generate
         if original_fidelity_sample is not None:
@@ -1109,10 +1181,14 @@ def _run_profiled_train_step(
             original_tokenizer.recorder = None
         else:
             model.tokenizer = original_tokenizer
-        policy_post_handle.remove()
-        policy_pre_handle.remove()
-        prior_post_handle.remove()
-        prior_pre_handle.remove()
+        for handle in (
+            policy_post_handle,
+            policy_pre_handle,
+            prior_post_handle,
+            prior_pre_handle,
+        ):
+            if handle is not None:
+                handle.remove()
     return recorder
 
 
@@ -1157,8 +1233,50 @@ def _benchmark_prior(
     iterations: int,
     seed: int,
 ) -> dict[str, Any]:
-    """Time repeated prior scoring for one implementation."""
+    """Time uncached prior scoring for one implementation."""
     torch.manual_seed(seed + 2000)
+    input_batches = torch.randint(
+        3,
+        32,
+        (warmup + iterations, batch_size, sequence_length),
+        dtype=torch.long,
+        device=device,
+    )
+    input_batches[:, :, -1] = 2
+
+    def prior_step(iteration_index: int) -> None:
+        batch_index = (
+            iteration_index
+            if iteration_index >= 0
+            else iterations + abs(iteration_index) - 1
+        )
+        model.prior_sequence_log_probabilities(input_batches[batch_index])
+
+    model.prior.eval()
+    samples = _measure_iterations(
+        prior_step,
+        device=device,
+        warmup=warmup,
+        iterations=iterations,
+    )
+    summary = _summarize_timed_operation(samples, units_per_iteration=batch_size)
+    summary["units"] = "sequences"
+    summary["cache_state"] = "cold"
+    return summary
+
+
+def _benchmark_prior_reuse(
+    model: S3GFNModel | OptimizedS3GFNModel,
+    *,
+    batch_size: int,
+    sequence_length: int,
+    device: torch.device,
+    warmup: int,
+    iterations: int,
+    seed: int,
+) -> dict[str, Any]:
+    """Time repeated scoring of identical trajectories, including cache hits."""
+    torch.manual_seed(seed + 2500)
     input_ids = torch.randint(
         3,
         32,
@@ -1172,15 +1290,19 @@ def _benchmark_prior(
         del iteration_index
         model.prior_sequence_log_probabilities(input_ids)
 
+    clear_cache = getattr(model, "clear_prior_cache", None)
+    if callable(clear_cache):
+        clear_cache()
     model.prior.eval()
     samples = _measure_iterations(
         prior_step,
         device=device,
-        warmup=warmup,
+        warmup=max(1, warmup),
         iterations=iterations,
     )
     summary = _summarize_timed_operation(samples, units_per_iteration=batch_size)
     summary["units"] = "sequences"
+    summary["cache_state"] = "reuse"
     return summary
 
 
@@ -1263,6 +1385,7 @@ def _benchmark_training_step(
     warmup: int,
     iterations: int,
     seed: int,
+    profile_timings: bool,
 ) -> dict[str, Any]:
     """Benchmark one actual training-mode optimization step."""
     state = _create_train_step_state(
@@ -1270,56 +1393,94 @@ def _benchmark_training_step(
         device=device,
         batch_size=batch_size,
         max_length=max_length,
+        training_steps=warmup + iterations,
         optimized_options=optimized_options,
     )
 
     def train_step(iteration_index: int) -> _PhaseRecorder:
+        seed_offset = (
+            iteration_index
+            if iteration_index >= 0
+            else iterations + abs(iteration_index)
+        )
         return _run_profiled_train_step(
             model,
             device=device,
             state=state,
-            seed=seed + 4000 + max(iteration_index, 0),
+            seed=seed + 4000 + seed_offset,
+            profile_timings=profile_timings,
         )
 
-    deferred_sync = (
-        isinstance(state.sampler, OptimizedS3GFNSampler) and state.sampler.deferred_sync
+    optimized_sampler = (
+        state.sampler if isinstance(state.sampler, OptimizedS3GFNSampler) else None
+    )
+    deferred_sync = bool(
+        optimized_sampler is not None and optimized_sampler.deferred_sync
     )
     if deferred_sync:
-        state.sampler._deferred_training_steps.clear()
-        state.sampler._collect_deferred_metrics = True
+        optimized_sampler._deferred_training_steps.clear()
+        optimized_sampler._collect_deferred_metrics = True
+    if optimized_sampler is not None:
+        optimized_sampler._active_grad_scaler = optimized_sampler._make_grad_scaler()
+        precision_scope = optimized_sampler._tf32_scope()
+    else:
+        precision_scope = nullcontext()
     try:
-        samples = _measure_iterations(
-            train_step,
-            device=device,
-            warmup=warmup,
-            iterations=iterations,
-        )
+        with precision_scope:
+            samples = _measure_iteration_blocks(
+                train_step,
+                device=device,
+                warmup=warmup,
+                iterations=iterations,
+            )
     finally:
         if deferred_sync:
-            state.sampler._flush_deferred_metrics()
-            state.sampler._collect_deferred_metrics = False
-    summary = _summarize_timed_operation(samples, units_per_iteration=1)
-    summary["units"] = "steps"
+            optimized_sampler._flush_deferred_metrics()
+            optimized_sampler._collect_deferred_metrics = False
+        if optimized_sampler is not None:
+            optimized_sampler._active_grad_scaler = None
+    summary = _summarize_timed_operation(
+        samples,
+        units_per_iteration=batch_size,
+    )
+    summary["units"] = "trajectories"
+    summary["steps_per_s"] = _summarize_samples(
+        [1.0 / (sample.wall_ms / 1000.0) for sample in samples if sample.wall_ms > 0.0]
+    )
     summary["batch_size"] = batch_size
     summary["replay_batch_size"] = batch_size
     summary["max_length"] = max_length
-    recorders = [sample.payload for sample in samples]
+    summary["warmup_steps"] = warmup
+    summary["measured_steps"] = iterations
+    summary["measurement_block_size"] = min(20, iterations)
+    summary["measurement_mode"] = (
+        "intrusive_phase_profile"
+        if profile_timings
+        else "steady_state_synchronized_wall"
+    )
+    recorders = [recorder for sample in samples for recorder in sample.payload]
     phase_summary = _summarize_recorder_payloads(recorders)
     summary["quality"] = phase_summary.pop("quality")
     summary["phases"] = phase_summary
     summary["generated_trajectories_per_s"] = _summarize_samples(
         [
-            recorder.generated_count / (sample.wall_ms / 1000.0)
-            for recorder, sample in zip(recorders, samples, strict=True)
-            if sample.wall_ms > 0.0
+            sum(recorder.generated_count for recorder in sample.payload)
+            / (sample.wall_ms * len(sample.payload) / 1000.0)
+            for sample in samples
+            if sample.wall_ms > 0.0 and sample.payload
         ]
     )
     summary["valid_trajectories_per_s"] = _summarize_samples(
         [
-            recorder.valid_count / (sample.wall_ms / 1000.0)
-            for recorder, sample in zip(recorders, samples, strict=True)
-            if sample.wall_ms > 0.0
+            sum(recorder.valid_count for recorder in sample.payload)
+            / (sample.wall_ms * len(sample.payload) / 1000.0)
+            for sample in samples
+            if sample.wall_ms > 0.0 and sample.payload
         ]
+    )
+    summary["replay_update_rate"] = statistics.fmean(
+        float(getattr(recorder, "replay_update_performed", False))
+        for recorder in recorders
     )
     return summary
 
@@ -1434,7 +1595,7 @@ def _build_comparison(result: dict[str, Any]) -> dict[str, Any]:
     if reference is None or optimized is None:
         return {}
     comparison: dict[str, Any] = {}
-    for section_name in ("generation", "prior", "training_step"):
+    for section_name in ("generation", "prior", "prior_reuse", "training_step"):
         comparison[section_name] = {
             "speedup_reference_over_optimized": _compute_speedup(
                 reference[section_name]["wall_ms"]["median"],
@@ -1499,6 +1660,7 @@ def _benchmark_implementation(
     iterations: int,
     smoke_steps: int,
     seed: int,
+    profile_timings: bool,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Benchmark one implementation and return metrics plus a correctness sample."""
     model = _build_model(
@@ -1533,6 +1695,15 @@ def _benchmark_implementation(
                 iterations=iterations,
                 seed=seed,
             ),
+            "prior_reuse": _benchmark_prior_reuse(
+                model,
+                batch_size=batch_size,
+                sequence_length=sequence_length,
+                device=device,
+                warmup=warmup,
+                iterations=iterations,
+                seed=seed,
+            ),
             "policy_vectorization": _benchmark_policy_vectorization(
                 model,
                 batch_size=batch_size,
@@ -1551,6 +1722,7 @@ def _benchmark_implementation(
                 warmup=warmup,
                 iterations=iterations,
                 seed=seed,
+                profile_timings=profile_timings,
             ),
         }
         if smoke_steps > 0:
@@ -1674,7 +1846,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--profile-step",
         action="store_true",
-        help="Print detailed train-step phase timings and forward counters.",
+        help=(
+            "Enable intrusive synchronized phase timings. Disabled by default "
+            "so primary wall-time measurements represent steady-state training."
+        ),
     )
     parser.add_argument(
         "--gpu-utilization-trace",
@@ -1709,8 +1884,7 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
     if args.warmup < 0 or args.iterations <= 0:
         raise ValueError("--warmup must be nonnegative and --iterations positive.")
 
-    if not args.real_model:
-        torch.manual_seed(args.seed)
+    torch.manual_seed(args.seed)
 
     templates = (
         _load_real_templates(
@@ -1730,7 +1904,7 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
         else (args.implementation,)
     )
     result: dict[str, Any] = {
-        "benchmark_version": 2,
+        "benchmark_version": 3,
         "implementation_mode": args.implementation,
         "config": {
             "real_model": bool(args.real_model),
@@ -1748,6 +1922,7 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
             "tokenizer_name": args.tokenizer_name,
             "cache_dir": args.cache_dir,
             "ablations": _benchmark_optimized_options(args),
+            "profile_timings": bool(args.profile_step),
         },
         "environment": _collect_environment_metadata(device),
         "implementations": {},
@@ -1765,6 +1940,7 @@ def run_benchmark(args: argparse.Namespace) -> dict[str, Any]:
                 "iterations": args.iterations,
                 "smoke_steps": args.smoke_steps,
                 "seed": args.seed,
+                "profile_timings": bool(args.profile_step),
             }
             optimized_options = _benchmark_optimized_options(args)
             if implementation == "optimized" and (
@@ -1846,6 +2022,12 @@ def _print_cli_summary(result: dict[str, Any], *, profile_step: bool) -> None:
         ]
         prior_reference = implementations["reference"]["prior"]["wall_ms"]["median"]
         prior_optimized = implementations["optimized"]["prior"]["wall_ms"]["median"]
+        prior_reuse_reference = implementations["reference"]["prior_reuse"]["wall_ms"][
+            "median"
+        ]
+        prior_reuse_optimized = implementations["optimized"]["prior_reuse"]["wall_ms"][
+            "median"
+        ]
         print(
             "generation_ms: "
             f"reference={generation_reference:.3f} "
@@ -1855,8 +2037,14 @@ def _print_cli_summary(result: dict[str, Any], *, profile_step: bool) -> None:
         print(
             "prior_ms: "
             f"reference={prior_reference:.3f} "
-            f"optimized_cached={prior_optimized:.3f} "
+            f"optimized={prior_optimized:.3f} "
             f"speedup={result['comparisons']['prior']['speedup_reference_over_optimized']:.2f}x"
+        )
+        print(
+            "prior_reuse_ms: "
+            f"reference={prior_reuse_reference:.3f} "
+            f"optimized={prior_reuse_optimized:.3f} "
+            f"speedup={result['comparisons']['prior_reuse']['speedup_reference_over_optimized']:.2f}x"
         )
         print(
             "training_step_ms: "
@@ -1906,6 +2094,10 @@ def _print_cli_summary(result: dict[str, Any], *, profile_step: bool) -> None:
     print(
         f"{implementation_name}_prior_ms="
         f"{implementation['prior']['wall_ms']['median']:.3f}"
+    )
+    print(
+        f"{implementation_name}_prior_reuse_ms="
+        f"{implementation['prior_reuse']['wall_ms']['median']:.3f}"
     )
     print(
         f"{implementation_name}_training_step_ms="

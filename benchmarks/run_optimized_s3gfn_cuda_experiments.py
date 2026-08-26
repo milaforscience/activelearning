@@ -350,8 +350,8 @@ PROFILE_PRESETS: dict[str, dict[str, Any]] = {
         "description": "Longer CUDA comparison profile.",
         "sequence_length": 140,
         "max_length": 140,
-        "warmup": 2,
-        "iterations": 5,
+        "warmup": 10,
+        "iterations": 100,
         "smoke_steps": 10,
     },
 }
@@ -930,14 +930,31 @@ def execute_run(
         )
         benchmark = worker_result.benchmark
         record["benchmark_path"] = str(raw_json_path)
-        record["benchmark"] = _select_implementation_metrics(
+        implementation_metrics = _select_implementation_metrics(
             benchmark,
             run_spec.implementation,
         )
+        record["benchmark"] = implementation_metrics
         record["quality"] = benchmark.get("quality", {})
         record["status"] = "success" if completed.returncode == 0 else "failure"
         if completed.returncode != 0:
             record["error"] = "Worker exited nonzero despite JSON output."
+        compile_mode = record["ablations"]["compile_mode"]
+        if completed.returncode == 0 and compile_mode != "eager":
+            optimization = implementation_metrics.get("optimization", {})
+            graph_count = int(optimization.get("compile_graph_count", 0))
+            fallback_reason = optimization.get("compile_fallback_reason")
+            compile_effective = graph_count > 0 and fallback_reason is None
+            record["compile_effective"] = compile_effective
+            if not compile_effective:
+                record["status"] = "failure"
+                record["error"] = (
+                    "Compilation stage did not produce an effective compiled "
+                    f"graph: graph_count={graph_count}, "
+                    f"fallback_reason={fallback_reason!r}."
+                )
+        else:
+            record["compile_effective"] = None
     except (json.JSONDecodeError, KeyError) as error:
         record["status"] = "failure"
         record["error"] = f"Malformed worker output: {error}"
@@ -981,6 +998,7 @@ def _training_quality(record: dict[str, Any]) -> dict[str, Any]:
 _SPEEDUP_METRICS = {
     "generation_wall_ms": ("generation", "wall_ms", "median"),
     "prior_wall_ms": ("prior", "wall_ms", "median"),
+    "prior_reuse_wall_ms": ("prior_reuse", "wall_ms", "median"),
     "training_step_wall_ms": ("training_step", "wall_ms", "median"),
 }
 
@@ -1299,6 +1317,40 @@ def aggregate_run_records(records: Sequence[dict[str, Any]]) -> dict[str, Any]:
                     )
                 ),
             },
+            "prior_reuse": {
+                "wall_ms": _summarize(
+                    _metric_values(
+                        group_records,
+                        "prior_reuse",
+                        "wall_ms",
+                        "median",
+                    )
+                ),
+                "throughput_per_s": _summarize(
+                    _metric_values(
+                        group_records,
+                        "prior_reuse",
+                        "throughput_per_s",
+                        "median",
+                    )
+                ),
+                "peak_allocated_bytes": _summarize(
+                    _metric_values(
+                        group_records,
+                        "prior_reuse",
+                        "peak_allocated_bytes",
+                        "median",
+                    )
+                ),
+                "peak_reserved_bytes": _summarize(
+                    _metric_values(
+                        group_records,
+                        "prior_reuse",
+                        "peak_reserved_bytes",
+                        "median",
+                    )
+                ),
+            },
             "training_step": {
                 "wall_ms": _summarize(
                     _metric_values(
@@ -1330,6 +1382,13 @@ def aggregate_run_records(records: Sequence[dict[str, Any]]) -> dict[str, Any]:
                         "training_step",
                         "peak_reserved_bytes",
                         "median",
+                    )
+                ),
+                "replay_update_rate": _summarize(
+                    _metric_values(
+                        group_records,
+                        "training_step",
+                        "replay_update_rate",
                     )
                 ),
             },
@@ -1411,6 +1470,7 @@ def aggregate_run_records(records: Sequence[dict[str, Any]]) -> dict[str, Any]:
                 "throughput_per_s"
             ]["median"],
             "prior_wall_ms_median": summary["prior"]["wall_ms"]["median"],
+            "prior_reuse_wall_ms_median": summary["prior_reuse"]["wall_ms"]["median"],
             "training_step_wall_ms_median": summary["training_step"]["wall_ms"][
                 "median"
             ],
@@ -1452,6 +1512,11 @@ def aggregate_run_records(records: Sequence[dict[str, Any]]) -> dict[str, Any]:
                 if reference_speedups is None
                 else reference_speedups["prior_wall_ms"]["median"]
             ),
+            "prior_reuse_speedup_vs_reference": (
+                None
+                if reference_speedups is None
+                else reference_speedups["prior_reuse_wall_ms"]["median"]
+            ),
             "training_step_speedup_vs_reference": (
                 None
                 if reference_speedups is None
@@ -1467,11 +1532,19 @@ def aggregate_run_records(records: Sequence[dict[str, Any]]) -> dict[str, Any]:
                 if parent_speedups is None
                 else parent_speedups["prior_wall_ms"]["median"]
             ),
+            "prior_reuse_speedup_vs_parent": (
+                None
+                if parent_speedups is None
+                else parent_speedups["prior_reuse_wall_ms"]["median"]
+            ),
             "training_step_speedup_vs_parent": (
                 None
                 if parent_speedups is None
                 else parent_speedups["training_step_wall_ms"]["median"]
             ),
+            "training_replay_update_rate_median": summary["training_step"][
+                "replay_update_rate"
+            ]["median"],
             "peak_allocated_bytes_median": summary["training_step"][
                 "peak_allocated_bytes"
             ]["median"],
