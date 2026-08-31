@@ -193,12 +193,127 @@ class XTBIPEAOracleConfig(BaseModel):
         )
 
 
+class Dock3OracleConfig(BaseModel):
+    """Configuration for :class:`~activelearning.applications.molecules.dock3_oracle.Dock3Oracle`.
+
+    Parameters
+    ----------
+    indock_template : str
+        INDOCK template shipped with the receptor dockfiles.
+    dockfiles_dir : str
+        Directory of prepared receptor grid files.
+    fidelity_costs : dict[int, float]
+        Cost per sample. DOCK3 has no fidelity ladder, so exactly one fidelity
+        level must be declared; compose with other oracles through
+        ``CompositeOracle`` for multi-fidelity runs.
+    fidelity_confidences : dict[int, float], optional
+        Confidence in ``[0, 1]`` per fidelity.  Defaults to costs normalised by max.
+    mol_repr : str
+        Input molecules representation.  DOCK3 only accepts ``"smiles"``.
+    dockenv_sh : str, optional
+        Environment bootstrap script sourced before ligbuild.  Defaults to the
+        shared cluster install.
+    dock64_exe : str, optional
+        Path to the dock64 binary.  Defaults to the shared cluster install.
+    ligbuild_exe : str
+        Name or path of the ligbuild executable, resolved from ``$PATH`` after
+        sourcing ``dockenv_sh``.
+    tmp_dir : str, optional
+        Directory for per-call workdirs, preserved for debugging.  Keep it short
+        (under ~25 characters); AMSOL silently corrupts builds when total paths
+        exceed its fixed-width Fortran buffer.
+    timeout : int
+        Wall-clock seconds allowed for *each* of the ligbuild and dock64
+        subprocesses.  Note that this, and not ``ligbuild_timeout``, is what
+        actually bounds a ligbuild run.
+    ligbuild_timeout : int
+        Internal per-protomer timeout hint passed to ligbuild through
+        ``custom_parms.json``.  Only meaningful when below ``timeout``.
+    num_workers : int, optional
+        Threads used per query batch.  ``null`` resolves to
+        ``$SLURM_CPUS_PER_TASK``, else the CPU count, else 1.
+    negate_score : bool
+        Whether to return ``-score`` so the maximizing loop chases the
+        strongest binders.  DOCK3 scores are negative-is-better.
+    warmup : bool
+        Whether to probe the docking environment during construction.  Leave
+        enabled in production: the probe must run single-threaded before any
+        parallel ligbuild call.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["Dock3Oracle"] = "Dock3Oracle"
+    indock_template: str
+    dockfiles_dir: str
+    fidelity_costs: dict[int, float]
+    fidelity_confidences: dict[int, float] | None = None
+    mol_repr: Literal["smiles"] = "smiles"
+    dockenv_sh: str | None = None
+    dock64_exe: str | None = None
+    ligbuild_exe: str = "ligbuild"
+    tmp_dir: str | None = None
+    timeout: int = Field(default=300, gt=0)
+    ligbuild_timeout: int = Field(default=150, gt=0)
+    num_workers: int | None = Field(default=1, ge=1)
+    negate_score: bool = True
+    warmup: bool = True
+
+    @model_validator(mode="after")
+    def validate_single_fidelity(self) -> "Dock3OracleConfig":
+        """Validate that exactly one fidelity level is declared.
+
+        Returns
+        -------
+        Dock3OracleConfig
+            This validated configuration instance.
+
+        Raises
+        ------
+        ValueError
+            If zero or more than one fidelity level is declared.
+        """
+        if len(self.fidelity_costs) != 1:
+            raise ValueError(
+                "Dock3Oracle is single-fidelity and must declare exactly one "
+                f"fidelity level in fidelity_costs; got {sorted(self.fidelity_costs)}."
+            )
+        return self
+
+    def build(self) -> Oracle:
+        """Build the DOCK3-backed oracle lazily.
+
+        Returns
+        -------
+        Oracle
+            Configured :class:`~activelearning.applications.molecules.dock3_oracle.Dock3Oracle`.
+        """
+        from activelearning.applications.molecules.dock3_oracle import Dock3Oracle
+
+        return Dock3Oracle(
+            indock_template=self.indock_template,
+            dockfiles_dir=self.dockfiles_dir,
+            fidelity_costs=self.fidelity_costs,
+            fidelity_confidences=self.fidelity_confidences,
+            dockenv_sh=self.dockenv_sh,
+            dock64_exe=self.dock64_exe,
+            ligbuild_exe=self.ligbuild_exe,
+            tmp_dir=self.tmp_dir,
+            timeout=self.timeout,
+            ligbuild_timeout=self.ligbuild_timeout,
+            num_workers=self.num_workers,
+            negate_score=self.negate_score,
+            warmup=self.warmup,
+        )
+
+
 OracleConfig = Annotated[
     Union[
         BraninOracleConfig,
         Hartmann6DOracleConfig,
         CompositeOracleConfig,
         XTBIPEAOracleConfig,
+        Dock3OracleConfig,
     ],
     Field(discriminator="type"),
 ]

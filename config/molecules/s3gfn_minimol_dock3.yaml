@@ -1,0 +1,78 @@
+# S3-GFN molecule experiment: MiniMol fingerprints + exact SMILES DKL,
+# scored by DOCK3 docking against the AmpC beta-lactamase receptor.
+#
+# Prerequisites:
+#   - uv sync --extra molecules
+#   - the DOCK3 toolchain on the cluster: dockenv.sh, ligbuild, dock64
+#   - a prepared receptor dockfiles directory and its INDOCK template
+#   - run inside a Slurm allocation so $SLURM_TMPDIR exists; the oracle needs
+#     node-local scratch reachable through a short path (see Dock3Oracle docs)
+#
+# Docking is expensive (~32 core-seconds per molecule), so num_workers should
+# match the allocation's cpus-per-task. Budget is denominated in the same units
+# as fidelity_costs, i.e. core-seconds here.
+
+runtime:
+  device: cpu
+  precision: 64
+  seed: 42
+
+dataset:
+  type: ListDataset
+
+surrogate:
+  type: ExactDKLSurrogate
+  encoder:
+    type: MiniMolSmilesEncoder
+    batch_size: 16
+    latent_dim: 32
+    cache_size: 4096
+  training_params:
+    epochs: 10
+    lr: 1.0e-3
+  standardize_outputs: true
+
+acquisition:
+  type: UpperConfidenceBound
+  beta: 2.0
+
+sampler:
+  type: S3GFNSampler
+  n_samples: 64
+  fidelities: [1]
+  model_name_or_path: ibm-research/GP-MoLFormer-Uniq
+  tokenizer_name_or_path: ibm-research/MoLFormer-XL-both-10pct
+  trust_remote_code: true
+  max_length: 140
+  batch_size: 16
+  replay_batch_size: 16
+  n_train_steps: 25
+  num_warmup_steps: 5
+  beta: 25.0
+  aux_coefficient: 0.001
+  sa_threshold: 4.0
+
+selector:
+  type: TopKAcquisitionSelector
+  num_samples: 16
+
+oracle:
+  type: Dock3Oracle
+  indock_template: /home/ethankrz/dock_smiles/ampc_dockfiles/INDOCK
+  dockfiles_dir: /home/ethankrz/dock_smiles/ampc_dockfiles
+  mol_repr: smiles
+  fidelity_costs:
+    1: 32.0          # measured mean core-seconds per molecule
+  num_workers: 64
+  ligbuild_timeout: 150
+
+budget:
+  available_budget: 1536.0
+  schedule:
+    type: constant
+    value: 512.0
+
+logger:
+  type: ConsoleLogger
+  project_name: activelearning_tutorials
+  run_name: molecules-s3gfn-minimol-dock3
