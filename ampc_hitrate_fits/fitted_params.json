@@ -1,0 +1,12 @@
+{
+    "ampc": {
+        "artifact_mean": -3.667084850807413,
+        "artifact_std": 0.999997073981824,
+        "artifact_freq": 1.1845986033846908e-06,
+        "rho": -0.64,
+        "exp_mean": 3.18,
+        "exp_std": 1.24,
+        "MSE": 0.00037249016550825294,
+        "target": "target1"
+    }
+}

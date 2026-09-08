@@ -8,25 +8,34 @@ The pipeline is ported from the standalone ``dock_smiles`` project and keeps
 several non-obvious behaviours that are load bearing; see the individual
 function docstrings before changing anything here.
 
+Observed values are an estimated probability of binding rather than the raw
+docking energy; see
+:mod:`activelearning.applications.molecules.hit_rate` for the conversion.
+
 Unlike :mod:`activelearning.applications.molecules.xtb_oracle`, this module
-depends only on the standard library: the chemistry happens in external
-binaries, so no optional ``molecules`` extra is required to import it.
+needs only numpy and scipy: the chemistry happens in external binaries, so no
+optional ``molecules`` extra is required to import it.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
+from activelearning.applications.molecules.hit_rate import HitRateModel
 from activelearning.oracle.multi_fidelity_oracle import MultiFidelityOracle
 from activelearning.utils.types import Candidate, Observation
 
@@ -48,7 +57,143 @@ _OUTDOCK_FILE_MARKERS = (" close the file:", " open the file:")
 
 # Longest tmp_dir prefix that still leaves AMSOL room to work; see
 # _short_workdir_base for the rationale.
-_MAX_SAFE_TMP_DIR_CHARS = 30
+_MAX_SAFE_TMP_DIR_CHARS = 25
+
+# Seconds allowed for an already-killed process tree to close its pipes. The
+# tree has been SIGKILLed by this point, so this only bounds a pathological
+# drain rather than any real work.
+_KILL_DRAIN_TIMEOUT = 10
+
+# Memoized fallback workdir base, used when the /tmp alias is unusable. Guarded
+# by a lock because a query batch is evaluated from a thread pool.
+_fallback_base_lock = threading.Lock()
+_fallback_base: Optional[Path] = None
+
+
+def _kill_process_tree(process: subprocess.Popen[str]) -> None:
+    """SIGKILL a process along with every descendant it spawned.
+
+    ``subprocess`` only ever signals the process it launched directly. Here
+    that process is a shell, and the real work runs in its children (ligbuild,
+    with AMSOL and OpenEye below that), so killing the shell alone leaves them
+    running with no parent watching. They then keep consuming cores in the
+    job's allocation for the remainder of the run.
+
+    Relies on the process having been started with ``start_new_session=True``,
+    which makes its PID the ID of a process group containing the whole tree.
+
+    Parameters
+    ----------
+    process : subprocess.Popen
+        Process whose tree should be killed.
+    """
+    try:
+        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        # Already reaped, or the group is not ours to signal. Killing the
+        # direct child is the best that can be done.
+        process.kill()
+
+
+def _run_subprocess(
+    command: list[str],
+    *,
+    timeout: int,
+    cwd: Optional[Path] = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a command in its own process group, killing the tree on timeout.
+
+    Equivalent to ``subprocess.run(capture_output=True, text=True,
+    timeout=...)`` except that a timeout takes down the entire process tree
+    instead of just the launched process; see :func:`_kill_process_tree`.
+
+    Parameters
+    ----------
+    command : list[str]
+        Command and arguments to execute.
+    timeout : int
+        Wall-clock seconds allowed before the process tree is killed.
+    cwd : Path, optional
+        Working directory for the subprocess.
+
+    Returns
+    -------
+    subprocess.CompletedProcess
+        Completed process with captured text ``stdout`` and ``stderr``.
+
+    Raises
+    ------
+    subprocess.TimeoutExpired
+        If the command did not finish within ``timeout``. Its message still
+        contains "timed out", which is what :func:`_classify_failure` keys on.
+    """
+    with subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        cwd=str(cwd) if cwd is not None else None,
+        start_new_session=True,
+    ) as process:
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            _kill_process_tree(process)
+            try:
+                process.communicate(timeout=_KILL_DRAIN_TIMEOUT)
+            except subprocess.TimeoutExpired:
+                pass
+            raise
+        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
+
+
+def _is_usable_directory(path: Path) -> bool:
+    """Return whether ``path`` is a directory this process can create files in.
+
+    ``Path.is_dir`` follows symlinks, so a dangling symlink and a plain file
+    both answer ``False``; a directory owned by another user answers ``False``
+    on the access check.
+
+    Parameters
+    ----------
+    path : Path
+        Candidate directory.
+
+    Returns
+    -------
+    bool
+        ``True`` when the path is a writable, searchable directory.
+    """
+    return path.is_dir() and os.access(path, os.W_OK | os.X_OK)
+
+
+def _fallback_workdir_base(alias: Path, reason: str) -> Path:
+    """Return a process-wide short workdir base, created once on first use.
+
+    Parameters
+    ----------
+    alias : Path
+        The alias path that could not be used, quoted in the warning.
+    reason : str
+        Short description of why the alias was rejected.
+
+    Returns
+    -------
+    Path
+        A short, writable directory under ``/tmp``.
+    """
+    global _fallback_base
+    with _fallback_base_lock:
+        if _fallback_base is None or not _is_usable_directory(_fallback_base):
+            _fallback_base = Path(tempfile.mkdtemp(prefix="d.", dir="/tmp"))
+            logger.warning(
+                "Short workdir alias %s is unusable (%s); falling back to %s. "
+                "Docking continues, but without node-local scratch.",
+                alias,
+                reason,
+                _fallback_base,
+            )
+        return _fallback_base
 
 
 def _short_workdir_base() -> Path:
@@ -68,6 +213,13 @@ def _short_workdir_base() -> Path:
     alias is per-Slurm-job so concurrent jobs on a node never fight over the
     symlink target.
 
+    The alias path can also be occupied by something unusable: a dangling
+    symlink left by an earlier job whose ``$SLURM_TMPDIR`` is gone, a plain
+    file, or a directory owned by another user (outside Slurm the tag is the
+    constant ``cli``, so the name is shared node-wide). Every one of those
+    would otherwise raise for every molecule and surface as an undifferentiated
+    ``NaN``, so an unusable alias falls back to a fresh short directory instead.
+
     Returns
     -------
     Path
@@ -76,24 +228,32 @@ def _short_workdir_base() -> Path:
     job_tag = os.environ.get("SLURM_JOB_ID") or os.environ.get("RUN_ID") or "cli"
     alias = Path(f"/tmp/d.{job_tag}")
     slurm_tmpdir = os.environ.get("SLURM_TMPDIR")
-    if not slurm_tmpdir:
-        alias.mkdir(parents=True, exist_ok=True)
+
+    if slurm_tmpdir:
+        target = Path(slurm_tmpdir)
+        try:
+            if alias.is_symlink():
+                if alias.resolve() != target.resolve():
+                    alias.unlink()
+                    alias.symlink_to(target, target_is_directory=True)
+            elif not alias.exists():
+                alias.symlink_to(target, target_is_directory=True)
+        except OSError:
+            # /tmp not writable, or a race with a sibling process. The
+            # usability check below decides what to do about it.
+            pass
+
+    if _is_usable_directory(alias):
         return alias
 
-    target = Path(slurm_tmpdir)
     try:
-        if alias.is_symlink():
-            if alias.resolve() != target.resolve():
-                alias.unlink()
-                alias.symlink_to(target, target_is_directory=True)
-        elif not alias.exists():
-            alias.symlink_to(target, target_is_directory=True)
-    except OSError:
-        # /tmp not writable, or a race with a sibling process. Fall back to a
-        # plain directory; AMSOL still gets a short prefix, we just lose the
-        # NVMe scratch.
         alias.mkdir(parents=True, exist_ok=True)
-    return alias
+    except OSError as error:
+        return _fallback_workdir_base(alias, f"{type(error).__name__}: {error}")
+
+    if _is_usable_directory(alias):
+        return alias
+    return _fallback_workdir_base(alias, "not a writable directory")
 
 
 def _warmup_dockenv(
@@ -114,6 +274,14 @@ def _warmup_dockenv(
     healthy pre-built environment still proceed and the per-call ligbuild
     surfaces the real error if there is one.
 
+    The probe deliberately uses the same shell form as :func:`_run_ligbuild`
+    (``bash -c``, not ``bash -lc``). A login shell reads ``/etc/profile`` and
+    ``~/.bash_profile``, which is where a cluster defines ``module``; probing
+    under one while the real call runs without it lets the probe report success
+    for an environment ligbuild never sees. Since the whole point of the probe
+    is to catch a broken environment before any parallel call, a false OK is
+    worse than no probe at all. Keep the two invocations identical.
+
     Parameters
     ----------
     dockenv_sh : str
@@ -129,12 +297,7 @@ def _warmup_dockenv(
         'python -c "import openeye, Pyro4" 2>&1'
     )
     try:
-        result = subprocess.run(
-            ["bash", "-lc", probe_cmd],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
+        result = _run_subprocess(["bash", "-c", probe_cmd], timeout=timeout)
     except subprocess.TimeoutExpired:
         logger.warning(
             "dockenv warmup timed out after %ds (dockenv_sh=%s). Continuing; "
@@ -211,13 +374,7 @@ def _run_ligbuild(
         f'source "{dockenv_sh}" && '
         f'{ligbuild_exe} "{smi_file}" "{out_dir}" "{custom_parms_path}"'
     )
-    result = subprocess.run(
-        ["bash", "-c", cmd],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        cwd=str(out_dir.parent),
-    )
+    result = _run_subprocess(["bash", "-c", cmd], timeout=timeout, cwd=out_dir.parent)
 
     # Deliberately not checking the return code: ligbuild commonly exits rc=1
     # because its shutil.rmtree("db2_outputs") cleanup races in parallel jobs,
@@ -353,12 +510,8 @@ def _run_dock64(
     if not dockfiles_copy.exists():
         shutil.copytree(str(dockfiles_dir), str(dockfiles_copy))
 
-    result = subprocess.run(
-        ["./dock64", indock_path.name],
-        capture_output=True,
-        text=True,
-        cwd=str(work_dir),
-        timeout=timeout,
+    result = _run_subprocess(
+        ["./dock64", indock_path.name], timeout=timeout, cwd=work_dir
     )
 
     # dock64 exits non-zero even on success (it raises an ieee_inexact signal),
@@ -506,6 +659,14 @@ class Dock3Oracle(MultiFidelityOracle):
     runs ``dock64`` against the receptor dockfiles, and parses the best pose
     energy out of ``OUTDOCK``.
 
+    The observed value is **not** that energy. The raw score is converted to an
+    estimated probability of binding through
+    :class:`~activelearning.applications.molecules.hit_rate.HitRateModel`, and it
+    is that probability the acquisition loop maximizes. The raw score is kept in
+    each observation's metadata. Note that the probability is not monotone in
+    the score: it peaks at an interior score and falls off beyond it, because
+    scores that good are more likely to be artifacts than real binders.
+
     DOCK3 has no natural fidelity ladder, so exactly one fidelity level must be
     declared. Cheaper molecular oracles can be combined with this one at other
     fidelity levels through
@@ -546,10 +707,14 @@ class Dock3Oracle(MultiFidelityOracle):
         Threads used to evaluate a query batch. ``None`` resolves to
         ``$SLURM_CPUS_PER_TASK``, else the CPU count, else 1. Defaults to 1
         (serial). The work happens in subprocesses, so threads scale well.
-    negate_score : bool, default=True
-        Whether to return ``-score``. DOCK3 scores are negative-is-better while
-        the acquisition loop maximizes, so the default makes the strongest
-        binder the highest-valued observation.
+    hitrate_params : str or Path
+        JSON file of fitted hit-rate parameters, keyed by target name.
+    score_pprop_table : str or Path
+        Score/pProp lookup table for the reference library screen.
+    pki_threshold : float
+        Experimental pKi at or above which a molecule counts as a hit.
+    hitrate_target : str, default="ampc"
+        Key to read from ``hitrate_params``.
     warmup : bool, default=True
         Whether to probe the docking environment during construction. Leave
         enabled in production: the probe must run single-threaded before any
@@ -562,7 +727,8 @@ class Dock3Oracle(MultiFidelityOracle):
     failed docking run costs real compute. This differs from the standalone
     ``dock_smiles`` scripts, which use ``0.0`` as the failure sentinel; ``0.0``
     is also a legitimate (if weak) DOCK3 score, so it cannot be distinguished
-    from a failure.
+    from a failure. Keeping ``NaN`` matters more now that the observed value is
+    a probability, since ``0.0`` is a perfectly ordinary hit rate.
     """
 
     def __init__(
@@ -570,6 +736,9 @@ class Dock3Oracle(MultiFidelityOracle):
         indock_template: str | Path,
         dockfiles_dir: str | Path,
         fidelity_costs: dict[int, float],
+        hitrate_params: str | Path,
+        score_pprop_table: str | Path,
+        pki_threshold: float,
         fidelity_confidences: Optional[dict[int, float]] = None,
         dockenv_sh: str | Path | None = None,
         dock64_exe: str | Path | None = None,
@@ -578,7 +747,7 @@ class Dock3Oracle(MultiFidelityOracle):
         timeout: int = 300,
         ligbuild_timeout: int = 150,
         num_workers: Optional[int] = 1,
-        negate_score: bool = True,
+        hitrate_target: str = "ampc",
         warmup: bool = True,
     ) -> None:
         """Initialize the DOCK3-backed molecular oracle.
@@ -586,13 +755,16 @@ class Dock3Oracle(MultiFidelityOracle):
         Raises
         ------
         FileNotFoundError
-            If the INDOCK template or the dockfiles directory is missing.
+            If the INDOCK template, the dockfiles directory, the fitted
+            hit-rate parameters or the score/pProp table is missing.
+        KeyError
+            If ``hitrate_target`` is absent from the parameter file, or a
+            required fitted parameter is missing.
         ValueError
-            If no fidelity or more than one fidelity is declared, or if a
-            timeout or worker count is not positive.
+            If no fidelity or more than one fidelity is declared, if a timeout
+            or worker count is not positive, or if the fitted parameters are
+            out of range.
         """
-        if not fidelity_costs:
-            raise ValueError("fidelity_costs must declare exactly one fidelity.")
         if len(fidelity_costs) != 1:
             raise ValueError(
                 "Dock3Oracle is single-fidelity and must declare exactly one "
@@ -626,8 +798,16 @@ class Dock3Oracle(MultiFidelityOracle):
         self._ligbuild_exe = ligbuild_exe
         self._timeout = timeout
         self._ligbuild_timeout = ligbuild_timeout
-        self._negate_score = negate_score
+        self._pki_threshold = pki_threshold
         self._num_workers = self._resolve_num_workers(num_workers)
+
+        # Built once, up front, so a missing or malformed parameter file fails
+        # at construction rather than turning every molecule into a NaN.
+        self._hit_rate_model = HitRateModel.from_files(
+            params_path=hitrate_params,
+            score_pprop_table=score_pprop_table,
+            target=hitrate_target,
+        )
 
         if tmp_dir is None:
             self._tmp_dir: Optional[Path] = None
@@ -638,9 +818,10 @@ class Dock3Oracle(MultiFidelityOracle):
                 logger.warning(
                     "tmp_dir=%r is %d chars; ligbuild/AMSOL may silently corrupt "
                     "builds once total paths exceed ~80 chars. Prefer a tmp_dir "
-                    "under /tmp/ (<=25 chars) for reliable docking scores.",
+                    "under /tmp/ (<=%d chars) for reliable docking scores.",
                     str(self._tmp_dir),
                     len(str(self._tmp_dir)),
+                    _MAX_SAFE_TMP_DIR_CHARS,
                 )
 
         if warmup:
@@ -687,6 +868,10 @@ class Dock3Oracle(MultiFidelityOracle):
         ------
         ValueError
             If a candidate has an unsupported fidelity or a non-string ``x``.
+
+        See Also
+        --------
+        _log_query_failure_summary : Aggregate outcomes logged for each batch.
         """
         # Validate everything up front and serially, so programmer errors raise
         # instead of being swallowed as a per-molecule NaN inside a worker.
@@ -715,20 +900,54 @@ class Dock3Oracle(MultiFidelityOracle):
             observations.append(
                 Observation(
                     x=candidate.x,
-                    y=self._apply_sign(raw),
+                    y=self._hit_rate(raw),
                     fidelity=fidelity,
                     metadata={
                         **(candidate.metadata or {}),
                         "dock3_raw_score": raw,
+                        "dock3_pprop": self._hit_rate_model.pprop(raw),
                         "dock3_failure_reason": reason,
                     },
                 )
             )
+        self._log_query_failure_summary(results)
         return observations
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _log_query_failure_summary(
+        self, results: Sequence[tuple[float, Optional[str]]]
+    ) -> None:
+        """Log aggregate docking outcomes for one query batch, if a logger is bound.
+
+        Failed molecules score ``NaN`` and are dropped by the active-learning
+        loop before they reach the dataset, so the per-observation
+        ``dock3_failure_reason`` never survives the round. Without this summary
+        the two situations that matter cannot be told apart: a sampler emitting
+        unbuildable molecules, and a compute node where the docking environment
+        is broken so every molecule fails identically. Both spend the full
+        budget, since cost is charged before the query runs.
+
+        Parameters
+        ----------
+        results : Sequence[tuple[float, str or None]]
+            Per-molecule ``(raw_score, failure_reason)`` pairs from the most
+            recent :meth:`query` call.
+        """
+        if self.logger is None or not results:
+            return
+
+        reasons = Counter(reason for _, reason in results if reason is not None)
+        total = len(results)
+        succeeded = total - sum(reasons.values())
+
+        self.logger.log_metric("dock3/queried", float(total))
+        self.logger.log_metric("dock3/succeeded", float(succeeded))
+        self.logger.log_metric("dock3/success_rate", succeeded / total)
+        for reason, count in sorted(reasons.items()):
+            self.logger.log_metric(f"dock3/failures/{reason}", float(count))
 
     @staticmethod
     def _resolve_num_workers(num_workers: Optional[int]) -> int:
@@ -753,49 +972,6 @@ class Dock3Oracle(MultiFidelityOracle):
             except ValueError:
                 logger.warning("Ignoring unparsable SLURM_CPUS_PER_TASK=%r", slurm_cpus)
         return os.cpu_count() or 1
-
-    @staticmethod
-    def _resolve_fidelity_confidences(
-        fidelity_costs: dict[int, float],
-        fidelity_confidences: Optional[dict[int, float]],
-    ) -> dict[int, float]:
-        """Resolve confidences, defaulting to cost-normalized fractions.
-
-        Parameters
-        ----------
-        fidelity_costs : dict[int, float]
-            Cost per sample for each fidelity level.
-        fidelity_confidences : dict[int, float] or None
-            Explicit confidence values in ``[0, 1]``. When ``None``, each
-            fidelity's confidence is set to ``cost / max_cost``.
-
-        Returns
-        -------
-        dict[int, float]
-            Confidence value for every fidelity key in ``fidelity_costs``.
-
-        Raises
-        ------
-        ValueError
-            If the provided keys do not match those of ``fidelity_costs``.
-        """
-        if fidelity_confidences is None:
-            max_cost = max(fidelity_costs.values())
-            return {fid: cost / max_cost for fid, cost in fidelity_costs.items()}
-
-        missing_fidelities = sorted(set(fidelity_costs) - set(fidelity_confidences))
-        extra_fidelities = sorted(set(fidelity_confidences) - set(fidelity_costs))
-        if missing_fidelities or extra_fidelities:
-            message_parts = []
-            if missing_fidelities:
-                message_parts.append(f"missing keys {missing_fidelities}")
-            if extra_fidelities:
-                message_parts.append(f"unexpected keys {extra_fidelities}")
-            raise ValueError(
-                "fidelity_confidences must have exactly the same fidelity keys as "
-                f"fidelity_costs; got {' and '.join(message_parts)}."
-            )
-        return dict(fidelity_confidences)
 
     @staticmethod
     def _extract_smiles(candidate: Candidate) -> str:
@@ -823,24 +999,25 @@ class Dock3Oracle(MultiFidelityOracle):
             )
         return candidate.x
 
-    def _apply_sign(self, raw: float) -> float:
-        """Apply the maximization sign convention to a raw DOCK3 score.
+    def _hit_rate(self, raw: float) -> float:
+        """Convert a raw DOCK3 score into an estimated probability of binding.
 
         Parameters
         ----------
         raw : float
-            Raw DOCK3 total score, or ``NaN`` for a failed evaluation.
+            Raw DOCK3 total score, un-negated, or ``NaN`` for a failed
+            evaluation.
 
         Returns
         -------
         float
-            ``-raw`` when ``negate_score`` is set, else ``raw``. ``NaN``
-            propagates unchanged.
+            Probability in ``[0, 1]``. ``NaN`` propagates unchanged, so failed
+            molecules stay failures rather than becoming a low probability.
         """
-        return -raw if self._negate_score else raw
+        return self._hit_rate_model.hit_rate(raw, self._pki_threshold)
 
     def _objective_score(self, smiles: str) -> float:
-        """Score a SMILES string, applying the sign convention.
+        """Dock a SMILES string and return its estimated probability of binding.
 
         This is the ``score_fn`` stored in the fidelity config, used by the
         inherited :meth:`MultiFidelityOracle.query`.
@@ -856,7 +1033,7 @@ class Dock3Oracle(MultiFidelityOracle):
             The objective value, or ``NaN`` if the molecule failed to dock.
         """
         raw, _ = self._safe_dock3_score(smiles)
-        return self._apply_sign(raw)
+        return self._hit_rate(raw)
 
     def _safe_dock3_score(self, smiles: str) -> tuple[float, Optional[str]]:
         """Dock a molecule, converting any unexpected failure into ``NaN``.
@@ -982,8 +1159,10 @@ class Dock3Oracle(MultiFidelityOracle):
             return Path(tempfile.mkdtemp(prefix="d", dir=str(base))), True
 
         # Persistent workdirs are for debugging, so make them identifiable.
+        # blake2b rather than hash(): string hashing is salted per process, so
+        # hash() would name the same molecule differently on every run.
         # mkdtemp still guarantees uniqueness across threads and processes.
-        digest = f"{abs(hash(smiles)) % (10**8):08d}"
+        digest = hashlib.blake2b(smiles.encode("utf-8"), digest_size=4).hexdigest()
         work_dir = Path(
             tempfile.mkdtemp(prefix=f"dock3_{digest}_", dir=str(self._tmp_dir))
         )

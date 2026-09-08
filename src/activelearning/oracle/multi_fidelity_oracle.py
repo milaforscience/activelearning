@@ -1,4 +1,4 @@
-from typing import Any, Sequence
+from typing import Any, Optional, Sequence
 
 from activelearning.oracle.oracle import Oracle
 from activelearning.utils.types import Candidate, Observation
@@ -55,6 +55,53 @@ class MultiFidelityOracle(Oracle):
 
         self.fidelity_configs = fidelity_configs
         self._supported_fidelities = sorted(self.fidelity_configs.keys())
+
+    @staticmethod
+    def _resolve_fidelity_confidences(
+        fidelity_costs: dict[int, float],
+        fidelity_confidences: Optional[dict[int, float]],
+    ) -> dict[int, float]:
+        """Resolve confidences, defaulting to cost-normalized fractions.
+
+        Helper for subclasses that accept ``fidelity_costs`` and optional
+        ``fidelity_confidences`` as constructor arguments, letting a caller
+        declare costs alone and get sensible confidences derived from them.
+
+        Parameters
+        ----------
+        fidelity_costs : dict[int, float]
+            Cost per sample for each fidelity level. Must be non-empty.
+        fidelity_confidences : dict[int, float] or None
+            Explicit confidence values in ``[0, 1]``. When ``None``, each
+            fidelity's confidence is set to ``cost / max_cost``.
+
+        Returns
+        -------
+        dict[int, float]
+            Confidence value for every fidelity key in ``fidelity_costs``.
+
+        Raises
+        ------
+        ValueError
+            If the provided keys do not match those of ``fidelity_costs``.
+        """
+        if fidelity_confidences is None:
+            max_cost = max(fidelity_costs.values())
+            return {fid: cost / max_cost for fid, cost in fidelity_costs.items()}
+
+        missing_fidelities = sorted(set(fidelity_costs) - set(fidelity_confidences))
+        extra_fidelities = sorted(set(fidelity_confidences) - set(fidelity_costs))
+        if missing_fidelities or extra_fidelities:
+            message_parts = []
+            if missing_fidelities:
+                message_parts.append(f"missing keys {missing_fidelities}")
+            if extra_fidelities:
+                message_parts.append(f"unexpected keys {extra_fidelities}")
+            raise ValueError(
+                "fidelity_confidences must have exactly the same fidelity keys as "
+                f"fidelity_costs; got {' and '.join(message_parts)}."
+            )
+        return dict(fidelity_confidences)
 
     def get_fidelity_confidences(self) -> dict[int, float]:
         """Return confidence values by fidelity level, sorted by fidelity."""

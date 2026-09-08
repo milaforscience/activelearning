@@ -196,6 +196,10 @@ class XTBIPEAOracleConfig(BaseModel):
 class Dock3OracleConfig(BaseModel):
     """Configuration for :class:`~activelearning.applications.molecules.dock3_oracle.Dock3Oracle`.
 
+    The oracle observes an estimated probability of binding, converted from the
+    raw DOCK3 score by the fitted hit-rate model. The raw score is retained in
+    observation metadata.
+
     Parameters
     ----------
     indock_template : str
@@ -232,9 +236,14 @@ class Dock3OracleConfig(BaseModel):
     num_workers : int, optional
         Threads used per query batch.  ``null`` resolves to
         ``$SLURM_CPUS_PER_TASK``, else the CPU count, else 1.
-    negate_score : bool
-        Whether to return ``-score`` so the maximizing loop chases the
-        strongest binders.  DOCK3 scores are negative-is-better.
+    hitrate_params : str
+        JSON file of fitted hit-rate parameters, keyed by target name.
+    score_pprop_table : str
+        Score/pProp lookup table for the reference library screen.
+    pki_threshold : float
+        Experimental pKi at or above which a molecule counts as a hit.
+    hitrate_target : str
+        Key to read from ``hitrate_params``.
     warmup : bool
         Whether to probe the docking environment during construction.  Leave
         enabled in production: the probe must run single-threaded before any
@@ -249,6 +258,10 @@ class Dock3OracleConfig(BaseModel):
     fidelity_costs: dict[int, float]
     fidelity_confidences: dict[int, float] | None = None
     mol_repr: Literal["smiles"] = "smiles"
+    hitrate_params: str
+    score_pprop_table: str
+    pki_threshold: float
+    hitrate_target: str = "ampc"
     dockenv_sh: str | None = None
     dock64_exe: str | None = None
     ligbuild_exe: str = "ligbuild"
@@ -256,7 +269,6 @@ class Dock3OracleConfig(BaseModel):
     timeout: int = Field(default=300, gt=0)
     ligbuild_timeout: int = Field(default=150, gt=0)
     num_workers: int | None = Field(default=1, ge=1)
-    negate_score: bool = True
     warmup: bool = True
 
     @model_validator(mode="after")
@@ -302,7 +314,10 @@ class Dock3OracleConfig(BaseModel):
             timeout=self.timeout,
             ligbuild_timeout=self.ligbuild_timeout,
             num_workers=self.num_workers,
-            negate_score=self.negate_score,
+            hitrate_params=self.hitrate_params,
+            score_pprop_table=self.score_pprop_table,
+            pki_threshold=self.pki_threshold,
+            hitrate_target=self.hitrate_target,
             warmup=self.warmup,
         )
 

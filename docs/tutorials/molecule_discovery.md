@@ -145,6 +145,48 @@ The three xTB fidelities trade cost for accuracy. Each higher fidelity runs more
     xtb --version
     ```
 
+## **DOCK3 docking scores**
+
+xTB scores an intrinsic property of a molecule. Docking instead scores how well a molecule fits a *specific* protein pocket, which is the usual objective in early-stage drug discovery.
+
+The built-in [`Dock3Oracle`](../reference/activelearning/applications/molecules/dock3_oracle/#activelearning.applications.molecules.dock3_oracle.Dock3Oracle) wraps the DOCK3 toolchain. Per molecule it runs two external programs:
+
+1. `ligbuild` turns the SMILES string into a 3-D ligand file (`.db2`), enumerating protonation states, tautomers, and conformers along the way.
+2. `dock64` places that ligand into a prepared receptor pocket in many orientations and writes the pose energies to a text file called `OUTDOCK`.
+
+The oracle does **not** report that energy as the objective. The best (most negative) pose energy is converted into an estimated **probability of binding** by the fitted hit-rate model in [`hit_rate.py`](../reference/activelearning/applications/molecules/hit_rate/#activelearning.applications.molecules.hit_rate.HitRateModel), and that probability is what the acquisition loop maximizes. The raw energy is kept in each observation's metadata as `dock3_raw_score`.
+
+The conversion runs in two stages:
+
+1. **Score to pProp.** An empirical lookup over a reference library screen maps the docking score to `pProp = -log10(fraction of the library ranked at or above it)`. The AmpC table covers scores from about -235 to +100; scores outside that range are clamped to the endpoints.
+2. **pProp to hit rate.** A bivariate normal for genuine binders, mixed with an artifact distribution for false positives, gives the probability that the molecule binds at least as tightly as `pki_threshold`.
+
+!!! warning "The objective is not monotone in the docking score"
+    P(binding) peaks at an interior score and **falls off for better scores**, because the artifact component increasingly dominates: a score that good is more likely to be an artifact than a real binder. With the shipped AmpC parameters the turnover sits near -87, and it is pronounced: a molecule scoring -87 is rated far above one scoring -166. This is deliberate — it stops the sampler from chasing artifacts — but it does mean the best objective value is not "the most negative score available", and the turnover is well inside the range a generative sampler can reach.
+
+Two properties distinguish this oracle from `XTBIPEAOracle`:
+
+- **SMILES only.** `mol_repr` accepts only `smiles`, so pair it with a SMILES sampler and a SMILES encoder. The config validator rejects a SELFIES encoder against this oracle at parse time.
+- **Requires the fitted hit-rate model.** `hitrate_params`, `score_pprop_table` and `pki_threshold` are all required. Nothing is baked into the code, so swapping in a refitted parameter file is a config change.
+- **Single fidelity.** Docking has no natural cost/accuracy ladder here, so `fidelity_costs` must declare exactly one level. Combine it with cheaper oracles through [`CompositeOracle`](../reference/activelearning/oracle/composite_oracle/#activelearning.oracle.composite_oracle.CompositeOracle) if you want a multi-fidelity run.
+
+A complete example config, docking against the AmpC β-lactamase receptor with an S3-GFN sampler and MiniMol fingerprints:
+
+```sh
+uv run activelearning config/molecules/s3gfn_minimol_dock3.yaml
+```
+
+Docking is expensive — roughly 32 core-seconds per molecule for that receptor — so the budget in that config is denominated in core-seconds and `num_workers` should match the CPUs in your allocation. The work happens in subprocesses, so threads scale well.
+
+!!! warning "External dependency"
+    Unlike `XTBIPEAOracle`, this oracle needs no extra Python packages — the chemistry all happens in external binaries. It does need the DOCK3 toolchain (`dockenv.sh`, `ligbuild`, `dock64`) and a prepared receptor `dockfiles` directory with its `INDOCK` template, and it expects to run inside a Slurm allocation so that node-local scratch is available through a short path. Point `indock_template` and `dockfiles_dir` at your own receptor before running.
+
+## **Handling failures**
+
+Both molecular oracles return `NaN` for a molecule they cannot evaluate — a SMILES that fails geometry construction, a ligand `ligbuild` cannot build, a docking run that places no pose. The active-learning loop drops those observations before fitting the surrogate, but **still consumes their budget**, because a failed evaluation costs real compute. The specific xTB failure modes are covered in [step 2](#2-run-the-pool-based-dkl-examples) below.
+
+Because failures are dropped, they are invisible in the dataset, so `Dock3Oracle` logs a per-round breakdown instead: `dock3/success_rate` plus one `dock3/failures/<reason>` counter per failure mode, whenever a logger is bound. Watch it on the first round. A success rate near zero usually means the docking environment did not provision correctly on the compute node rather than that the sampler is generating bad molecules — and the two are indistinguishable from the scores alone.
+
 ## **1. Prepare the molecule environment**
 
 Install the optional molecule dependencies. If you also want the molecule grids in Aim, install the Aim extra at the same time:

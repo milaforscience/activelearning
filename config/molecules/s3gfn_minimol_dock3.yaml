@@ -1,6 +1,11 @@
 # S3-GFN molecule experiment: MiniMol fingerprints + exact SMILES DKL,
 # scored by DOCK3 docking against the AmpC beta-lactamase receptor.
 #
+# The objective is the estimated probability of binding at pKi >= 6.5, converted
+# from the raw docking score by the fitted AmpC hit-rate model. Note it is not
+# monotone in the score: it peaks at an interior score and falls off beyond it,
+# because scores that good are more likely artifacts than real binders.
+#
 # Prerequisites:
 #   - uv sync --extra molecules
 #   - the DOCK3 toolchain on the cluster: dockenv.sh, ligbuild, dock64
@@ -65,6 +70,12 @@ oracle:
     1: 32.0          # measured mean core-seconds per molecule
   num_workers: 64
   ligbuild_timeout: 150
+  # The observed value is P(binding), not the docking score. Paths are relative
+  # to the repository root, like config/data/molecules.txt elsewhere.
+  hitrate_params: ampc_hitrate_fits/fitted_params.json
+  score_pprop_table: ampc_hitrate_fits/data/full_scores.df
+  hitrate_target: ampc
+  pki_threshold: 6.5
 
 budget:
   available_budget: 1536.0

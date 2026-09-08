@@ -12,6 +12,7 @@ dependencies = [
     "botorch>=0.16.1",
     "matplotlib>=3.10.8",
     "numpy>=1.26.0,<3.0.0",
+    "scipy>=1.11.0",
     "omegaconf>=2.3.0",
     "pydantic>=2.12.5",
     "pydantic-settings>=2.13.1",

@@ -383,3 +383,33 @@ def test_query_raises_when_budget_insufficient():
     costs = oracle.get_costs(candidates)
     with pytest.raises(ValueError, match="Cost .* exceeds available budget"):
         budget.consume(sum(costs))
+
+
+def test_resolve_fidelity_confidences_defaults_to_cost_fractions():
+    """Omitted confidences are derived by normalizing costs by the maximum."""
+    resolved = MultiFidelityOracle._resolve_fidelity_confidences({1: 1.0, 2: 4.0}, None)
+    assert resolved == {1: 0.25, 2: 1.0}
+
+
+def test_resolve_fidelity_confidences_passes_through_explicit_values():
+    """Explicit confidences are returned as a copy, not the caller's dict."""
+    provided = {1: 0.2, 2: 0.9}
+    resolved = MultiFidelityOracle._resolve_fidelity_confidences(
+        {1: 1.0, 2: 4.0}, provided
+    )
+
+    assert resolved == provided
+    assert resolved is not provided
+
+
+@pytest.mark.parametrize(
+    ("confidences", "match"),
+    [
+        ({1: 0.5}, "missing keys \\[2\\]"),
+        ({1: 0.5, 2: 0.9, 3: 1.0}, "unexpected keys \\[3\\]"),
+    ],
+)
+def test_resolve_fidelity_confidences_rejects_mismatched_keys(confidences, match):
+    """Confidence keys must match cost keys exactly."""
+    with pytest.raises(ValueError, match=match):
+        MultiFidelityOracle._resolve_fidelity_confidences({1: 1.0, 2: 4.0}, confidences)

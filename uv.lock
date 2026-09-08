@@ -44,6 +44,8 @@ dependencies = [
     { name = "omegaconf" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "torch" },
 ]
 
@@ -99,6 +101,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pydantic-settings", specifier = ">=2.13.1" },
     { name = "rdkit", marker = "extra == 'molecules'", specifier = ">=2026.3.1" },
+    { name = "scipy", specifier = ">=1.11.0" },
     { name = "selfies", marker = "extra == 'molecules'", specifier = ">=2.2.0" },
     { name = "setuptools", marker = "extra == 'molecules'", specifier = "<81" },
     { name = "torch", specifier = ">=2.5.1" },

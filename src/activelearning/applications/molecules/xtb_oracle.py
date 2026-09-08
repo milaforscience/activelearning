@@ -868,50 +868,6 @@ class XTBIPEAOracle(MultiFidelityOracle):
             )
         return dict(per_fidelity_num_conformers)
 
-    @staticmethod
-    def _resolve_fidelity_confidences(
-        fidelity_costs: dict[int, float],
-        fidelity_confidences: Optional[dict[int, float]],
-    ) -> dict[int, float]:
-        """Resolve fidelity confidence values, defaulting to cost-normalized fractions.
-
-        Parameters
-        ----------
-        fidelity_costs : dict[int, float]
-            Cost per sample for each fidelity level.
-        fidelity_confidences : dict[int, float] or None
-            Explicit confidence values in ``[0, 1]``.  When ``None``, each
-            fidelity's confidence is set to ``cost / max_cost``.
-
-        Returns
-        -------
-        dict[int, float]
-            Confidence value for every fidelity key in ``fidelity_costs``.
-
-        Raises
-        ------
-        ValueError
-            If ``fidelity_confidences`` is provided but its keys do not match
-            those of ``fidelity_costs`` exactly.
-        """
-        if fidelity_confidences is None:
-            max_cost = max(fidelity_costs.values())
-            return {fid: cost / max_cost for fid, cost in fidelity_costs.items()}
-
-        missing_fidelities = sorted(set(fidelity_costs) - set(fidelity_confidences))
-        extra_fidelities = sorted(set(fidelity_confidences) - set(fidelity_costs))
-        if missing_fidelities or extra_fidelities:
-            message_parts = []
-            if missing_fidelities:
-                message_parts.append(f"missing keys {missing_fidelities}")
-            if extra_fidelities:
-                message_parts.append(f"unexpected keys {extra_fidelities}")
-            raise ValueError(
-                "fidelity_confidences must have exactly the same fidelity keys as "
-                f"fidelity_costs; got {' and '.join(message_parts)}."
-            )
-        return dict(fidelity_confidences)
-
     def _conformer_cfg_for_fidelity(self, fidelity: int) -> ConformerConfig:
         """Return the :class:`ConformerConfig` to use for a given fidelity level.
 

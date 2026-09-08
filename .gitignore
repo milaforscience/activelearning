@@ -344,3 +344,6 @@ data/replay.csv
 # Outputs and plots
 outputs/
 plots/
+CLAUDE.md
+src/activelearning/sampler/gflownet/OVERVIEW.md
+DOCK3_ORACLE_REVIEW.md

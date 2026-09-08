@@ -1,24 +1,36 @@
 """Tests for Dock3Oracle (ligbuild/dock64 subprocess calls are mocked)."""
 
+import hashlib
+import json
 import math
+import os
+import shutil
 import subprocess
+import time
 from pathlib import Path
+from typing import Any, Iterator
 from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
 
+from activelearning.applications.molecules import dock3_oracle
 from activelearning.applications.molecules.dock3_oracle import (
     Dock3Oracle,
     _build_indock,
     _classify_failure,
     _extract_db2,
+    _is_usable_directory,
     _parse_outdock_score,
     _run_dock64,
     _run_ligbuild,
+    _run_subprocess,
     _short_workdir_base,
+    _warmup_dockenv,
 )
+from activelearning.logger.logger import Logger
 from activelearning.oracle.config import Dock3OracleConfig
+from activelearning.runtime import RuntimeContext
 from activelearning.utils.types import Candidate
 
 _MODULE = "activelearning.applications.molecules.dock3_oracle"
@@ -80,14 +92,79 @@ def dock_paths(tmp_path: Path) -> tuple[Path, Path]:
     return indock, dockfiles
 
 
+class _RecordingLogger(Logger):
+    """Minimal logger that records every metric it is handed."""
+
+    def __init__(self) -> None:
+        super().__init__(project_name="test")
+        self.metrics: dict[str, Any] = {}
+
+    def log_config(self, config: dict[str, Any]) -> None:
+        """Ignore configuration."""
+
+    def log_metric(self, key: str, value: Any) -> None:
+        """Record one metric."""
+        self.metrics[key] = value
+
+    def log_figure(self, key: str, figure: Any) -> None:
+        """Ignore figures."""
+
+    def log_step(self, step: int) -> None:
+        """Ignore step boundaries."""
+
+    def end(self) -> None:
+        """Ignore shutdown."""
+
+
+@pytest.fixture(scope="session")
+def hitrate_kwargs(tmp_path_factory) -> dict[str, Any]:
+    """Return the hit-rate constructor arguments, backed by synthetic files.
+
+    Built here rather than read from ``ampc_hitrate_fits/``, which is untracked
+    and may move. The conversion itself is covered by ``test_hit_rate.py``.
+    """
+    directory = tmp_path_factory.mktemp("hitrate")
+
+    table = directory / "full_scores.df"
+    scores = [-120.0 + 0.5 * i for i in range(241)]
+    pprops = [9.0 - (7.5 / 240) * i for i in range(241)]
+    table.write_text(
+        "score n cumul_n prop cumul_prop pprop\n"
+        + "".join(f"{s:.4f} 1 1 0.0 0.0 {p:.4f}\n" for s, p in zip(scores, pprops))
+    )
+
+    params = directory / "fitted_params.json"
+    params.write_text(
+        json.dumps(
+            {
+                "ampc": {
+                    "rho": -0.75,
+                    "exp_mean": -1.5,
+                    "exp_std": 1.4,
+                    "artifact_freq": 1.2e-06,
+                    "artifact_mean": -3.7,
+                    "artifact_std": 1.0,
+                }
+            }
+        )
+    )
+
+    return {
+        "hitrate_params": str(params),
+        "score_pprop_table": str(table),
+        "pki_threshold": 6.5,
+    }
+
+
 @pytest.fixture
-def oracle(dock_paths: tuple[Path, Path]) -> Dock3Oracle:
+def oracle(dock_paths: tuple[Path, Path], hitrate_kwargs) -> Dock3Oracle:
     """Return a constructed oracle with the environment warmup skipped."""
     indock, dockfiles = dock_paths
     return Dock3Oracle(
         indock_template=indock,
         dockfiles_dir=dockfiles,
         fidelity_costs={0: 32.0},
+        **hitrate_kwargs,
         warmup=False,
     )
 
@@ -283,7 +360,7 @@ class TestRunDock64:
             (work_dir / "OUTDOCK").write_text("done")
             return subprocess.CompletedProcess(args[0], returncode=0)
 
-        with patch(f"{_MODULE}.subprocess.run", side_effect=fake_run):
+        with patch(f"{_MODULE}._run_subprocess", side_effect=fake_run):
             _run_dock64(
                 work_dir,
                 indock,
@@ -305,7 +382,7 @@ class TestRunDock64:
             (work_dir / "OUTDOCK").write_text("done")
             return subprocess.CompletedProcess(args[0], returncode=2)
 
-        with patch(f"{_MODULE}.subprocess.run", side_effect=fake_run):
+        with patch(f"{_MODULE}._run_subprocess", side_effect=fake_run):
             _run_dock64(
                 work_dir,
                 indock,
@@ -322,7 +399,7 @@ class TestRunDock64:
             ["./dock64"], returncode=0, stdout="out", stderr="err"
         )
 
-        with patch(f"{_MODULE}.subprocess.run", return_value=completed):
+        with patch(f"{_MODULE}._run_subprocess", return_value=completed):
             with pytest.raises(RuntimeError, match="produced no OUTDOCK"):
                 _run_dock64(
                     work_dir,
@@ -339,7 +416,7 @@ class TestRunDock64:
             (work_dir / "OUTDOCK").write_text("done")
             return subprocess.CompletedProcess(args[0], returncode=0)
 
-        with patch(f"{_MODULE}.subprocess.run", side_effect=fake_run) as run_mock:
+        with patch(f"{_MODULE}._run_subprocess", side_effect=fake_run) as run_mock:
             _run_dock64(
                 work_dir,
                 indock,
@@ -349,7 +426,7 @@ class TestRunDock64:
             )
 
         assert run_mock.call_args.args[0] == ["./dock64", "INDOCK_run"]
-        assert run_mock.call_args.kwargs["cwd"] == str(work_dir)
+        assert run_mock.call_args.kwargs["cwd"] == work_dir
         assert run_mock.call_args.kwargs["timeout"] == 123
 
 
@@ -384,7 +461,7 @@ class TestRunLigbuild:
             target.write_bytes(b"tgz")
             return subprocess.CompletedProcess(args[0], returncode=0)
 
-        with patch(f"{_MODULE}.subprocess.run", side_effect=fake_run):
+        with patch(f"{_MODULE}._run_subprocess", side_effect=fake_run):
             result = _run_ligbuild(
                 smi,
                 out_dir,
@@ -405,7 +482,7 @@ class TestRunLigbuild:
             (out_dir / "bundle.tgz").write_bytes(b"tgz")
             return subprocess.CompletedProcess(args[0], returncode=1)
 
-        with patch(f"{_MODULE}.subprocess.run", side_effect=fake_run):
+        with patch(f"{_MODULE}._run_subprocess", side_effect=fake_run):
             result = _run_ligbuild(
                 smi,
                 out_dir,
@@ -423,7 +500,7 @@ class TestRunLigbuild:
             ["bash"], returncode=1, stdout="out", stderr="err"
         )
 
-        with patch(f"{_MODULE}.subprocess.run", return_value=completed):
+        with patch(f"{_MODULE}._run_subprocess", return_value=completed):
             with pytest.raises(RuntimeError, match=r"produced no \.tgz"):
                 _run_ligbuild(
                     smi,
@@ -445,7 +522,7 @@ class TestRunLigbuild:
             (out_dir / "bundle.tgz").write_bytes(b"tgz")
             return subprocess.CompletedProcess(args[0], returncode=0)
 
-        with patch(f"{_MODULE}.subprocess.run", side_effect=fake_run):
+        with patch(f"{_MODULE}._run_subprocess", side_effect=fake_run):
             _run_ligbuild(
                 smi,
                 out_dir,
@@ -535,7 +612,9 @@ class TestShortWorkdirBase:
 class TestDock3OracleConstruction:
     """Tests for oracle construction and configuration validation."""
 
-    def test_missing_indock_template_raises(self, tmp_path: Path) -> None:
+    def test_missing_indock_template_raises(
+        self, tmp_path: Path, hitrate_kwargs
+    ) -> None:
         dockfiles = tmp_path / "dockfiles"
         dockfiles.mkdir()
         with pytest.raises(FileNotFoundError, match="INDOCK template not found"):
@@ -543,27 +622,32 @@ class TestDock3OracleConstruction:
                 indock_template=tmp_path / "nope" / "INDOCK",
                 dockfiles_dir=dockfiles,
                 fidelity_costs={0: 32.0},
+                **hitrate_kwargs,
                 warmup=False,
             )
 
-    def test_missing_dockfiles_dir_raises(self, dock_paths) -> None:
+    def test_missing_dockfiles_dir_raises(self, dock_paths, hitrate_kwargs) -> None:
         indock, dockfiles = dock_paths
         with pytest.raises(FileNotFoundError, match="dockfiles_dir not found"):
             Dock3Oracle(
                 indock_template=indock,
                 dockfiles_dir=dockfiles / "not_a_dir",
                 fidelity_costs={0: 32.0},
+                **hitrate_kwargs,
                 warmup=False,
             )
 
     @pytest.mark.parametrize("costs", [{}, {0: 1.0, 1: 2.0}])
-    def test_rejects_non_single_fidelity(self, dock_paths, costs) -> None:
+    def test_rejects_non_single_fidelity(
+        self, dock_paths, costs, hitrate_kwargs
+    ) -> None:
         indock, dockfiles = dock_paths
         with pytest.raises(ValueError, match="exactly one"):
             Dock3Oracle(
                 indock_template=indock,
                 dockfiles_dir=dockfiles,
                 fidelity_costs=costs,
+                **hitrate_kwargs,
                 warmup=False,
             )
 
@@ -575,35 +659,42 @@ class TestDock3OracleConstruction:
             ({"num_workers": 0}, "num_workers must be None or at least 1"),
         ],
     )
-    def test_rejects_invalid_numeric_arguments(self, dock_paths, kwargs, match) -> None:
+    def test_rejects_invalid_numeric_arguments(
+        self, dock_paths, kwargs, match, hitrate_kwargs
+    ) -> None:
         indock, dockfiles = dock_paths
         with pytest.raises(ValueError, match=match):
             Dock3Oracle(
                 indock_template=indock,
                 dockfiles_dir=dockfiles,
                 fidelity_costs={0: 32.0},
+                **hitrate_kwargs,
                 warmup=False,
                 **kwargs,
             )
 
-    def test_warmup_is_skipped_when_disabled(self, dock_paths) -> None:
+    def test_warmup_is_skipped_when_disabled(self, dock_paths, hitrate_kwargs) -> None:
         indock, dockfiles = dock_paths
         with patch(f"{_MODULE}._warmup_dockenv") as warmup_mock:
             Dock3Oracle(
                 indock_template=indock,
                 dockfiles_dir=dockfiles,
                 fidelity_costs={0: 32.0},
+                **hitrate_kwargs,
                 warmup=False,
             )
         warmup_mock.assert_not_called()
 
-    def test_warmup_runs_once_during_construction(self, dock_paths) -> None:
+    def test_warmup_runs_once_during_construction(
+        self, dock_paths, hitrate_kwargs
+    ) -> None:
         indock, dockfiles = dock_paths
         with patch(f"{_MODULE}._warmup_dockenv") as warmup_mock:
             Dock3Oracle(
                 indock_template=indock,
                 dockfiles_dir=dockfiles,
                 fidelity_costs={0: 32.0},
+                **hitrate_kwargs,
                 warmup=True,
             )
         warmup_mock.assert_called_once()
@@ -615,7 +706,7 @@ class TestDock3OracleConstruction:
         assert oracle.get_costs([Candidate(x="CCO", fidelity=0)]) == [32.0]
 
     def test_num_workers_auto_resolves_from_slurm(
-        self, dock_paths, monkeypatch
+        self, dock_paths, monkeypatch, hitrate_kwargs
     ) -> None:
         indock, dockfiles = dock_paths
         monkeypatch.setenv("SLURM_CPUS_PER_TASK", "64")
@@ -623,6 +714,7 @@ class TestDock3OracleConstruction:
             indock_template=indock,
             dockfiles_dir=dockfiles,
             fidelity_costs={0: 32.0},
+            **hitrate_kwargs,
             num_workers=None,
             warmup=False,
         )
@@ -632,16 +724,16 @@ class TestDock3OracleConstruction:
 class TestDock3OracleConfig:
     """Tests for the pydantic configuration model."""
 
-    def test_build_round_trip(self, dock_paths) -> None:
+    def test_build_round_trip(self, dock_paths, hitrate_kwargs) -> None:
         indock, dockfiles = dock_paths
         config = Dock3OracleConfig(
             indock_template=str(indock),
             dockfiles_dir=str(dockfiles),
             fidelity_costs={0: 32.0},
+            **hitrate_kwargs,
             num_workers=8,
             timeout=111,
             ligbuild_timeout=77,
-            negate_score=False,
             warmup=False,
         )
         built = config.build()
@@ -650,48 +742,56 @@ class TestDock3OracleConfig:
         assert built._num_workers == 8
         assert built._timeout == 111
         assert built._ligbuild_timeout == 77
-        assert built._negate_score is False
+        assert built._pki_threshold == pytest.approx(6.5)
         assert built.get_supported_fidelities() == [0]
 
-    def test_defaults_resolve_to_cluster_paths(self, dock_paths) -> None:
+    def test_defaults_resolve_to_cluster_paths(
+        self, dock_paths, hitrate_kwargs
+    ) -> None:
         """A null path in config means 'use the oracle's default'."""
         indock, dockfiles = dock_paths
         built = Dock3OracleConfig(
             indock_template=str(indock),
             dockfiles_dir=str(dockfiles),
             fidelity_costs={0: 32.0},
+            **hitrate_kwargs,
             warmup=False,
         ).build()
 
         assert built._dockenv_sh.endswith("dockenv.sh")
         assert built._dock64_exe.endswith("dock64")
 
-    def test_rejects_extra_fields(self, dock_paths) -> None:
+    def test_rejects_extra_fields(self, dock_paths, hitrate_kwargs) -> None:
         indock, dockfiles = dock_paths
         with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
             Dock3OracleConfig(
                 indock_template=str(indock),
                 dockfiles_dir=str(dockfiles),
                 fidelity_costs={0: 32.0},
+                **hitrate_kwargs,
                 exhaustiveness=8,
             )
 
-    def test_rejects_multi_fidelity(self, dock_paths) -> None:
+    def test_rejects_multi_fidelity(self, dock_paths, hitrate_kwargs) -> None:
         indock, dockfiles = dock_paths
         with pytest.raises(ValidationError, match="exactly one"):
             Dock3OracleConfig(
                 indock_template=str(indock),
                 dockfiles_dir=str(dockfiles),
                 fidelity_costs={0: 32.0, 1: 64.0},
+                **hitrate_kwargs,
             )
 
-    def test_rejects_non_smiles_representation(self, dock_paths) -> None:
+    def test_rejects_non_smiles_representation(
+        self, dock_paths, hitrate_kwargs
+    ) -> None:
         indock, dockfiles = dock_paths
         with pytest.raises(ValidationError):
             Dock3OracleConfig(
                 indock_template=str(indock),
                 dockfiles_dir=str(dockfiles),
                 fidelity_costs={0: 32.0},
+                **hitrate_kwargs,
                 mol_repr="selfies",
             )
 
@@ -699,34 +799,41 @@ class TestDock3OracleConfig:
 class TestDock3OracleQuery:
     """Tests for the query path, with docking itself mocked out."""
 
-    def test_negates_score_by_default(self, oracle) -> None:
+    def test_observes_a_probability_not_the_raw_score(self, oracle) -> None:
+        """y is P(binding); the docking energy stays in metadata."""
         with patch.object(oracle, "_dock3_score", return_value=(-67.85, None)):
             observations = oracle.query([Candidate(x="CCO", fidelity=0)])
 
-        assert observations[0].y == pytest.approx(67.85)
-        assert observations[0].x == "CCO"
-        assert observations[0].fidelity == 0
+        observation = observations[0]
+        expected = oracle._hit_rate_model.hit_rate(-67.85, 6.5)
+        assert observation.y == pytest.approx(expected)
+        assert 0.0 <= observation.y <= 1.0
+        assert observation.metadata["dock3_raw_score"] == pytest.approx(-67.85)
+        assert observation.x == "CCO"
+        assert observation.fidelity == 0
 
-    def test_raw_score_when_negation_disabled(self, dock_paths) -> None:
+    def test_better_scores_give_higher_probabilities(self, oracle) -> None:
+        """Within the normal range, a stronger docking score must rank higher."""
+        with patch.object(
+            oracle,
+            "_dock3_score",
+            side_effect=lambda smiles: ({"good": -90.0, "weak": -30.0}[smiles], None),
+        ):
+            observations = oracle.query(
+                [Candidate(x="good", fidelity=0), Candidate(x="weak", fidelity=0)]
+            )
+
+        assert observations[0].y > observations[1].y
+
+    def test_preserves_order_with_multiple_workers(
+        self, dock_paths, hitrate_kwargs
+    ) -> None:
         indock, dockfiles = dock_paths
         built = Dock3Oracle(
             indock_template=indock,
             dockfiles_dir=dockfiles,
             fidelity_costs={0: 32.0},
-            negate_score=False,
-            warmup=False,
-        )
-        with patch.object(built, "_dock3_score", return_value=(-67.85, None)):
-            observations = built.query([Candidate(x="CCO", fidelity=0)])
-
-        assert observations[0].y == pytest.approx(-67.85)
-
-    def test_preserves_order_with_multiple_workers(self, dock_paths) -> None:
-        indock, dockfiles = dock_paths
-        built = Dock3Oracle(
-            indock_template=indock,
-            dockfiles_dir=dockfiles,
-            fidelity_costs={0: 32.0},
+            **hitrate_kwargs,
             num_workers=4,
             warmup=False,
         )
@@ -739,7 +846,14 @@ class TestDock3OracleQuery:
             observations = built.query(candidates)
 
         assert [obs.x for obs in observations] == ["a", "b", "c", "d"]
-        assert [obs.y for obs in observations] == [10.0, 20.0, 30.0, 40.0]
+        assert [obs.metadata["dock3_raw_score"] for obs in observations] == [
+            -10.0,
+            -20.0,
+            -30.0,
+            -40.0,
+        ]
+        expected = [built._hit_rate_model.hit_rate(scores[k], 6.5) for k in "abcd"]
+        assert [obs.y for obs in observations] == pytest.approx(expected)
 
     def test_failed_molecule_yields_nan_and_reason(self, oracle) -> None:
         with patch.object(
@@ -751,7 +865,9 @@ class TestDock3OracleQuery:
                 [Candidate(x="CCO", fidelity=0), Candidate(x="bad", fidelity=0)]
             )
 
-        assert observations[0].y == pytest.approx(67.85)
+        assert observations[0].y == pytest.approx(
+            oracle._hit_rate_model.hit_rate(-67.85, 6.5)
+        )
         assert math.isnan(observations[1].y)
         assert observations[1].metadata["dock3_failure_reason"] == "ligbuild_no_tgz"
 
@@ -765,6 +881,9 @@ class TestDock3OracleQuery:
         metadata = observations[0].metadata
         assert metadata["source"] == "pool"
         assert metadata["dock3_raw_score"] == pytest.approx(-67.85)
+        assert metadata["dock3_pprop"] == pytest.approx(
+            oracle._hit_rate_model.pprop(-67.85)
+        )
         assert metadata["dock3_failure_reason"] is None
 
     def test_empty_query_returns_empty_list(self, oracle) -> None:
@@ -797,3 +916,253 @@ class TestDock3OracleQuery:
         assert math.isnan(observations[0].y)
         assert observations[0].metadata["dock3_failure_reason"] == "oracle_failed"
         assert any("disk exploded" in record.message for record in caplog.records)
+
+
+class TestRunSubprocess:
+    """Tests for the process-group-aware subprocess runner."""
+
+    def test_captures_output_and_return_code(self) -> None:
+        result = _run_subprocess(
+            ["bash", "-c", "echo out; echo err >&2; exit 3"], timeout=30
+        )
+
+        assert result.returncode == 3
+        assert result.stdout.strip() == "out"
+        assert result.stderr.strip() == "err"
+
+    def test_runs_in_the_requested_directory(self, tmp_path: Path) -> None:
+        result = _run_subprocess(["bash", "-c", "pwd"], timeout=30, cwd=tmp_path)
+
+        assert Path(result.stdout.strip()).resolve() == tmp_path.resolve()
+
+    def test_timeout_kills_grandchildren(self, tmp_path: Path) -> None:
+        """Killing only the shell leaves ligbuild's children eating the allocation."""
+        pid_file = tmp_path / "child.pid"
+        script = f'sleep 300 & echo $! > "{pid_file}"; wait'
+
+        with pytest.raises(subprocess.TimeoutExpired):
+            _run_subprocess(["bash", "-c", script], timeout=2)
+
+        child_pid = int(pid_file.read_text().strip())
+        # SIGKILL is asynchronous and the process lingers as a zombie until it
+        # is reparented and reaped, so poll rather than checking once.
+        deadline = time.monotonic() + 5.0
+        while time.monotonic() < deadline:
+            try:
+                os.kill(child_pid, 0)
+            except OSError:
+                return
+            time.sleep(0.05)
+        pytest.fail(f"grandchild {child_pid} survived the timeout")
+
+
+class TestWarmupDockenv:
+    """Tests for the docking-environment probe."""
+
+    def test_probes_with_the_same_shell_form_as_ligbuild(self, tmp_path: Path) -> None:
+        """A login-shell probe could pass where the non-login real call fails."""
+        completed = subprocess.CompletedProcess(
+            ["bash"], returncode=0, stdout="", stderr=""
+        )
+        with patch(f"{_MODULE}._run_subprocess", return_value=completed) as probe_mock:
+            _warmup_dockenv(dockenv_sh="/fake/dockenv.sh", ligbuild_exe="ligbuild")
+        probe_argv = probe_mock.call_args.args[0]
+
+        smi = tmp_path / "lig.smi"
+        smi.write_text("CCO lig\n")
+        out_dir = tmp_path / "ligbuild_out"
+
+        def fake_run(*args, **kwargs):
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "bundle.tgz").write_bytes(b"tgz")
+            return subprocess.CompletedProcess(args[0], returncode=0)
+
+        with patch(f"{_MODULE}._run_subprocess", side_effect=fake_run) as ligbuild_mock:
+            _run_ligbuild(
+                smi,
+                out_dir,
+                dockenv_sh="/fake/dockenv.sh",
+                ligbuild_exe="ligbuild",
+                timeout=300,
+                ligbuild_timeout=150,
+            )
+        ligbuild_argv = ligbuild_mock.call_args.args[0]
+
+        assert probe_argv[:2] == ["bash", "-c"]
+        assert probe_argv[:2] == ligbuild_argv[:2]
+
+    def test_probe_failure_is_logged_not_raised(self, caplog) -> None:
+        """A healthy pre-built environment must not be blocked by a failed probe."""
+        completed = subprocess.CompletedProcess(
+            ["bash"], returncode=1, stdout="boom", stderr=""
+        )
+        with patch(f"{_MODULE}._run_subprocess", return_value=completed):
+            with caplog.at_level("WARNING"):
+                _warmup_dockenv(dockenv_sh="/fake/dockenv.sh", ligbuild_exe="ligbuild")
+
+        assert any("warmup probe exited" in record.message for record in caplog.records)
+
+    def test_probe_timeout_is_logged_not_raised(self, caplog) -> None:
+        with patch(
+            f"{_MODULE}._run_subprocess",
+            side_effect=subprocess.TimeoutExpired(["bash"], 600),
+        ):
+            with caplog.at_level("WARNING"):
+                _warmup_dockenv(dockenv_sh="/fake/dockenv.sh", ligbuild_exe="ligbuild")
+
+        assert any("timed out" in record.message for record in caplog.records)
+
+
+class TestIsUsableDirectory:
+    """Tests for the workdir usability probe."""
+
+    def test_accepts_a_writable_directory(self, tmp_path: Path) -> None:
+        assert _is_usable_directory(tmp_path)
+
+    def test_rejects_a_plain_file(self, tmp_path: Path) -> None:
+        target = tmp_path / "file"
+        target.write_text("x")
+        assert not _is_usable_directory(target)
+
+    def test_rejects_a_dangling_symlink(self, tmp_path: Path) -> None:
+        link = tmp_path / "link"
+        link.symlink_to(tmp_path / "gone", target_is_directory=True)
+        assert not _is_usable_directory(link)
+
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores permission bits")
+    def test_rejects_an_unwritable_directory(self, tmp_path: Path) -> None:
+        target = tmp_path / "readonly"
+        target.mkdir(mode=0o500)
+        try:
+            assert not _is_usable_directory(target)
+        finally:
+            target.chmod(0o700)
+
+
+class TestShortWorkdirBaseFallback:
+    """Tests for the fallback taken when the /tmp alias is unusable."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_fallback(self, monkeypatch) -> Iterator[None]:
+        """Isolate the memoized fallback base and remove it afterwards."""
+        monkeypatch.setattr(dock3_oracle, "_fallback_base", None)
+        yield
+        created = dock3_oracle._fallback_base
+        if created is not None:
+            shutil.rmtree(created, ignore_errors=True)
+
+    @staticmethod
+    def _dangling_alias(tag: str, tmp_path: Path) -> Path:
+        """Create a dangling symlink at the alias path for ``tag``."""
+        alias = Path(f"/tmp/d.{tag}")
+        alias.symlink_to(tmp_path / "does_not_exist", target_is_directory=True)
+        return alias
+
+    def test_dangling_alias_falls_back_to_a_short_directory(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A stale alias must not turn every molecule into an unexplained NaN."""
+        monkeypatch.setenv("SLURM_JOB_ID", "test_dock3_fallback")
+        monkeypatch.delenv("SLURM_TMPDIR", raising=False)
+        alias = self._dangling_alias("test_dock3_fallback", tmp_path)
+        try:
+            base = _short_workdir_base()
+
+            assert base != alias
+            assert _is_usable_directory(base)
+            # Still short enough for AMSOL's fixed-width path buffer.
+            assert len(str(base)) <= 25
+        finally:
+            if alias.is_symlink():
+                alias.unlink()
+
+    def test_fallback_is_created_once_per_process(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """One shared base; a fresh directory per molecule would leak them."""
+        monkeypatch.setenv("SLURM_JOB_ID", "test_dock3_fallback_once")
+        monkeypatch.delenv("SLURM_TMPDIR", raising=False)
+        alias = self._dangling_alias("test_dock3_fallback_once", tmp_path)
+        try:
+            assert _short_workdir_base() == _short_workdir_base()
+        finally:
+            if alias.is_symlink():
+                alias.unlink()
+
+
+class TestQueryFailureSummary:
+    """Tests for the aggregated docking-outcome metrics."""
+
+    def test_logs_counts_and_reasons(self, oracle) -> None:
+        """Failed molecules are dropped downstream, so the counts must be logged."""
+        recorder = _RecordingLogger()
+        oracle.bind_runtime_context(RuntimeContext(logger=recorder))
+        with patch.object(
+            oracle,
+            "_dock3_score",
+            side_effect=[
+                (-67.85, None),
+                (float("nan"), "ligbuild_no_tgz"),
+                (float("nan"), "ligbuild_no_tgz"),
+                (float("nan"), "dock64_timeout"),
+            ],
+        ):
+            oracle.query([Candidate(x=key, fidelity=0) for key in "abcd"])
+
+        assert recorder.metrics["dock3/queried"] == 4.0
+        assert recorder.metrics["dock3/succeeded"] == 1.0
+        assert recorder.metrics["dock3/success_rate"] == pytest.approx(0.25)
+        assert recorder.metrics["dock3/failures/ligbuild_no_tgz"] == 2.0
+        assert recorder.metrics["dock3/failures/dock64_timeout"] == 1.0
+
+    def test_no_failure_keys_when_everything_succeeds(self, oracle) -> None:
+        recorder = _RecordingLogger()
+        oracle.bind_runtime_context(RuntimeContext(logger=recorder))
+        with patch.object(oracle, "_dock3_score", return_value=(-10.0, None)):
+            oracle.query([Candidate(x="CCO", fidelity=0)])
+
+        assert recorder.metrics["dock3/success_rate"] == pytest.approx(1.0)
+        assert not [key for key in recorder.metrics if "failures" in key]
+
+    def test_is_a_no_op_without_a_bound_logger(self, oracle) -> None:
+        with patch.object(oracle, "_dock3_score", return_value=(-10.0, None)):
+            observations = oracle.query([Candidate(x="CCO", fidelity=0)])
+
+        assert observations[0].y == pytest.approx(
+            oracle._hit_rate_model.hit_rate(-10.0, 6.5)
+        )
+
+
+class TestMakeWorkdir:
+    """Tests for per-call working directory creation."""
+
+    def test_persistent_workdirs_are_named_stably_and_uniquely(
+        self, dock_paths, tmp_path: Path, hitrate_kwargs
+    ) -> None:
+        """hash() is salted per process and would rename the same molecule."""
+        indock, dockfiles = dock_paths
+        built = Dock3Oracle(
+            indock_template=indock,
+            dockfiles_dir=dockfiles,
+            fidelity_costs={0: 32.0},
+            **hitrate_kwargs,
+            tmp_dir=tmp_path / "wd",
+            warmup=False,
+        )
+
+        first, auto_cleanup = built._make_workdir("CCO")
+        second, _ = built._make_workdir("CCO")
+
+        digest = hashlib.blake2b(b"CCO", digest_size=4).hexdigest()
+        assert auto_cleanup is False
+        assert first.name.startswith(f"dock3_{digest}_")
+        assert second.name.startswith(f"dock3_{digest}_")
+        assert first != second
+
+    def test_ephemeral_workdirs_are_marked_for_cleanup(self, oracle) -> None:
+        work_dir, auto_cleanup = oracle._make_workdir("CCO")
+        try:
+            assert auto_cleanup is True
+            assert work_dir.is_dir()
+        finally:
+            shutil.rmtree(work_dir, ignore_errors=True)
