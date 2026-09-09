@@ -56,6 +56,7 @@ def _run_subprocess(
     *,
     timeout: int,
     cwd: Optional[Path] = None,
+    env: Optional[dict[str, str]] = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run a command in its own process group, killing the tree on timeout.
 
@@ -71,6 +72,9 @@ def _run_subprocess(
         Wall-clock seconds allowed before the process tree is killed.
     cwd : Path, optional
         Working directory for the subprocess.
+    env : dict[str, str], optional
+        Complete environment for the subprocess. ``None`` inherits this
+        process's environment; pass a full mapping (not a delta) to override it.
 
     Returns
     -------
@@ -90,6 +94,7 @@ def _run_subprocess(
         stderr=subprocess.PIPE,
         text=True,
         cwd=str(cwd) if cwd is not None else None,
+        env=env,
         start_new_session=True,
     ) as process:
         try:

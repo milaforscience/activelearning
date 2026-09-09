@@ -176,7 +176,9 @@ A complete example config, docking against the AmpC β-lactamase receptor with a
 uv run activelearning config/molecules/s3gfn_minimol_dock3.yaml
 ```
 
-Docking is expensive — roughly 32 core-seconds per molecule for that receptor — so the budget in that config is denominated in core-seconds and `num_workers` should match the CPUs in your allocation. The work happens in subprocesses, so threads scale well.
+Docking is expensive — roughly 32 core-seconds per molecule for that receptor — so the budget in that config is denominated in core-seconds. `num_workers` defaults to `null`, which sizes the thread pool from the CPUs the job actually holds (the process CPU affinity mask and `$SLURM_CPUS_PER_TASK`, whichever is smaller), so you do not normally set it. The work happens in subprocesses, so threads scale well.
+
+The real ceiling is the batch, not the allocation: `active_learning()` hands the oracle exactly `selector.num_samples` candidates per round, so a 16-candidate round docks on 16 cores no matter how many are allocated — and under `CompositeOracle` only the fidelity-1 share of that batch reaches DOCK3. Each round logs `dock3/workers_used` alongside `dock3/workers_available`, so the run's own metrics say whether the allocation was saturated.
 
 !!! warning "External dependency"
     Unlike `XTBIPEAOracle`, this oracle needs no extra Python packages — the chemistry all happens in external binaries. It does need the DOCK3 toolchain (`dockenv.sh`, `ligbuild`, `dock64`) and a prepared receptor `dockfiles` directory with its `INDOCK` template, and it expects to run inside a Slurm allocation so that node-local scratch is available through a short path. Point `indock_template` and `dockfiles_dir` at your own receptor before running.

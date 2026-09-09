@@ -13,9 +13,10 @@
 #   - run inside a Slurm allocation so $SLURM_TMPDIR exists; the oracle needs
 #     node-local scratch reachable through a short path (see Dock3Oracle docs)
 #
-# Docking is expensive (~32 core-seconds per molecule), so num_workers should
-# match the allocation's cpus-per-task. Budget is denominated in the same units
-# as fidelity_costs, i.e. core-seconds here.
+# Docking is expensive (~32 core-seconds per molecule) and one molecule takes
+# one core, so num_workers is left null and sized from the job's allocation.
+# Budget is denominated in the same units as fidelity_costs, i.e. core-seconds
+# here, so parallelism buys wall time, not more evaluations.
 
 runtime:
   device: cpu
@@ -68,7 +69,10 @@ oracle:
   mol_repr: smiles
   fidelity_costs:
     1: 32.0          # measured mean core-seconds per molecule
-  num_workers: 64
+  # null sizes the docking thread pool from the CPUs this job holds. The
+  # ceiling is still selector.num_samples: a 16-molecule round uses 16
+  # cores however many are allocated.
+  num_workers: null
   ligbuild_timeout: 150
   # The observed value is P(binding), not the docking score. Paths are relative
   # to the repository root, like config/data/molecules.txt elsewhere.

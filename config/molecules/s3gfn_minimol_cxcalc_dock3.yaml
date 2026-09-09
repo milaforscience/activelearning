@@ -94,6 +94,8 @@ oracle:
       anion_percent_threshold: 0.0
       zero_probability: 0.0
       nonzero_probability: 0.01
+      # One subprocess already covers a whole batch, so extra threads only
+      # help past chunk_size.
       num_workers: 1
     - type: Dock3Oracle
       mol_repr: smiles
@@ -103,7 +105,9 @@ oracle:
         1: 32.0
       fidelity_confidences:
         1: 1.0
-      num_workers: 64
+      # null sizes the docking thread pool from the CPUs this job holds.
+      # The ceiling is the fidelity-1 share of selector.num_samples.
+      num_workers: null
       ligbuild_timeout: 150
       # Paths are relative to the repository root, like config/data/molecules.txt.
       hitrate_params: ampc_hitrate_fits/fitted_params.json

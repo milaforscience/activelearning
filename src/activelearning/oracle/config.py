@@ -234,8 +234,10 @@ class Dock3OracleConfig(BaseModel):
         Internal per-protomer timeout hint passed to ligbuild through
         ``custom_parms.json``.  Only meaningful when below ``timeout``.
     num_workers : int, optional
-        Threads used per query batch.  ``null`` resolves to
-        ``$SLURM_CPUS_PER_TASK``, else the CPU count, else 1.
+        Threads used per query batch.  Defaults to ``null``, which sizes the
+        pool from the CPUs this job actually holds -- the process CPU affinity
+        mask and ``$SLURM_CPUS_PER_TASK``, whichever is smaller.  The achieved
+        concurrency is still capped by the batch the selector hands the oracle.
     hitrate_params : str
         JSON file of fitted hit-rate parameters, keyed by target name.
     score_pprop_table : str
@@ -268,7 +270,7 @@ class Dock3OracleConfig(BaseModel):
     tmp_dir: str | None = None
     timeout: int = Field(default=300, gt=0)
     ligbuild_timeout: int = Field(default=150, gt=0)
-    num_workers: int | None = Field(default=1, ge=1)
+    num_workers: int | None = Field(default=None, ge=1)
     warmup: bool = True
 
     @model_validator(mode="after")
@@ -367,9 +369,10 @@ class CxcalcOracleConfig(BaseModel):
         a single chunk; cxcalc is a JVM application, so batching is what makes
         this oracle cheap.
     num_workers : int, optional
-        Threads used to evaluate chunks.  ``null`` resolves to
-        ``$SLURM_CPUS_PER_TASK``, else the CPU count, else 1.  Only relevant for
-        batches larger than ``chunk_size``.
+        Threads used to evaluate chunks.  Defaults to ``null``, which sizes
+        the pool from the CPUs this job actually holds -- the process CPU
+        affinity mask and ``$SLURM_CPUS_PER_TASK``, whichever is smaller.  Only
+        relevant for batches larger than ``chunk_size``.
     warmup : bool
         Whether to prime the cxcalc environment during construction.  Leave
         enabled in production: the probe must run single-threaded before any
@@ -391,7 +394,7 @@ class CxcalcOracleConfig(BaseModel):
     nonzero_probability: float = Field(default=0.01, ge=0.0, le=1.0)
     timeout: int = Field(default=600, gt=0)
     chunk_size: int = Field(default=12500, ge=1)
-    num_workers: int | None = Field(default=1, ge=1)
+    num_workers: int | None = Field(default=None, ge=1)
     warmup: bool = True
 
     @model_validator(mode="after")

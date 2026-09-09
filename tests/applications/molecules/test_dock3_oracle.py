@@ -340,94 +340,93 @@ class TestRunDock64:
     """Tests for the dock64 invocation."""
 
     @staticmethod
-    def _setup(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
-        work_dir = tmp_path / "td" / "run"
-        work_dir.mkdir(parents=True)
-        indock = work_dir / "INDOCK_run"
+    def _setup(tmp_path: Path) -> tuple[Path, Path, Path]:
+        """Build the dock-root layout _run_dock64 expects.
+
+        The dockfiles copy is a sibling of run_dir, not inside it, because
+        INDOCK refers to its grids as ``../dockfiles/...``. It is made once per
+        oracle by ``Dock3Oracle._get_dock_root``.
+        """
+        dock_root = tmp_path / "k"
+        run_dir = dock_root / "r"
+        run_dir.mkdir(parents=True)
+        indock = run_dir / "INDOCK_run"
         indock.write_text("DOCK 3.8 parameter\n")
-        dockfiles = tmp_path / "dockfiles_src"
+        dockfiles = dock_root / "dockfiles"
         dockfiles.mkdir()
         (dockfiles / "vdw.vdw").write_bytes(b"\x00grid")
-        dock64 = tmp_path / "dock64"
+        dock64 = dock_root / "dock64"
         dock64.write_bytes(b"#!/bin/true\n")
-        return work_dir, indock, dockfiles, dock64
-
-    def test_copies_dockfiles_rather_than_symlinking(self, tmp_path: Path) -> None:
-        """Symlinked grid files silently mis-score on Lustre; must be a copy."""
-        work_dir, indock, dockfiles, dock64 = self._setup(tmp_path)
-
-        def fake_run(*args, **kwargs):
-            (work_dir / "OUTDOCK").write_text("done")
-            return subprocess.CompletedProcess(args[0], returncode=0)
-
-        with patch(f"{_MODULE}._run_subprocess", side_effect=fake_run):
-            _run_dock64(
-                work_dir,
-                indock,
-                dock64_exe=str(dock64),
-                dockfiles_dir=dockfiles,
-                timeout=300,
-            )
-
-        copied = work_dir.parent / "dockfiles"
-        assert copied.is_dir()
-        assert not copied.is_symlink()
-        assert (copied / "vdw.vdw").read_bytes() == b"\x00grid"
+        return run_dir, indock, dock64
 
     def test_succeeds_despite_nonzero_return_code(self, tmp_path: Path) -> None:
         """dock64 exits non-zero on success (ieee_inexact); OUTDOCK is the signal."""
-        work_dir, indock, dockfiles, dock64 = self._setup(tmp_path)
+        run_dir, indock, dock64 = self._setup(tmp_path)
 
         def fake_run(*args, **kwargs):
-            (work_dir / "OUTDOCK").write_text("done")
+            (run_dir / "OUTDOCK").write_text("done")
             return subprocess.CompletedProcess(args[0], returncode=2)
 
         with patch(f"{_MODULE}._run_subprocess", side_effect=fake_run):
-            _run_dock64(
-                work_dir,
-                indock,
-                dock64_exe=str(dock64),
-                dockfiles_dir=dockfiles,
-                timeout=300,
-            )
+            _run_dock64(run_dir, indock, dock64_exe=dock64, timeout=300)
 
-        assert (work_dir / "OUTDOCK").exists()
+        assert (run_dir / "OUTDOCK").exists()
 
     def test_raises_when_no_outdock(self, tmp_path: Path) -> None:
-        work_dir, indock, dockfiles, dock64 = self._setup(tmp_path)
+        run_dir, indock, dock64 = self._setup(tmp_path)
         completed = subprocess.CompletedProcess(
             ["./dock64"], returncode=0, stdout="out", stderr="err"
         )
 
         with patch(f"{_MODULE}._run_subprocess", return_value=completed):
             with pytest.raises(RuntimeError, match="produced no OUTDOCK"):
-                _run_dock64(
-                    work_dir,
-                    indock,
-                    dock64_exe=str(dock64),
-                    dockfiles_dir=dockfiles,
-                    timeout=300,
-                )
+                _run_dock64(run_dir, indock, dock64_exe=dock64, timeout=300)
 
-    def test_runs_dock64_in_work_dir(self, tmp_path: Path) -> None:
-        work_dir, indock, dockfiles, dock64 = self._setup(tmp_path)
+    def test_runs_dock64_in_run_dir(self, tmp_path: Path) -> None:
+        run_dir, indock, dock64 = self._setup(tmp_path)
 
         def fake_run(*args, **kwargs):
-            (work_dir / "OUTDOCK").write_text("done")
+            (run_dir / "OUTDOCK").write_text("done")
             return subprocess.CompletedProcess(args[0], returncode=0)
 
         with patch(f"{_MODULE}._run_subprocess", side_effect=fake_run) as run_mock:
-            _run_dock64(
-                work_dir,
-                indock,
-                dock64_exe=str(dock64),
-                dockfiles_dir=dockfiles,
-                timeout=123,
-            )
+            _run_dock64(run_dir, indock, dock64_exe=dock64, timeout=123)
 
-        assert run_mock.call_args.args[0] == ["./dock64", "INDOCK_run"]
-        assert run_mock.call_args.kwargs["cwd"] == work_dir
+        assert run_mock.call_args.args[0] == [str(dock64), "INDOCK_run"]
+        assert run_mock.call_args.kwargs["cwd"] == run_dir
         assert run_mock.call_args.kwargs["timeout"] == 123
+
+    def test_dock_root_copies_dockfiles_rather_than_symlinking(
+        self, dock_paths, hitrate_kwargs, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Symlinked grid files silently mis-score on Lustre; must be a copy.
+
+        The copy moved from per-molecule to per-oracle, so this now exercises
+        ``_get_dock_root``; the invariant it guards is unchanged.
+        """
+        indock, dockfiles = dock_paths
+        dock64 = tmp_path / "dock64_src"
+        dock64.write_bytes(b"#!/bin/true\n")
+        base = tmp_path / "base"
+        base.mkdir()
+        monkeypatch.setattr(f"{_MODULE}._short_workdir_base", lambda: base)
+
+        oracle = Dock3Oracle(
+            indock_template=indock,
+            dockfiles_dir=dockfiles,
+            fidelity_costs={0: 32.0},
+            **hitrate_kwargs,
+            dock64_exe=dock64,
+            warmup=False,
+        )
+        dock_root = oracle._get_dock_root()
+
+        copied = dock_root / "dockfiles"
+        assert copied.is_dir()
+        assert not copied.is_symlink()
+        assert (copied / "vdw.vdw").read_bytes() == b"\x00grid"
+        # One copy per oracle, reused by every worker.
+        assert oracle._get_dock_root() == dock_root
 
 
 class TestRunLigbuild:

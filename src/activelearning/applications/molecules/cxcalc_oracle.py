@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import logging
 import math
-import os
 import subprocess
 import tempfile
 from collections import Counter
@@ -35,6 +34,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence
 
+from activelearning.applications.molecules._parallel import resolve_num_workers
 from activelearning.applications.molecules._subprocess import _run_subprocess
 from activelearning.oracle.multi_fidelity_oracle import MultiFidelityOracle
 from activelearning.utils.types import Candidate, Observation
@@ -433,9 +433,11 @@ class CxcalcOracle(MultiFidelityOracle):
         Maximum molecules per cxcalc invocation. Matches the production chunk
         size; a typical acquisition batch is a single chunk.
     num_workers : int, optional
-        Threads used to evaluate chunks. ``None`` resolves to
-        ``$SLURM_CPUS_PER_TASK``, else the CPU count, else 1. Defaults to 1
-        (serial). Only relevant for batches larger than ``chunk_size``.
+        Threads used to evaluate chunks. Defaults to ``None``, which sizes the
+        pool from the CPUs this job actually holds; see
+        :func:`~activelearning.applications.molecules._parallel.resolve_num_workers`.
+        Only relevant for batches larger than ``chunk_size``, since a batch that
+        fits in one chunk is one subprocess.
     warmup : bool, default=True
         Whether to prime the cxcalc environment during construction. Leave
         enabled in production: the probe must run single-threaded before any
@@ -468,7 +470,7 @@ class CxcalcOracle(MultiFidelityOracle):
         nonzero_probability: float = 0.01,
         timeout: int = 600,
         chunk_size: int = 12500,
-        num_workers: Optional[int] = 1,
+        num_workers: Optional[int] = None,
         warmup: bool = True,
     ) -> None:
         """Initialize the cxcalc-backed molecular oracle.
@@ -526,7 +528,7 @@ class CxcalcOracle(MultiFidelityOracle):
         self._nonzero_probability = float(nonzero_probability)
         self._timeout = timeout
         self._chunk_size = chunk_size
-        self._num_workers = self._resolve_num_workers(num_workers)
+        self._num_workers = resolve_num_workers(num_workers)
 
         # Deliberately no existence check on cxcalc_exe: it may only resolve
         # once env_setup has run. The warmup is what surfaces a bad path.
@@ -769,30 +771,6 @@ class CxcalcOracle(MultiFidelityOracle):
         self.logger.log_metric("cxcalc/success_rate", succeeded / total)
         for reason, count in sorted(reasons.items()):
             self.logger.log_metric(f"cxcalc/failures/{reason}", float(count))
-
-    @staticmethod
-    def _resolve_num_workers(num_workers: Optional[int]) -> int:
-        """Resolve the worker count, defaulting to the Slurm CPU allocation.
-
-        Parameters
-        ----------
-        num_workers : int or None
-            Requested worker count, or ``None`` to auto-detect.
-
-        Returns
-        -------
-        int
-            Concrete number of worker threads to use.
-        """
-        if num_workers is not None:
-            return num_workers
-        slurm_cpus = os.environ.get("SLURM_CPUS_PER_TASK")
-        if slurm_cpus:
-            try:
-                return max(1, int(slurm_cpus))
-            except ValueError:
-                logger.warning("Ignoring unparsable SLURM_CPUS_PER_TASK=%r", slurm_cpus)
-        return os.cpu_count() or 1
 
     @staticmethod
     def _extract_smiles(candidate: Candidate) -> str:

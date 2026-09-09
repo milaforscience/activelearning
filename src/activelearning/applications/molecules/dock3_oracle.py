@@ -29,11 +29,16 @@ import sys
 import tarfile
 import tempfile
 import threading
+import weakref
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
+from activelearning.applications.molecules._parallel import (
+    SINGLE_THREAD_ENV,
+    resolve_num_workers,
+)
 from activelearning.applications.molecules._subprocess import _run_subprocess
 from activelearning.applications.molecules.hit_rate import HitRateModel
 from activelearning.oracle.multi_fidelity_oracle import MultiFidelityOracle
@@ -249,6 +254,7 @@ def _run_ligbuild(
     ligbuild_exe: str,
     timeout: int,
     ligbuild_timeout: int,
+    env: Optional[dict[str, str]] = None,
 ) -> Path:
     """Run ligbuild on ``smi_file`` and return the ``.tgz`` bundle it produced.
 
@@ -268,6 +274,9 @@ def _run_ligbuild(
         Wall-clock seconds allowed for the ligbuild subprocess.
     ligbuild_timeout : int
         Internal per-protomer timeout hint written into ``custom_parms.json``.
+    env : dict[str, str], optional
+        Complete environment for the subprocess; ``None`` inherits this
+        process's.
 
     Returns
     -------
@@ -292,7 +301,9 @@ def _run_ligbuild(
         f'source "{dockenv_sh}" && '
         f'{ligbuild_exe} "{smi_file}" "{out_dir}" "{custom_parms_path}"'
     )
-    result = _run_subprocess(["bash", "-c", cmd], timeout=timeout, cwd=out_dir.parent)
+    result = _run_subprocess(
+        ["bash", "-c", cmd], timeout=timeout, cwd=out_dir.parent, env=env
+    )
 
     # Deliberately not checking the return code: ligbuild commonly exits rc=1
     # because its shutil.rmtree("db2_outputs") cleanup races in parallel jobs,
@@ -384,58 +395,57 @@ def _build_indock(indock_template: Path, db2_path: Path, dest_dir: Path) -> Path
 
 
 def _run_dock64(
-    work_dir: Path,
+    run_dir: Path,
     indock_path: Path,
     *,
-    dock64_exe: str,
-    dockfiles_dir: Path,
+    dock64_exe: Path,
     timeout: int,
+    env: Optional[dict[str, str]] = None,
 ) -> None:
-    """Run dock64 in ``work_dir`` against a private copy of the dockfiles.
+    """Run dock64 in ``run_dir`` against the shared dockfiles copy beside it.
 
-    The dockfiles must be a **real copy** at ``work_dir.parent/dockfiles``, not
-    a symlink: the large Fortran binary grid files (``.phi``, ``.bmp``,
-    ``.vdw``, ``.desolv``) read incorrectly through symlinks on networked and
-    Lustre filesystems, which silently mis-scores every molecule with no error.
-    Placing them as a sibling of ``work_dir`` is what makes the
-    ``../dockfiles/...`` references inside INDOCK resolve.
+    ``run_dir`` must be a direct child of the oracle's dock root, because the
+    receptor's INDOCK refers to its grids as ``../dockfiles/...`` relative to
+    dock64's working directory. :meth:`Dock3Oracle._get_dock_root` is what
+    creates that layout.
+
+    The dockfiles there must be a **real copy**, not a symlink: the large
+    Fortran binary grid files (``.phi``, ``.bmp``, ``.vdw``, ``.desolv``) read
+    incorrectly through symlinks on networked and Lustre filesystems, which
+    silently mis-scores every molecule with no error. The copy is made once per
+    oracle rather than once per molecule -- the grids are read-only, so every
+    worker can read the same copy concurrently, and a per-molecule ``copytree``
+    of ~23 MB would otherwise leave the thread pool waiting on I/O instead of
+    docking.
 
     Parameters
     ----------
-    work_dir : Path
+    run_dir : Path
         Directory dock64 runs in; receives ``OUTDOCK`` and the ``test.*``
-        outputs.
+        outputs. Must be a child of the dock root.
     indock_path : Path
-        The patched INDOCK file inside ``work_dir``.
-    dock64_exe : str
-        Path to the dock64 binary, copied into ``work_dir`` before running.
-    dockfiles_dir : Path
-        Receptor grid directory to copy.
+        The patched INDOCK file inside ``run_dir``.
+    dock64_exe : Path
+        Path to the dock64 binary in the dock root.
     timeout : int
         Wall-clock seconds allowed for the dock64 subprocess.
+    env : dict[str, str], optional
+        Complete environment for the subprocess; ``None`` inherits this
+        process's.
 
     Raises
     ------
     RuntimeError
         If dock64 produced no ``OUTDOCK`` file.
     """
-    dock64_dest = work_dir / "dock64"
-    if not dock64_dest.exists():
-        shutil.copy2(dock64_exe, str(dock64_dest))
-        dock64_dest.chmod(dock64_dest.stat().st_mode | 0o111)
-
-    dockfiles_copy = work_dir.parent / "dockfiles"
-    if not dockfiles_copy.exists():
-        shutil.copytree(str(dockfiles_dir), str(dockfiles_copy))
-
     result = _run_subprocess(
-        ["./dock64", indock_path.name], timeout=timeout, cwd=work_dir
+        [str(dock64_exe), indock_path.name], timeout=timeout, cwd=run_dir, env=env
     )
 
     # dock64 exits non-zero even on success (it raises an ieee_inexact signal),
     # so the return code carries no information. Presence of OUTDOCK is the
     # real success signal.
-    if not (work_dir / "OUTDOCK").exists():
+    if not (run_dir / "OUTDOCK").exists():
         raise RuntimeError(
             f"dock64 produced no OUTDOCK.\n"
             f"STDOUT: {result.stdout}\nSTDERR: {result.stderr}"
@@ -622,9 +632,13 @@ class Dock3Oracle(MultiFidelityOracle):
         Internal per-protomer timeout hint passed to ligbuild through
         ``custom_parms.json``. Only meaningful when it is below ``timeout``.
     num_workers : int, optional
-        Threads used to evaluate a query batch. ``None`` resolves to
-        ``$SLURM_CPUS_PER_TASK``, else the CPU count, else 1. Defaults to 1
-        (serial). The work happens in subprocesses, so threads scale well.
+        Threads used to evaluate a query batch. Defaults to ``None``, which
+        sizes the pool from the CPUs this job actually holds; see
+        :func:`~activelearning.applications.molecules._parallel.resolve_num_workers`.
+        The work happens in subprocesses, so threads scale well. The achieved
+        concurrency is ``min(num_workers, batch size)``, and the batch is
+        whatever the selector hands the oracle -- a 16-candidate round cannot
+        use more than 16 cores however many are allocated.
     hitrate_params : str or Path
         JSON file of fitted hit-rate parameters, keyed by target name.
     score_pprop_table : str or Path
@@ -664,7 +678,7 @@ class Dock3Oracle(MultiFidelityOracle):
         tmp_dir: str | Path | None = None,
         timeout: int = 300,
         ligbuild_timeout: int = 150,
-        num_workers: Optional[int] = 1,
+        num_workers: Optional[int] = None,
         hitrate_target: str = "ampc",
         warmup: bool = True,
     ) -> None:
@@ -717,7 +731,14 @@ class Dock3Oracle(MultiFidelityOracle):
         self._timeout = timeout
         self._ligbuild_timeout = ligbuild_timeout
         self._pki_threshold = pki_threshold
-        self._num_workers = self._resolve_num_workers(num_workers)
+        self._num_workers = resolve_num_workers(num_workers)
+
+        # One receptor grid copy per oracle, shared read-only by every
+        # worker. Built on first dock rather than here so that constructing
+        # an oracle stays cheap and no scratch is claimed by a run that
+        # never docks; see _get_dock_root.
+        self._dock_root: Optional[Path] = None
+        self._dock_root_lock = threading.Lock()
 
         # Built once, up front, so a missing or malformed parameter file fails
         # at construction rather than turning every molecule into a NaN.
@@ -804,10 +825,22 @@ class Dock3Oracle(MultiFidelityOracle):
             return []
 
         smiles_list = [smiles for _, smiles in prepared]
-        if self._num_workers == 1 or len(smiles_list) == 1:
+        workers_used = min(self._num_workers, len(smiles_list))
+        if workers_used < self._num_workers:
+            # Not a misconfiguration, but the usual reason a docking round
+            # leaves cores idle, and invisible from the outside otherwise.
+            logger.info(
+                "Docking %d molecules across %d of %d workers; the batch, not "
+                "the CPU allocation, is the limit (the selector's num_samples, "
+                "split further by fidelity under CompositeOracle).",
+                len(smiles_list),
+                workers_used,
+                self._num_workers,
+            )
+        if workers_used == 1:
             results = [self._safe_dock3_score(smiles) for smiles in smiles_list]
         else:
-            with ThreadPoolExecutor(max_workers=self._num_workers) as executor:
+            with ThreadPoolExecutor(max_workers=workers_used) as executor:
                 # executor.map preserves input order.
                 results = list(executor.map(self._safe_dock3_score, smiles_list))
 
@@ -828,7 +861,7 @@ class Dock3Oracle(MultiFidelityOracle):
                     },
                 )
             )
-        self._log_query_failure_summary(results)
+        self._log_query_failure_summary(results, workers_used)
         return observations
 
     # ------------------------------------------------------------------
@@ -836,7 +869,7 @@ class Dock3Oracle(MultiFidelityOracle):
     # ------------------------------------------------------------------
 
     def _log_query_failure_summary(
-        self, results: Sequence[tuple[float, Optional[str]]]
+        self, results: Sequence[tuple[float, Optional[str]]], workers_used: int
     ) -> None:
         """Log aggregate docking outcomes for one query batch, if a logger is bound.
 
@@ -853,6 +886,10 @@ class Dock3Oracle(MultiFidelityOracle):
         results : Sequence[tuple[float, str or None]]
             Per-molecule ``(raw_score, failure_reason)`` pairs from the most
             recent :meth:`query` call.
+        workers_used : int
+            Threads the batch was actually spread over. Logged as
+            ``dock3/workers_used`` so a run's own metrics answer whether the CPU
+            allocation was saturated, without external instrumentation.
         """
         if self.logger is None or not results:
             return
@@ -861,35 +898,76 @@ class Dock3Oracle(MultiFidelityOracle):
         total = len(results)
         succeeded = total - sum(reasons.values())
 
+        self.logger.log_metric("dock3/workers_used", float(workers_used))
+        self.logger.log_metric("dock3/workers_available", float(self._num_workers))
         self.logger.log_metric("dock3/queried", float(total))
         self.logger.log_metric("dock3/succeeded", float(succeeded))
         self.logger.log_metric("dock3/success_rate", succeeded / total)
         for reason, count in sorted(reasons.items()):
             self.logger.log_metric(f"dock3/failures/{reason}", float(count))
 
-    @staticmethod
-    def _resolve_num_workers(num_workers: Optional[int]) -> int:
-        """Resolve the worker count, defaulting to the Slurm CPU allocation.
+    def _get_dock_root(self) -> Path:
+        """Return this oracle's shared dock root, creating it on first use.
 
-        Parameters
-        ----------
-        num_workers : int or None
-            Requested worker count, or ``None`` to auto-detect.
+        The root holds one real copy of the receptor dockfiles and one copy of
+        the dock64 binary, and every molecule's ``run_dir`` is created directly
+        inside it so that INDOCK's ``../dockfiles/...`` references resolve to
+        that single copy.
+
+        Copying the ~23 MB grid directory once per oracle instead of once per
+        molecule is what keeps the thread pool docking rather than waiting on
+        I/O: at 64 workers the old layout ran 64 concurrent copies of identical
+        read-only data. Concurrent reads of a real copy are safe -- the hazard
+        the copy guards against is symlink resolution on networked and Lustre
+        filesystems, which is unaffected by sharing.
 
         Returns
         -------
-        int
-            Concrete number of worker threads to use.
+        Path
+            Directory containing ``dockfiles/`` and the ``dock64`` binary.
         """
-        if num_workers is not None:
-            return num_workers
-        slurm_cpus = os.environ.get("SLURM_CPUS_PER_TASK")
-        if slurm_cpus:
+        with self._dock_root_lock:
+            if self._dock_root is not None:
+                return self._dock_root
+
+            root = Path(tempfile.mkdtemp(prefix="k", dir=str(_short_workdir_base())))
             try:
-                return max(1, int(slurm_cpus))
-            except ValueError:
-                logger.warning("Ignoring unparsable SLURM_CPUS_PER_TASK=%r", slurm_cpus)
-        return os.cpu_count() or 1
+                shutil.copytree(str(self._dockfiles_dir), str(root / "dockfiles"))
+                dock64_dest = root / "dock64"
+                shutil.copy2(self._dock64_exe, str(dock64_dest))
+                dock64_dest.chmod(dock64_dest.stat().st_mode | 0o111)
+            except Exception:
+                shutil.rmtree(root, ignore_errors=True)
+                raise
+
+            # Bound to the oracle rather than to a __del__, so the scratch is
+            # released when the oracle is collected or the process exits.
+            # rmtree is passed a plain string so the callback holds no
+            # reference back to self, which would keep it alive forever.
+            weakref.finalize(self, shutil.rmtree, str(root), True)
+            self._dock_root = root
+            logger.info("Prepared shared dock root at %s.", root)
+            return root
+
+    def _subprocess_env(self) -> Optional[dict[str, str]]:
+        """Return the environment for this oracle's toolchain subprocesses.
+
+        The pipeline is driven one molecule per worker, so any OpenMP- or
+        BLAS-threaded component inside ligbuild or dock64 would multiply the
+        worker count rather than add throughput, and would invalidate the
+        core-second cost constant, which was measured at one core per molecule.
+        Pinned only when running in parallel, so a serial run keeps whatever the
+        job set.
+
+        Returns
+        -------
+        dict[str, str] or None
+            A complete environment mapping, or ``None`` to inherit this
+            process's environment unchanged.
+        """
+        if self._num_workers == 1:
+            return None
+        return {**os.environ, **SINGLE_THREAD_ENV}
 
     @staticmethod
     def _extract_smiles(candidate: Candidate) -> str:
@@ -999,6 +1077,7 @@ class Dock3Oracle(MultiFidelityOracle):
             failure label from :func:`_classify_failure` on failure.
         """
         work_dir, auto_cleanup = self._make_workdir(smiles)
+        run_dir: Optional[Path] = None
         try:
             smi_file = work_dir / f"{name}.smi"
             smi_file.write_text(f"{smiles} {name}\n")
@@ -1011,6 +1090,7 @@ class Dock3Oracle(MultiFidelityOracle):
                     ligbuild_exe=self._ligbuild_exe,
                     timeout=self._timeout,
                     ligbuild_timeout=self._ligbuild_timeout,
+                    env=self._subprocess_env(),
                 )
             except Exception as error:
                 logger.warning(
@@ -1029,19 +1109,20 @@ class Dock3Oracle(MultiFidelityOracle):
                 )
                 return float("nan"), _classify_failure("db2_extract", str(error))
 
-            # dock64 runs from run_dir so that the '../dockfiles/...' paths in
-            # INDOCK resolve to this call's private dockfiles copy.
-            run_dir = work_dir / "run"
-            run_dir.mkdir(parents=True, exist_ok=True)
+            # dock64 runs from a run_dir created directly inside the dock
+            # root, so that the '../dockfiles/...' paths in INDOCK resolve to
+            # this oracle's single shared dockfiles copy.
+            dock_root = self._get_dock_root()
+            run_dir = Path(tempfile.mkdtemp(prefix="r", dir=str(dock_root)))
             indock_path = _build_indock(self._indock_template, db2_path, run_dir)
 
             try:
                 _run_dock64(
                     run_dir,
                     indock_path,
-                    dock64_exe=self._dock64_exe,
-                    dockfiles_dir=self._dockfiles_dir,
+                    dock64_exe=dock_root / "dock64",
                     timeout=self._timeout,
+                    env=self._subprocess_env(),
                 )
             except Exception as error:
                 logger.warning(
@@ -1056,6 +1137,20 @@ class Dock3Oracle(MultiFidelityOracle):
                 )
             return score, None
         finally:
+            if run_dir is not None:
+                if auto_cleanup:
+                    shutil.rmtree(run_dir, ignore_errors=True)
+                else:
+                    # A persistent tmp_dir is for debugging, so keep OUTDOCK
+                    # where it has always been, at <work_dir>/run. Never let
+                    # that bookkeeping turn a scored molecule into a NaN.
+                    try:
+                        shutil.move(str(run_dir), str(work_dir / "run"))
+                    except OSError as error:
+                        logger.warning(
+                            "Could not preserve %s for debugging: %s", run_dir, error
+                        )
+                        shutil.rmtree(run_dir, ignore_errors=True)
             if auto_cleanup:
                 shutil.rmtree(work_dir, ignore_errors=True)
 
