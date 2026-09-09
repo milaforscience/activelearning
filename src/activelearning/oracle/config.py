@@ -322,6 +322,126 @@ class Dock3OracleConfig(BaseModel):
         )
 
 
+class CxcalcOracleConfig(BaseModel):
+    """Configuration for :class:`~activelearning.applications.molecules.cxcalc_oracle.CxcalcOracle`.
+
+    The oracle observes an estimated probability of binding, converted from the
+    raw anionic percentage by a configurable two-valued step. The percentage is
+    retained in observation metadata. Reporting a probability is what lets this
+    oracle share a multi-fidelity target with ``Dock3Oracle``.
+
+    Parameters
+    ----------
+    fidelity_costs : dict[int, float]
+        Cost per sample. cxcalc computes one property at one pH, so exactly one
+        fidelity level must be declared; compose with other oracles through
+        ``CompositeOracle`` for multi-fidelity runs.
+    fidelity_confidences : dict[int, float], optional
+        Confidence in ``[0, 1]`` per fidelity.  Defaults to costs normalised by max,
+        which for a single-fidelity oracle is always ``1.0`` - set it explicitly
+        when composing with another oracle, or both will claim full confidence.
+    mol_repr : str
+        Input molecules representation.  cxcalc only accepts ``"smiles"``.
+    cxcalc_exe : str, optional
+        Path to the cxcalc launcher.  Defaults to the shared cluster install.
+    env_setup : str, optional
+        Shell command run before cxcalc to put a JVM on ``PATH``.  Defaults to
+        ``"module load java"``; set to ``null`` when java is already loaded.
+    ph : float
+        pH at which the microspecies distribution is computed.
+    anionic_charges : list[int]
+        Net formal charges counted as anionic.
+    anion_percent_threshold : float
+        Percentage strictly above which a molecule counts as anionic.  The
+        default of ``0.0`` treats any trace of charge as anionic; raising it to
+        ``0.5`` or ``1.0`` excludes a large band of barely-charged molecules
+        that dock much more like the uncharged ones.
+    zero_probability : float
+        Probability reported at or below the threshold.
+    nonzero_probability : float
+        Probability reported above the threshold.
+    timeout : int
+        Wall-clock seconds allowed for each cxcalc subprocess.
+    chunk_size : int
+        Maximum molecules per cxcalc invocation.  A typical acquisition batch is
+        a single chunk; cxcalc is a JVM application, so batching is what makes
+        this oracle cheap.
+    num_workers : int, optional
+        Threads used to evaluate chunks.  ``null`` resolves to
+        ``$SLURM_CPUS_PER_TASK``, else the CPU count, else 1.  Only relevant for
+        batches larger than ``chunk_size``.
+    warmup : bool
+        Whether to prime the cxcalc environment during construction.  Leave
+        enabled in production: the probe must run single-threaded before any
+        parallel call.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["CxcalcOracle"] = "CxcalcOracle"
+    fidelity_costs: dict[int, float]
+    fidelity_confidences: dict[int, float] | None = None
+    mol_repr: Literal["smiles"] = "smiles"
+    cxcalc_exe: str | None = None
+    env_setup: str | None = "module load java"
+    ph: float = 7.4
+    anionic_charges: list[int] = Field(default=[-1, -2], min_length=1)
+    anion_percent_threshold: float = Field(default=0.0, ge=0.0)
+    zero_probability: float = Field(default=0.0, ge=0.0, le=1.0)
+    nonzero_probability: float = Field(default=0.01, ge=0.0, le=1.0)
+    timeout: int = Field(default=600, gt=0)
+    chunk_size: int = Field(default=12500, ge=1)
+    num_workers: int | None = Field(default=1, ge=1)
+    warmup: bool = True
+
+    @model_validator(mode="after")
+    def validate_single_fidelity(self) -> "CxcalcOracleConfig":
+        """Validate that exactly one fidelity level is declared.
+
+        Returns
+        -------
+        CxcalcOracleConfig
+            This validated configuration instance.
+
+        Raises
+        ------
+        ValueError
+            If zero or more than one fidelity level is declared.
+        """
+        if len(self.fidelity_costs) != 1:
+            raise ValueError(
+                "CxcalcOracle is single-fidelity and must declare exactly one "
+                f"fidelity level in fidelity_costs; got {sorted(self.fidelity_costs)}."
+            )
+        return self
+
+    def build(self) -> Oracle:
+        """Build the cxcalc-backed oracle lazily.
+
+        Returns
+        -------
+        Oracle
+            Configured :class:`~activelearning.applications.molecules.cxcalc_oracle.CxcalcOracle`.
+        """
+        from activelearning.applications.molecules.cxcalc_oracle import CxcalcOracle
+
+        return CxcalcOracle(
+            fidelity_costs=self.fidelity_costs,
+            fidelity_confidences=self.fidelity_confidences,
+            cxcalc_exe=self.cxcalc_exe,
+            env_setup=self.env_setup,
+            ph=self.ph,
+            anionic_charges=self.anionic_charges,
+            anion_percent_threshold=self.anion_percent_threshold,
+            zero_probability=self.zero_probability,
+            nonzero_probability=self.nonzero_probability,
+            timeout=self.timeout,
+            chunk_size=self.chunk_size,
+            num_workers=self.num_workers,
+            warmup=self.warmup,
+        )
+
+
 OracleConfig = Annotated[
     Union[
         BraninOracleConfig,
@@ -329,6 +449,7 @@ OracleConfig = Annotated[
         CompositeOracleConfig,
         XTBIPEAOracleConfig,
         Dock3OracleConfig,
+        CxcalcOracleConfig,
     ],
     Field(discriminator="type"),
 ]

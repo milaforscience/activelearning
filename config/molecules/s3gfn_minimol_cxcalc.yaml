@@ -1,0 +1,98 @@
+# S3-GFN molecule experiment: MiniMol fingerprints + exact SMILES DKL, scored by
+# ChemAxon cxcalc against AmpC beta-lactamase.
+#
+# The objective is an estimated probability of binding, converted from the raw
+# anionic percentage (the fraction of the molecule carrying a net -1 or -2 formal
+# charge at pH 7.4) by a two-valued step: 0.0 when the molecule is uncharged,
+# 0.01 when it is not. AmpC favours anionic carboxylates, which is what makes
+# this cheap property informative at all - in a 10M-molecule reference screen the
+# mean DOCK3 score falls from about -32 for uncharged molecules to about -52 for
+# fully anionic ones.
+#
+# This is the low-fidelity partner to s3gfn_minimol_dock3.yaml; see
+# s3gfn_minimol_cxcalc_dock3.yaml for the two composed into one run.
+#
+# Prerequisites:
+#   - uv sync --extra molecules
+#   - the ChemAxon install and a JVM: the oracle runs "module load java" itself,
+#     which relies on `module` being an exported shell function (set env_setup to
+#     null when java is already on PATH)
+#
+# Cost: cxcalc is a JVM application invoked once per batch, so the honest
+# per-molecule cost depends on batch size. Bulk throughput measured over
+# 12,500-molecule chunks is ~0.0065 core-seconds per molecule; at acquisition
+# batch sizes JVM start-up dominates and ~0.2 is the realistic figure - still
+# ~160x cheaper than DOCK3's 32. Budget is denominated in those core-seconds.
+
+runtime:
+  device: cpu
+  precision: 64
+  seed: 42
+
+dataset:
+  type: ListDataset
+
+surrogate:
+  type: ExactDKLSurrogate
+  encoder:
+    type: MiniMolSmilesEncoder
+    batch_size: 16
+    latent_dim: 32
+    cache_size: 4096
+  training_params:
+    epochs: 10
+    lr: 1.0e-3
+  standardize_outputs: true
+
+acquisition:
+  type: UpperConfidenceBound
+  beta: 2.0
+
+sampler:
+  type: S3GFNSampler
+  n_samples: 64
+  fidelities: [0]
+  model_name_or_path: ibm-research/GP-MoLFormer-Uniq
+  tokenizer_name_or_path: ibm-research/MoLFormer-XL-both-10pct
+  trust_remote_code: true
+  max_length: 140
+  batch_size: 16
+  replay_batch_size: 16
+  n_train_steps: 25
+  num_warmup_steps: 5
+  beta: 25.0
+  aux_coefficient: 0.001
+  sa_threshold: 4.0
+
+selector:
+  type: TopKAcquisitionSelector
+  num_samples: 16
+
+oracle:
+  type: CxcalcOracle
+  mol_repr: smiles
+  fidelity_costs:
+    0: 0.2           # core-seconds per molecule at acquisition batch sizes
+  ph: 7.4
+  # The observed value is P(binding), not the anionic percentage. The percentage
+  # is kept in observation metadata as cxcalc_anion_percent.
+  #
+  # anion_percent_threshold: 0.0 counts any trace of charge as anionic. Consider
+  # raising it to 0.5: in the reference screen 10.8% of molecules fall in
+  # (0, 0.5) and dock much more like the uncharged ones (mean -34.70) than like
+  # the genuinely anionic (-44.61).
+  anion_percent_threshold: 0.0
+  zero_probability: 0.0
+  nonzero_probability: 0.01
+  num_workers: 1
+
+budget:
+  available_budget: 24.0
+  schedule:
+    type: constant
+    value: 8.0
+
+logger:
+  type: ConsoleLogger
+  project_name: activelearning_tutorials
+  run_name: molecules-s3gfn-minimol-cxcalc

@@ -1,0 +1,123 @@
+# S3-GFN molecule experiment: MiniMol fingerprints + variational SMILES DKL,
+# scored against AmpC beta-lactamase at two fidelities.
+#
+#   fidelity 0  CxcalcOracle  - % anionic at pH 7.4, ~0.2 core-seconds/molecule
+#   fidelity 1  Dock3Oracle   - DOCK3 docking,       ~32 core-seconds/molecule
+#
+# Both oracles observe the SAME quantity, an estimated probability of binding, so
+# the surrogate regresses on one consistent target. They differ in how they get
+# there: DOCK3 pushes its docking score through a fitted AmpC hit-rate model,
+# while cxcalc applies a deliberately coarse two-valued step to the anionic
+# percentage (0.0 uncharged, 0.01 otherwise). Fidelity 0 is therefore a very
+# blunt estimate of the target, not a different target.
+#
+# Note the DOCK3 objective is not monotone in the docking score: it peaks at an
+# interior score and falls off beyond it, because scores that good are more
+# likely artifacts than real binders.
+#
+# Prerequisites:
+#   - uv sync --extra molecules
+#   - the DOCK3 toolchain: dockenv.sh, ligbuild, dock64, a prepared receptor
+#     dockfiles directory and its INDOCK template
+#   - the ChemAxon install and a JVM (the cxcalc oracle runs "module load java")
+#   - run inside a Slurm allocation so $SLURM_TMPDIR exists; the DOCK3 oracle
+#     needs node-local scratch reachable through a short path
+#
+# Budget is denominated in core-seconds, matching both fidelity_costs.
+
+runtime:
+  device: cpu
+  precision: 64
+  seed: 42
+
+dataset:
+  type: ListDataset
+
+surrogate:
+  type: VariationalDKLSurrogate
+  target_fidelity: 1
+  encoder:
+    type: MiniMolSmilesEncoder
+    batch_size: 16
+    latent_dim: 32
+    cache_size: 4096
+  training_params:
+    epochs: 10
+    lr: 1.0e-3
+  num_inducing: 64
+  standardize_outputs: true
+
+acquisition:
+  type: QMultiFidelityLowerBoundMaxValueEntropy
+  candidate_set_spec:
+    type: TrainDataCandidateSetSpec
+  num_fantasies: 8
+  num_mv_samples: 10
+  num_y_samples: 64
+  maximize: true
+
+sampler:
+  type: S3GFNSampler
+  n_samples: 64
+  fidelities: [0, 1]
+  model_name_or_path: ibm-research/GP-MoLFormer-Uniq
+  tokenizer_name_or_path: ibm-research/MoLFormer-XL-both-10pct
+  trust_remote_code: true
+  max_length: 140
+  batch_size: 16
+  replay_batch_size: 16
+  n_train_steps: 25
+  num_warmup_steps: 5
+  beta: 25.0
+  aux_coefficient: 0.001
+  sa_threshold: 4.0
+
+selector:
+  type: TopKAcquisitionSelector
+  num_samples: 8
+
+# fidelity_confidences must be set explicitly here. Each sub-oracle is
+# single-fidelity, so the cost/max_cost default resolves each to 1.0 on its own,
+# and CompositeOracle merges {0: 1.0, 1: 1.0} without complaint - it only errors
+# when two oracles disagree about the same fidelity. The surrogate would then
+# treat the two-valued cheap signal as exactly as trustworthy as docking.
+oracle:
+  type: CompositeOracle
+  sub_oracles:
+    - type: CxcalcOracle
+      mol_repr: smiles
+      fidelity_costs:
+        0: 0.2
+      fidelity_confidences:
+        0: 0.3
+      ph: 7.4
+      anion_percent_threshold: 0.0
+      zero_probability: 0.0
+      nonzero_probability: 0.01
+      num_workers: 1
+    - type: Dock3Oracle
+      mol_repr: smiles
+      indock_template: /home/ethankrz/dock_smiles/ampc_dockfiles/INDOCK
+      dockfiles_dir: /home/ethankrz/dock_smiles/ampc_dockfiles
+      fidelity_costs:
+        1: 32.0
+      fidelity_confidences:
+        1: 1.0
+      num_workers: 64
+      ligbuild_timeout: 150
+      # Paths are relative to the repository root, like config/data/molecules.txt.
+      hitrate_params: ampc_hitrate_fits/fitted_params.json
+      score_pprop_table: ampc_hitrate_fits/data/full_scores.df
+      hitrate_target: ampc
+      pki_threshold: 6.5
+
+budget:
+  available_budget: 1536.0
+  schedule:
+    type: constant
+    value: 512.0
+
+logger:
+  type: ConsoleLogger
+  project_name: activelearning_tutorials
+  run_name: molecules-s3gfn-minimol-cxcalc-dock3

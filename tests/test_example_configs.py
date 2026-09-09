@@ -457,6 +457,72 @@ def test_molecule_s3gfn_minimol_variational_multi_fidelity_config_parses() -> No
     assert config.oracle.mol_repr == "smiles"
 
 
+def test_molecule_s3gfn_minimol_dock3_config_parses() -> None:
+    """Ensure the single-fidelity DOCK3 docking example matches the schema."""
+    config_path = REPOSITORY_ROOT / "config" / "molecules" / "s3gfn_minimol_dock3.yaml"
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "S3GFNSampler"
+    assert config.sampler.fidelities == [1]
+    assert config.surrogate.type == "ExactDKLSurrogate"
+    assert config.oracle.type == "Dock3Oracle"
+    assert config.oracle.mol_repr == "smiles"
+    assert config.oracle.fidelity_costs == {1: 32.0}
+    assert config.oracle.pki_threshold == 6.5
+
+
+def test_molecule_s3gfn_minimol_cxcalc_config_parses() -> None:
+    """Ensure the single-fidelity cxcalc example matches the schema."""
+    config_path = REPOSITORY_ROOT / "config" / "molecules" / "s3gfn_minimol_cxcalc.yaml"
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "S3GFNSampler"
+    assert config.sampler.fidelities == [0]
+    assert config.surrogate.type == "ExactDKLSurrogate"
+    assert config.oracle.type == "CxcalcOracle"
+    assert config.oracle.mol_repr == "smiles"
+    assert config.oracle.fidelity_costs == {0: 0.2}
+    assert config.oracle.ph == 7.4
+    assert config.oracle.anion_percent_threshold == 0.0
+    assert config.oracle.zero_probability == 0.0
+    assert config.oracle.nonzero_probability == 0.01
+
+
+def test_molecule_s3gfn_minimol_cxcalc_dock3_config_parses() -> None:
+    """Ensure the composed cxcalc/DOCK3 multi-fidelity example matches the schema.
+
+    Both sub-oracles must declare mol_repr='smiles' for the composite to resolve
+    one molecular representation, and both must declare fidelity_confidences
+    explicitly - each is single-fidelity, so the cost-derived default would
+    resolve both to 1.0.
+    """
+    config_path = (
+        REPOSITORY_ROOT / "config" / "molecules" / "s3gfn_minimol_cxcalc_dock3.yaml"
+    )
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "S3GFNSampler"
+    assert config.sampler.fidelities == [0, 1]
+    assert config.surrogate.is_multi_fidelity is True
+    assert config.surrogate.type == "VariationalDKLSurrogate"
+    assert config.surrogate.target_fidelity == 1
+    assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
+    assert config.oracle.type == "CompositeOracle"
+
+    cxcalc, dock3 = config.oracle.sub_oracles
+    assert cxcalc.type == "CxcalcOracle"
+    assert cxcalc.fidelity_costs == {0: 0.2}
+    assert cxcalc.fidelity_confidences == {0: 0.3}
+    assert cxcalc.mol_repr == "smiles"
+    assert dock3.type == "Dock3Oracle"
+    assert dock3.fidelity_costs == {1: 32.0}
+    assert dock3.fidelity_confidences == {1: 1.0}
+    assert dock3.mol_repr == "smiles"
+
+
 def test_molecule_dkl_exact_pool_config_parses() -> None:
     """Ensure the exact single-fidelity pool-based molecule example matches the schema."""
     config_path = REPOSITORY_ROOT / "config" / "molecules" / "exact.yaml"
