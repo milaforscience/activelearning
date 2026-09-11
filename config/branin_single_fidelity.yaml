@@ -1,0 +1,54 @@
+# Tutorial experiment: 2D Branin benchmark with a single fidelity level
+#
+# Run with:
+#   uv run activelearning config/branin_single_fidelity.yaml
+
+runtime:
+  device: cpu
+  precision: 64
+  seed: 42
+
+dataset:
+  type: ListDataset
+
+surrogate:
+  type: BoTorchGPSurrogate
+
+acquisition:
+  type: QMultiFidelityLowerBoundMaxValueEntropy
+  candidate_set_spec:
+    type: HypercubeCandidateSetSpec
+    bounds:
+      - [-5.0, 10.0]
+      - [0.0, 15.0]
+    n_points: 1000
+    strategy: lhs
+
+sampler:
+  type: HypercubeSampler
+  bounds:
+    - [-5.0, 10.0]
+    - [0.0, 15.0]
+  num_samples: 10000
+  fidelities: [1]
+  point_strategy: lhs
+
+selector:
+  type: CostAwareSelector
+
+oracle:
+  type: BraninOracle
+  fidelity_costs:
+    1: 1.0
+  log_landscape: true
+
+budget:
+  available_budget: 300.0
+  schedule:
+    type: constant
+    value: 30.0
+
+logger:
+  type: ConsoleLogger
+  project_name: activelearning_tutorials
+  run_name: branin-single-fidelity

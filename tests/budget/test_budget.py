@@ -2,7 +2,7 @@ import logging
 
 import pytest
 
-from activelearning.budget.budget import Budget
+from activelearning.budget.budget import Budget, _BUDGET_ATOL
 
 
 @pytest.fixture
@@ -220,3 +220,192 @@ def test_can_afford_no_side_effects():
 
     # Budget should remain unchanged
     assert budget.available_budget == initial_budget
+
+
+class TestValidateSchedule:
+    """Tests for Budget.validate_schedule method."""
+
+    def test_valid_schedule_passes(self):
+        """Schedule with sufficient allocations should not raise."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+        # No exception expected
+        budget.validate_schedule(min_query_cost=5.0)
+
+    def test_underfunded_round_raises(self):
+        """Schedule with a round below min_query_cost should raise."""
+
+        # Schedule: round 0 gets 1.0, rounds 1-9 get 10.0 each (total 91)
+        def stingy_start(r: int) -> float:
+            if r >= 10:
+                return 0.0
+            return 1.0 if r == 0 else 10.0
+
+        budget = Budget(available_budget=91.0, schedule=stingy_start)
+        with pytest.raises(ValueError, match="less than the minimum oracle query cost"):
+            budget.validate_schedule(min_query_cost=5.0)
+
+    def test_all_rounds_underfunded_raises(self):
+        """Schedule where every round is below min cost should raise."""
+
+        # 100 rounds of 0.5 each, but schedule signals end after that
+        def low_schedule(r: int) -> float:
+            return 0.5 if r < 200 else 0.0
+
+        budget = Budget(available_budget=100.0, schedule=low_schedule)
+        with pytest.raises(ValueError, match="less than the minimum oracle query cost"):
+            budget.validate_schedule(min_query_cost=1.0)
+
+    def test_exact_min_cost_passes(self):
+        """Schedule allocating exactly min_query_cost should pass."""
+        budget = Budget(available_budget=50.0, schedule=lambda r: 5.0)
+        # Should not raise — exactly at the threshold
+        budget.validate_schedule(min_query_cost=5.0)
+
+    def test_schedule_with_leading_zeros_are_underfunded(self):
+        """Leading zero-budget rounds should fail when a positive min query cost is required."""
+        allocations = [0.0, 0.0, 10.0, 20.0, 20.0]
+
+        def delayed_start_schedule(round_index: int) -> float:
+            return allocations[round_index] if round_index < len(allocations) else 0.0
+
+        budget = Budget(available_budget=50.0, schedule=delayed_start_schedule)
+        with pytest.raises(ValueError, match="less than the minimum oracle query cost"):
+            budget.validate_schedule(min_query_cost=1.0)
+
+    def test_schedule_with_leading_zeros_and_insufficient_total_raises(self):
+        """Validation should fail when total allocatable budget cannot cover available budget."""
+        allocations = [0.0, 0.0, 1.0, 5.0, 10.0, 50.0, 10.0, 5.0, 1.0, 0.0, 0.0]
+
+        def sparse_schedule(round_index: int) -> float:
+            return allocations[round_index] if round_index < len(allocations) else 0.0
+
+        budget = Budget(available_budget=100.0, schedule=sparse_schedule)
+        with pytest.raises(ValueError, match="cannot cover available_budget"):
+            budget.validate_schedule(min_query_cost=0.0)
+
+    def test_validation_stops_at_schedule_exhaustion(self):
+        """A non-positive allocation after a positive round ends validation."""
+        calls = []
+
+        def finite_schedule(round_index: int) -> float:
+            calls.append(round_index)
+            return 10.0 if round_index == 0 else 0.0
+
+        budget = Budget(available_budget=100.0, schedule=finite_schedule)
+        with pytest.raises(ValueError, match="cannot cover available_budget"):
+            budget.validate_schedule(min_query_cost=5.0)
+
+        assert calls == [0, 1]
+
+    def test_validation_uses_capped_round_budget(self):
+        """The effective budget must satisfy the minimum query cost."""
+        budget = Budget(available_budget=4.0, schedule=lambda r: 10.0)
+
+        with pytest.raises(ValueError, match="less than the minimum oracle query cost"):
+            budget.validate_schedule(min_query_cost=5.0)
+
+
+class TestBudgetInitialization:
+    """Tests for Budget.__init__ edge cases."""
+
+    def test_negative_budget_raises(self):
+        """Negative available_budget should raise ValueError."""
+        with pytest.raises(ValueError, match="must be non-negative"):
+            Budget(available_budget=-1.0, schedule=lambda r: 10.0)
+
+    def test_integer_budget_coerced_to_float(self):
+        """Integer available_budget should be coerced to float."""
+        budget = Budget(available_budget=100, schedule=lambda r: 10.0)
+        assert isinstance(budget.available_budget, float)
+        assert budget.available_budget == 100.0
+
+    def test_large_budget_accepted(self):
+        """Very large budget values should be accepted."""
+        budget = Budget(available_budget=1e15, schedule=lambda r: 1e12)
+        assert budget.available_budget == 1e15
+
+
+class TestConsumeFloatingPoint:
+    """Tests for floating-point tolerance in Budget.consume."""
+
+    def test_consume_within_tolerance_succeeds(self):
+        """Consuming slightly more than budget within _BUDGET_ATOL should succeed."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+        # Cost exceeds budget by less than _BUDGET_ATOL
+        budget.consume(100.0 + _BUDGET_ATOL * 0.5)
+        assert budget.available_budget == 0.0
+
+    def test_consume_beyond_tolerance_raises(self):
+        """Consuming more than budget beyond _BUDGET_ATOL should raise."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+        with pytest.raises(ValueError, match="exceeds available budget"):
+            budget.consume(100.0 + _BUDGET_ATOL * 10)
+
+    def test_consume_zero_cost(self):
+        """Consuming zero cost should leave budget unchanged."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+        budget.consume(0.0)
+        assert budget.available_budget == 100.0
+
+    def test_consume_floors_at_zero(self):
+        """Budget should never go negative after consume (floored at 0.0)."""
+        budget = Budget(available_budget=10.0, schedule=lambda r: 10.0)
+        # Tiny floating-point overshoot within tolerance
+        budget.consume(10.0 + _BUDGET_ATOL * 0.1)
+        assert budget.available_budget == 0.0
+
+    def test_consume_accumulation_drift(self):
+        """Many small consumes should not cause floating-point drift issues."""
+        budget = Budget(available_budget=1.0, schedule=lambda r: 0.1)
+        for _ in range(10):
+            budget.consume(0.1)
+        assert budget.available_budget == pytest.approx(0.0, abs=_BUDGET_ATOL)
+
+
+class TestCanAffordFloatingPoint:
+    """Tests for floating-point tolerance in Budget.can_afford."""
+
+    def test_can_afford_within_tolerance(self):
+        """Cost slightly above budget within _BUDGET_ATOL should be affordable."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+        assert budget.can_afford(100.0 + _BUDGET_ATOL * 0.5) is True
+
+    def test_cannot_afford_beyond_tolerance(self):
+        """Cost above budget beyond _BUDGET_ATOL should not be affordable."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+        assert budget.can_afford(100.0 + _BUDGET_ATOL * 10) is False
+
+    def test_can_afford_after_consumption(self):
+        """can_afford should reflect remaining budget after consumption."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+        budget.consume(60.0)
+        assert budget.can_afford(40.0) is True
+        assert budget.can_afford(41.0) is False
+
+    def test_can_afford_zero_budget(self):
+        """Zero remaining budget can only afford zero cost."""
+        budget = Budget(available_budget=0.0, schedule=lambda r: 10.0)
+        assert budget.can_afford(0.0) is True
+        assert budget.can_afford(_BUDGET_ATOL * 0.5) is True
+        assert budget.can_afford(_BUDGET_ATOL * 10) is False
+
+
+class TestGetRoundBudgetEdgeCases:
+    """Edge case tests for Budget.get_round_budget."""
+
+    def test_get_round_budget_does_not_consume(self):
+        """get_round_budget should not modify available_budget."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 10.0)
+        budget.get_round_budget(0)
+        budget.get_round_budget(1)
+        assert budget.available_budget == 100.0
+
+    def test_get_round_budget_with_zero_schedule(self):
+        """Schedule returning zero should return zero without warning."""
+        budget = Budget(available_budget=100.0, schedule=lambda r: 0.0)
+        assert budget.get_round_budget(0) == 0.0
+
+    def test_get_round_budget_exact_available(self):
+        """Schedule returning exactly available budget should not warn."""
+        budget = Budget(available_budget=10.0, schedule=lambda r: 10.0)
+        assert budget.get_round_budget(0) == 10.0

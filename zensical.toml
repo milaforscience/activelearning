@@ -1,0 +1,79 @@
+[project]
+site_name = "Multi-Fidelity Active Learning"
+site_description = "Documentation for the activelearning framework"
+site_url = "https://milaforscience.github.io/activelearning"
+repo_url = "https://github.com/milaforscience/activelearning"
+repo_name = "milaforscience/activelearning"
+docs_dir = "docs"
+extra_css = ["css/custom.css"]
+extra_javascript = [
+    "https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js",
+    "https://unpkg.com/mermaid@11/dist/mermaid.min.js",
+    "js/mermaid-init.js",
+    "js/api-reference-link.js",
+]
+nav = [
+    {"Home" = "index.md"},
+    {"Getting Started" = [
+        {"Installation" = "getting-started/installation.md"},
+        {"Quickstart" = "getting-started/quickstart.md"},
+    ]},
+    {"Introduction" = [
+        {"Framework Overview" = "concepts/overview.md"},
+        {"Active Learning Loop" = "concepts/active_learning_loop.md"},
+        {"Multi-Fidelity Setting" = "concepts/multi_fidelity.md"},
+        {"Runtime and Configuration" = "concepts/runtime_and_configuration.md"},
+        {"Related Work and Positioning" = "concepts/related-work.md"},
+    ]},
+    {"Tutorials" = [
+        {"Running Experiments" = "tutorials/running_experiments.md"},
+        {"Synthetic Function Examples" = "tutorials/synthetic_function_experiment.md"},
+    ]},
+    {"Extension Guide" = [
+        {"Overview" = "extension-guide/overview.md"},
+        {"Adding an Oracle" = "extension-guide/oracle.md"},
+        {"Adding a Sampler" = "extension-guide/sampler.md"},
+        {"Adding a Surrogate" = "extension-guide/surrogate.md"},
+        {"Adding a Selector" = "extension-guide/selector.md"},
+        {"Adding an Acquisition" = "extension-guide/acquisition.md"},
+    ]},
+    {"Resources" = [
+        {"FAQ" = "resources/faq.md"},
+        {"References and Citation" = "resources/references.md"},
+        {"Contributing" = "contributing.md"},
+    ]},
+    {"API Reference" = "reference/"},
+]
+
+[project.theme]
+variant = "modern"
+features = [
+    "content.code.copy",
+    "navigation.indexes",
+    "navigation.tabs",
+    "navvigation.sections"
+]
+
+[project.theme.font]
+text = "Inter"
+code = "JetBrains Mono"
+
+[project.markdown_extensions.admonition]
+
+[project.markdown_extensions.attr_list]
+
+[project.markdown_extensions.md_in_html]
+
+[project.markdown_extensions.pymdownx.arithmatex]
+generic = true
+
+[project.markdown_extensions.pymdownx.details]
+
+[project.markdown_extensions.pymdownx.emoji]
+emoji_index = "zensical.extensions.emoji.twemoji"
+emoji_generator = "zensical.extensions.emoji.to_svg"
+
+[project.markdown_extensions.pymdownx.superfences]
+custom_fences = [
+    { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]

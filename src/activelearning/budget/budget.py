@@ -6,6 +6,11 @@ from activelearning.runtime import ALRuntimeMixin
 
 logger = logging.getLogger(__name__)
 
+# Absolute tolerance for budget comparisons to guard against floating-point
+# accumulation drift (e.g. sum of many small costs slightly exceeding budget).
+_BUDGET_ATOL = 1e-9
+_SCHEDULE_VALIDATION_MAX_ROUNDS = 1_000_000
+
 
 class Budget(ALRuntimeMixin):
     """Manages budget allocation and consumption for active learning rounds.
@@ -42,6 +47,64 @@ class Budget(ALRuntimeMixin):
             )
         self.available_budget = available_budget
         self.schedule = schedule
+
+    def validate_schedule(self, min_query_cost: float) -> None:
+        """Validate that every round's budget can afford at least one query.
+
+        Infers the number of active rounds by iterating the schedule until the
+        cumulative allocation covers ``available_budget`` or the schedule is
+        deemed exhausted (first non-positive value after at least one positive
+        round). Call this at experiment setup time to fail fast when the
+        schedule would produce rounds too cheap to query anything or cannot
+        cover the configured budget.
+
+        Parameters
+        ----------
+        min_query_cost : float
+            Cheapest possible single oracle query cost. The schedule must
+            allocate at least this much budget for every round.
+
+        Raises
+        ------
+        ValueError
+            If any round's scheduled allocation is less than
+            ``min_query_cost``.
+        ValueError
+            If the schedule cannot cover ``available_budget``.
+        """
+        cumulative = 0.0
+        has_positive_allocation = False
+
+        for i in range(_SCHEDULE_VALIDATION_MAX_ROUNDS):
+            allocation = self.schedule(i)
+
+            if allocation <= 0.0 and has_positive_allocation:
+                break
+
+            effective_allocation = min(allocation, self.available_budget - cumulative)
+            if effective_allocation < min_query_cost:
+                raise ValueError(
+                    f"Budget schedule assigns less than the minimum oracle query "
+                    f"cost ({min_query_cost:.4g}) for: round {i} "
+                    f"(budget={effective_allocation:.4g}). "
+                    f"The experiment would terminate prematurely because no oracle "
+                    f"query can be afforded in this round. Adjust the schedule "
+                    f"parameters so that every round receives at least "
+                    f"{min_query_cost:.4g} budget."
+                )
+
+            cumulative += effective_allocation
+            has_positive_allocation = has_positive_allocation or allocation > 0.0
+
+            # Covered full budget — no need to scan further
+            if cumulative >= self.available_budget - _BUDGET_ATOL:
+                break
+
+        if cumulative < self.available_budget - _BUDGET_ATOL:
+            raise ValueError(
+                f"Budget schedule allocates only {cumulative:.4g} total budget, "
+                f"which cannot cover available_budget={self.available_budget:.4g}."
+            )
 
     def get_round_budget(self, current_round: int) -> float:
         """Calculate the budget allocated for a specific active learning round.
@@ -84,14 +147,14 @@ class Budget(ALRuntimeMixin):
         Raises
         ------
         ValueError
-            If cost exceeds available_budget.
+            If cost exceeds available_budget beyond floating-point tolerance.
         """
-        if cost > self.available_budget:
+        if cost > self.available_budget + _BUDGET_ATOL:
             raise ValueError(
                 f"Cost {cost:.2f} exceeds available budget {self.available_budget:.2f}"
             )
 
-        self.available_budget -= cost
+        self.available_budget = max(0.0, self.available_budget - cost)
 
     def can_afford(self, cost: float) -> bool:
         """Check if the given cost can be afforded within available budget.
@@ -109,4 +172,4 @@ class Budget(ALRuntimeMixin):
         can_afford : bool
             True if cost <= available_budget, False otherwise.
         """
-        return cost <= self.available_budget
+        return cost <= self.available_budget + _BUDGET_ATOL
