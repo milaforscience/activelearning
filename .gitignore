@@ -244,8 +244,8 @@ instance/
 # Sphinx documentation
 docs/_build/
 docs_api/_build/
-docs_api/source/activelearning/
-
+# Sphinx AutoAPI-generated API pages (keeps docs_api/source/index.rst tracked)
+docs_api/source/*/
 # PyBuilder
 .pybuilder/
 target/
@@ -271,6 +271,9 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+
+# The GFlowNet environment configs should be tracked
+!config/gflownet/env/
 
 # Spyder project settings
 .spyderproject

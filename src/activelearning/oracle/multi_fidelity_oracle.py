@@ -14,6 +14,7 @@ class MultiFidelityOracle(Oracle):
     fidelity_configs : dict[int, dict[str, Any]]
         Dictionary mapping fidelity level (int) to configuration.
         Each config must contain:
+
         - 'cost_per_sample'
             float - Cost per sample at this fidelity
         - 'score_fn'

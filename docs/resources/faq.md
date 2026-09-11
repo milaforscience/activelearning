@@ -17,9 +17,7 @@ Define per-fidelity costs in `oracle.fidelity_costs`. Cost-aware acquisition fun
 
 ## **What does this framework support?**
 
-The framework supports fidelity-aware data types, multi-fidelity benchmark oracles (Branin, Hartmann), cost-aware acquisition functions, cost-weighted candidate-fidelity proposals, and modular samplers ([`HypercubeSampler`](../reference/activelearning/sampler/hypercube_sampler/#activelearning.sampler.hypercube_sampler.HypercubeSampler), [`PoolUniformSampler`](../reference/activelearning/sampler/pool_uniform_sampler/#activelearning.sampler.pool_uniform_sampler.PoolUniformSampler), [`PoolScoreSampler`](../reference/activelearning/sampler/pool_score_sampler/#activelearning.sampler.pool_score_sampler.PoolScoreSampler)). A GFlowNet-based sampler is planned as a future extension.
-
-<!-- See [GFlowNet Sampler Setup](../tutorials/gflownet_sampler.md) for details on the GFlowNet integration. -->
+The framework supports fidelity-aware data types, multi-fidelity benchmark oracles (Branin, Hartmann), cost-aware acquisition functions, cost-weighted candidate-fidelity proposals, and modular samplers ([`HypercubeSampler`](../reference/activelearning/sampler/hypercube_sampler/#activelearning.sampler.hypercube_sampler.HypercubeSampler), [`PoolUniformSampler`](../reference/activelearning/sampler/pool_uniform_sampler/#activelearning.sampler.pool_uniform_sampler.PoolUniformSampler), [`PoolScoreSampler`](../reference/activelearning/sampler/pool_score_sampler/#activelearning.sampler.pool_score_sampler.PoolScoreSampler), [`GFlowNetSampler`](../tutorials/gflownet_sampler.md)). The GFlowNet sampler supports both single- and multi-fidelity mode via a `fidelities` list that maps directly to oracle fidelity keys — see [GFlowNet Sampler](../tutorials/gflownet_sampler.md) for details.
 
 ## **How should I cite this project?**
 

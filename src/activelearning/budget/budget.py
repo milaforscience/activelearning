@@ -18,13 +18,6 @@ class Budget(ALRuntimeMixin):
     The Budget class tracks remaining budget and provides per-round budget
     allocation via a configurable schedule function. It ensures costs do not
     exceed available budget and provides consumption tracking.
-
-    Attributes
-    ----------
-    available_budget : float
-        Remaining budget available for consumption.
-    schedule : Callable[[int], float]
-        Function mapping round number to allocated budget for that round.
     """
 
     def __init__(

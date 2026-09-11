@@ -28,6 +28,7 @@ nav = [
     {"Tutorials" = [
         {"Running Experiments" = "tutorials/running_experiments.md"},
         {"Synthetic Function Examples" = "tutorials/synthetic_function_experiment.md"},
+        {"Sampling using GFlowNets" = "tutorials/gflownet_sampler.md"},
     ]},
     {"Extension Guide" = [
         {"Overview" = "extension-guide/overview.md"},
@@ -51,7 +52,7 @@ features = [
     "content.code.copy",
     "navigation.indexes",
     "navigation.tabs",
-    "navvigation.sections"
+    "navigation.sections"
 ]
 
 [project.theme.font]
@@ -77,3 +78,6 @@ emoji_generator = "zensical.extensions.emoji.to_svg"
 custom_fences = [
     { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
 ]
+
+[project.extra]
+generator = false

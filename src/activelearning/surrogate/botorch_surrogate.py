@@ -278,6 +278,7 @@ class BoTorchGPSurrogate(Surrogate):
         -------
         result : Mapping[str, Any]
             Dictionary containing:
+
             - ``"mean"``: posterior means as a list for single-output models,
               or a nested list of shape ``(N, m)`` for multi-output models
             - ``"std"``: posterior standard deviations with the same shape

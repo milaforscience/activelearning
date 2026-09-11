@@ -1,0 +1,6 @@
+_target_: activelearning.sampler.gflownet.proxy.AcquisitionProxy
+
+reward_function: power
+reward_min: 1e-8
+reward_function_kwargs:
+  beta: 1.0
