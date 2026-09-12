@@ -105,9 +105,43 @@ predict yet. Cache the surrogate in `update()` and call `predict()` inside
 been called. Return neutral scores (e.g. `[0.0] * n`) when the surrogate is
 not yet available rather than raising.
 
-**Cost-weighting passthrough** — if you accept `cost_weighting` in `score()`,
-call it as the last step after computing raw scores, and return its result. Do
-not apply cost weighting twice.
+**Two independent cost-weighting mechanisms exist** — labeling cost can
+influence acquisition scores through two separate paths, and it is important
+to understand their scope:
+
+1. **Acquisition-level weighting** (configured at `update()` time).
+   Some acquisition classes — notably BoTorch multi-fidelity acquisitions —
+   accept a `cost_aware_utility` parameter that is wired into the internal
+   BoTorch acquisition object when `update()` is called. From that point on,
+   every call to `score()` returns values that *already* account for labeling
+   cost. Because the sampler and the selector receive the same acquisition
+   instance, this weighting affects both stages of candidate selection.
+
+2. **Caller-side weighting** (the `cost_weighting` argument of `score()`).
+   `score()` accepts an optional callable that post-processes raw acquisition
+   scores — for example dividing each score by the candidate's labeling cost.
+   This hook lets individual callers (such as `CostAwareSelector`) adjust
+   scores without modifying the acquisition object itself. It is applied
+   *after* any acquisition-level weighting has already been applied.
+
+These two mechanisms are **independent**. If you configure a BoTorch MF
+acquisition with `cost_aware_utility` *and* pair it with a cost-aware
+selector that divides by cost again, both penalties compound. To avoid
+double-counting, decide which level should own the cost penalty:
+
+- Use **acquisition-level** weighting when you want cost awareness to
+  propagate everywhere the acquisition is used (sampler score-guided
+  proposals *and* selector ranking).
+- Use **selector-level** weighting (via `cost_weighting` or
+  `CostAwareSelector`) when you want cost to influence only the final
+  selection step and leave the sampler's view of acquisition scores
+  agnostic to cost.
+
+**BoTorch MF cost utilities are frozen at `update()` time** — because the
+`cost_aware_utility` is wired in during `update()`, later `score()` calls
+cannot toggle it on or off per consumer. If you need different cost behavior
+for the sampler and the selector, you must create separate acquisition
+instances.
 
 ## **Related pages**
 

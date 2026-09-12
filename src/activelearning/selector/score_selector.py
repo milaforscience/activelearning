@@ -1,6 +1,7 @@
 from typing import Callable, Optional, Sequence
 
 from activelearning.acquisition.acquisition import Acquisition
+from activelearning.acquisition.cost_utility import cost_weighting_from_cost_fn
 from activelearning.selector.selector import Selector
 from activelearning.utils.types import Candidate
 
@@ -33,19 +34,27 @@ class TopKAcquisitionSelector(Selector):
         acquisition : Optional[Acquisition]
             Acquisition function to score candidates.
         cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
-            Cost function (ignored by this selector).
+            Optional candidate cost function. When provided, candidates are
+            ranked by inverse-cost-weighted acquisition values.
         round_budget : Optional[float]
             Budget limit (ignored by this selector).
+
         Returns
         -------
         result : list[Candidate]
-            List of top candidates by acquisition value.
+            List of top candidates by ranking score.
         """
         if acquisition is None:
             raise ValueError("Acquisition function is required for ScoreSelector.")
         if not candidates:
             return []
 
-        acq_values = acquisition.score(candidates)
+        if cost_fn is None:
+            acq_values = acquisition.score(candidates)
+        else:
+            acq_values = acquisition.score(
+                candidates,
+                cost_weighting=cost_weighting_from_cost_fn(cost_fn),
+            )
         ranked = sorted(zip(candidates, acq_values), key=lambda cv: cv[1], reverse=True)
         return [candidate for candidate, _ in ranked[: self.num_samples]]

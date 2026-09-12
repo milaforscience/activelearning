@@ -1,9 +1,12 @@
 import pytest
+import torch
 
 from activelearning.utils.types import (
     Candidate,
     Observation,
     candidates_to_tensor,
+    filter_finite_target_observations,
+    has_finite_target,
     label_candidates,
     observations_to_tensors,
 )
@@ -44,6 +47,20 @@ def test_observation_creation(observation_x, observation_y, fidelity):
     assert observation.fidelity == fidelity
 
 
+def test_candidate_creation_with_metadata():
+    """Metadata should be stored unchanged on Candidate."""
+    metadata = {"raw": "[C][O]"}
+    candidate = Candidate(x=42, metadata=metadata)
+    assert candidate.metadata == metadata
+
+
+def test_observation_creation_with_metadata():
+    """Metadata should be stored unchanged on Observation."""
+    metadata = {"raw": "[C][O]"}
+    observation = Observation(x=10, y=5.5, metadata=metadata)
+    assert observation.metadata == metadata
+
+
 def test_candidate_immutability(candidate_x, fidelity):
     """Test that Candidate instances are frozen and cannot be modified."""
     candidate = Candidate(x=candidate_x, fidelity=fidelity)
@@ -73,6 +90,13 @@ def test_label_candidates(fidelity):
     assert observations[0] == Observation(x=1, y=10.0, fidelity=fidelity)
     assert observations[1] == Observation(x=2, y=20.0, fidelity=fidelity)
     assert observations[2] == Observation(x=3, y=30.0, fidelity=fidelity)
+
+
+def test_label_candidates_preserves_metadata():
+    """Candidate metadata should be copied to the resulting observations."""
+    metadata = {"raw": "[C][O]"}
+    observations = label_candidates([Candidate(x=1, metadata=metadata)], [10.0])
+    assert observations == [Observation(x=1, y=10.0, metadata=metadata)]
 
 
 def test_observations_to_tensors_empty_mapping_raises_key_error():
@@ -105,3 +129,98 @@ def test_candidates_to_tensor_missing_mapping_raises_value_error():
 
     with pytest.raises(ValueError, match="no fidelity_confidences mapping"):
         candidates_to_tensor(candidates)
+
+
+def test_observations_to_tensors_ignores_metadata():
+    """Metadata should not affect tensor conversion."""
+    X, y, fidelities = observations_to_tensors(
+        [Observation(x=1, y=10.0, metadata={"raw": "[C][O]"})]
+    )
+    assert X.tolist() == [1.0]
+    assert y.tolist() == [10.0]
+    assert fidelities == []
+
+
+def test_candidates_to_tensor_ignores_metadata():
+    """Metadata should not affect candidate tensor conversion."""
+    X, fidelities = candidates_to_tensor([Candidate(x=1, metadata={"raw": "[C][O]"})])
+    assert X.tolist() == [1.0]
+    assert fidelities == []
+
+
+# ---------------------------------------------------------------------------
+# has_finite_target
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "y,expected",
+    [
+        # None is always invalid
+        (None, False),
+        # Non-finite scalars
+        (float("nan"), False),
+        (float("inf"), False),
+        (float("-inf"), False),
+        # Finite scalars
+        (0.0, True),
+        (3.14, True),
+        (-1.0, True),
+        (42, True),
+        # Lists / arrays
+        ([1.0, 2.0], True),
+        ([float("nan"), 1.0], False),
+        ([float("inf"), 0.0], False),
+        # Torch tensors
+        (torch.tensor([1.0, 2.0]), True),
+        (torch.tensor([float("nan"), 1.0]), False),
+        # Non-numeric payloads are treated as valid (can't be checked)
+        ("a string label", True),
+        ({"score": float("nan")}, True),
+    ],
+)
+def test_has_finite_target(y, expected):
+    obs = Observation(x=0, y=y)
+    assert has_finite_target(obs) is expected
+
+
+# ---------------------------------------------------------------------------
+# filter_finite_target_observations
+# ---------------------------------------------------------------------------
+
+
+def test_filter_finite_target_observations_removes_invalid():
+    """NaN, inf, and None targets are removed; finite targets are kept."""
+    observations = [
+        Observation(x=1, y=10.0),
+        Observation(x=2, y=float("nan")),
+        Observation(x=3, y=float("inf")),
+        Observation(x=4, y=None),
+        Observation(x=5, y=20.0),
+    ]
+    result = filter_finite_target_observations(observations)
+    assert [o.x for o in result] == [1, 5]
+
+
+def test_filter_finite_target_observations_all_valid():
+    """All-valid input passes through unchanged."""
+    observations = [Observation(x=i, y=float(i)) for i in range(5)]
+    result = filter_finite_target_observations(observations)
+    assert result == observations
+
+
+def test_filter_finite_target_observations_all_invalid():
+    """All-invalid input returns an empty list."""
+    observations = [
+        Observation(x=1, y=float("nan")),
+        Observation(x=2, y=None),
+    ]
+    result = filter_finite_target_observations(observations)
+    assert result == []
+
+
+def test_filter_finite_target_observations_accepts_generator():
+    """The function materialises a one-pass generator correctly."""
+    gen = (Observation(x=i, y=float(i)) for i in range(3))
+    result = filter_finite_target_observations(gen)
+    assert len(result) == 3

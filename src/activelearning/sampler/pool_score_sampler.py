@@ -1,7 +1,8 @@
 import torch
 
-from typing import Iterable, Optional, Sequence
+from typing import Callable, Iterable, Optional, Sequence
 from activelearning.acquisition.acquisition import Acquisition
+from activelearning.acquisition.cost_utility import cost_weighting_from_cost_fn
 from activelearning.sampler.sampler import Sampler
 from activelearning.utils.types import Candidate, Observation
 
@@ -39,6 +40,7 @@ class PoolScoreSampler(Sampler):
         self,
         acquisition: Optional[Acquisition] = None,
         observations: Optional[Iterable[Observation]] = None,
+        cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
     ) -> list[Candidate]:
         """Samples from the candidate pool weighted by acquisition values.
 
@@ -48,6 +50,9 @@ class PoolScoreSampler(Sampler):
             Acquisition function to compute acquisition values for candidates.
         observations : Optional[Iterable[Observation]]
             Optional iterable of observations (not used by this sampler).
+        cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
+            Optional candidate cost function. When provided, acquisition scores
+            are reweighted by inverse cost before the softmax step.
 
         Returns
         -------
@@ -61,7 +66,13 @@ class PoolScoreSampler(Sampler):
         if acquisition is None:
             raise ValueError("Acquisition function is required for PoolScoreSampler.")
 
-        acq_values = acquisition.score(self.candidate_pool)
+        if cost_fn is None:
+            acq_values = acquisition.score(self.candidate_pool)
+        else:
+            acq_values = acquisition.score(
+                self.candidate_pool,
+                cost_weighting=cost_weighting_from_cost_fn(cost_fn),
+            )
 
         # Apply softmax to convert acquisition values to valid probabilities
         weights = self._get_sampling_weights(acq_values)

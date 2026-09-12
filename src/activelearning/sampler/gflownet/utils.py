@@ -1,5 +1,6 @@
 """Shared utilities for the GFlowNet sampler package."""
 
+from collections.abc import Mapping, Sequence
 from typing import Any, Union
 
 import torch
@@ -12,6 +13,58 @@ from activelearning.utils.types import Candidate
 # Accepted input shapes for states_proxy: 2-D tensor, list of tensors,
 # list of plain sequences (single-fidelity), or list of dicts (multi-fidelity).
 _StatesProxy = Union[torch.Tensor, list]
+
+
+def _is_non_string_sequence(value: Any) -> bool:
+    """True for list/tuple-like values, but not text."""
+    return isinstance(value, Sequence) and not isinstance(
+        value, (str, bytes, bytearray)
+    )
+
+
+def _normalize_proxy_value(value: Any) -> Any:
+    """Convert a proxy value to a stable Python representation."""
+    if torch.is_tensor(value):
+        value = value.detach().cpu().tolist()
+    elif hasattr(value, "tolist") and not isinstance(value, (str, bytes, bytearray)):
+        try:
+            value = value.tolist()
+        except TypeError:
+            pass
+    if _is_non_string_sequence(value):
+        return tuple(value)
+    return value
+
+
+def _single_fidelity_proxy_values(proxy_states: Any) -> list[Any]:
+    """Normalize single-fidelity proxy outputs to one proxy value per candidate."""
+    if proxy_states is None:
+        return []
+
+    if torch.is_tensor(proxy_states):
+        proxy_values = proxy_states.detach().cpu().tolist()
+        return proxy_values if proxy_states.ndim > 1 else [proxy_values]
+
+    proxy_states = _normalize_proxy_value(proxy_states)
+    if isinstance(proxy_states, Mapping):
+        return [proxy_states]
+    if not _is_non_string_sequence(proxy_states):
+        return [proxy_states]
+
+    proxy_values = list(proxy_states)
+    if not proxy_values:
+        return []
+
+    if all(
+        isinstance(proxy_value, Mapping)
+        or isinstance(proxy_value, (str, bytes, bytearray))
+        or _is_non_string_sequence(_normalize_proxy_value(proxy_value))
+        or torch.is_tensor(proxy_value)
+        for proxy_value in proxy_values
+    ):
+        return [_normalize_proxy_value(proxy_value) for proxy_value in proxy_values]
+
+    return [proxy_values]
 
 
 def proxy_states_to_candidates(
@@ -43,13 +96,15 @@ multi_fidelity_env_wrapper.MultiFidelityGFlowNetEnvWrapperBase`),
 
     - a 2-D tensor ``[N, D]``
     - a list of 1-D tensors (stacked internally)
-    - a list of plain sequences
+    - a list of plain sequences or strings (e.g. SELFIES)
+    - a list of dicts (Mapping)
+    - a single sequence or Mapping (treated as one candidate)
 
     Parameters
     ----------
-    states_proxy : torch.Tensor or list
-        Output of ``env.states2proxy(states)``. Must be a ``torch.Tensor``
-        or a ``list``; any other type raises ``TypeError``.
+    states_proxy : torch.Tensor, list, tuple, or Mapping
+        Output of ``env.states2proxy(states)``. Strings, bytes, and ``None``
+        are invalid and raise ``TypeError``.
     env : GFlowNetEnv
         The environment that produced ``states_proxy``. Detected as
         multi-fidelity when it is a
@@ -70,11 +125,14 @@ multi_fidelity_env_wrapper.MultiFidelityGFlowNetEnvWrapperBase`),
     Raises
     ------
     TypeError
-        If ``states_proxy`` is neither a ``torch.Tensor`` nor a ``list``.
+        If ``states_proxy`` is a string, bytes, or any other non-collection type.
     """
-    if not isinstance(states_proxy, (list, torch.Tensor)):
+    if isinstance(states_proxy, (str, bytes, bytearray)) or not isinstance(
+        states_proxy, (torch.Tensor, Sequence, Mapping)
+    ):
         raise TypeError(
-            f"states_proxy must be a list or torch.Tensor, got {type(states_proxy).__name__}. "
+            f"states_proxy must be a list, tuple, torch.Tensor, or Mapping, "
+            f"got {type(states_proxy).__name__}. "
             "This likely indicates a bug in the calling code."
         )
     if len(states_proxy) == 0:
@@ -83,13 +141,9 @@ multi_fidelity_env_wrapper.MultiFidelityGFlowNetEnvWrapperBase`),
     if isinstance(env, MultiFidelityGFlowNetEnvWrapperBase):
         idx_base = env.idx_base_env
         idx_fid = env.idx_fidelity
-        candidates = []
+        candidates: list[Candidate] = []
         for state_proxy in states_proxy:
-            base = state_proxy[idx_base]
             fid_raw = state_proxy[idx_fid]
-            base_vals = (
-                base.detach().cpu().tolist() if torch.is_tensor(base) else list(base)
-            )
             raw_index = int(
                 fid_raw[0].item() if torch.is_tensor(fid_raw) else fid_raw[0]
             )
@@ -97,15 +151,15 @@ multi_fidelity_env_wrapper.MultiFidelityGFlowNetEnvWrapperBase`),
             fidelity = (
                 fidelity_map[raw_index - 1] if fidelity_map is not None else raw_index
             )
-            candidates.append(Candidate(x=tuple(base_vals), fidelity=fidelity))
+            candidates.append(
+                Candidate(
+                    x=_normalize_proxy_value(state_proxy[idx_base]),
+                    fidelity=fidelity,
+                )
+            )
         return candidates
 
-    # Single-fidelity: normalize the three possible shapes to a list of tuples.
-    if torch.is_tensor(states_proxy):
-        rows = states_proxy.detach().cpu().tolist()
-    elif torch.is_tensor(states_proxy[0]):
-        rows = torch.stack(states_proxy).detach().cpu().tolist()
-    else:
-        rows = [list(s) for s in states_proxy]
-
-    return [Candidate(x=tuple(row)) for row in rows]
+    return [
+        Candidate(x=_normalize_proxy_value(proxy_value))
+        for proxy_value in _single_fidelity_proxy_values(states_proxy)
+    ]

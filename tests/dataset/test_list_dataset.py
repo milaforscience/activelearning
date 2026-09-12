@@ -1,3 +1,5 @@
+import math
+
 import pytest
 
 from activelearning.dataset.list_dataset import ListDataset
@@ -60,6 +62,58 @@ def test_add_observations_multiple_times(dataset):
     assert observations[1].y == 20.0
     assert observations[2].x == 3
     assert observations[2].y == 30.0
+
+
+def test_add_observations_stores_nan_targets(dataset):
+    """NaN-valued observations are stored in the dataset unchanged.
+
+    Filtering is the responsibility of the AL loop (oracle boundary), not the dataset.
+    """
+    dataset.add_observations(
+        [
+            Observation(x=1, y=10.0),
+            Observation(x=2, y=float("nan")),
+            Observation(x=3, y=30.0),
+        ]
+    )
+
+    observations = dataset.get_observations_iterable()
+    latest = dataset.get_latest_observations_iterable()
+
+    assert len(observations) == 3
+    assert [obs.x for obs in observations] == [1, 2, 3]
+    assert latest == observations
+
+
+def test_add_observations_stores_infinite_targets(dataset):
+    """Infinite scalar targets are stored in the dataset unchanged."""
+    dataset.add_observations(
+        [
+            Observation(x=1, y=float("inf")),
+            Observation(x=2, y=float("-inf")),
+        ]
+    )
+
+    assert len(dataset.get_observations_iterable()) == 2
+    assert len(dataset.get_latest_observations_iterable()) == 2
+
+
+def test_add_observations_preserves_non_scalar_targets(dataset):
+    """Structured targets are stored faithfully — the dataset applies no filtering."""
+    dataset.add_observations(
+        [
+            Observation(x=1, y=[float("nan"), 1.0]),
+            Observation(x=2, y={"score": float("inf")}),
+        ]
+    )
+
+    observations = dataset.get_observations_iterable()
+
+    assert len(observations) == 2
+    assert len(observations[0].y) == 2
+    assert math.isnan(observations[0].y[0])
+    assert observations[0].y[1] == 1.0
+    assert observations[1].y == {"score": float("inf")}
 
 
 def test_get_latest_observations_empty_dataset(dataset):
@@ -137,3 +191,46 @@ def test_get_latest_observations_independence(dataset):
     latest_again = dataset.get_latest_observations_iterable()
     assert len(latest_again) == 1
     assert latest_again[0].x == 1
+
+
+# ---------------------------------------------------------------------------
+# get_best_candidates with invalid targets
+# ---------------------------------------------------------------------------
+
+
+def test_get_best_candidates_skips_nan_and_inf(dataset):
+    """get_best_candidates must ignore non-finite numeric targets even if stored."""
+    dataset.add_observations(
+        [
+            Observation(x=1, y=10.0),
+            Observation(x=2, y=float("nan")),
+            Observation(x=3, y=float("inf")),
+            Observation(x=4, y=30.0),
+        ]
+    )
+    best = dataset.get_best_candidates(k=2)
+    assert [o.x for o in best] == [4, 1]
+
+
+def test_get_best_candidates_skips_none(dataset):
+    """get_best_candidates must ignore observations with y=None."""
+    dataset.add_observations(
+        [
+            Observation(x=1, y=5.0),
+            Observation(x=2, y=None),
+            Observation(x=3, y=15.0),
+        ]
+    )
+    best = dataset.get_best_candidates(k=2)
+    assert [o.x for o in best] == [3, 1]
+
+
+def test_get_best_candidates_all_invalid_returns_empty(dataset):
+    """get_best_candidates returns an empty list when all stored targets are invalid."""
+    dataset.add_observations(
+        [
+            Observation(x=1, y=float("nan")),
+            Observation(x=2, y=None),
+        ]
+    )
+    assert dataset.get_best_candidates(k=1) == []
