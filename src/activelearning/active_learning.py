@@ -1,3 +1,5 @@
+import logging
+
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.budget.budget import Budget
 from activelearning.dataset.dataset import Dataset
@@ -10,6 +12,9 @@ from activelearning.runtime import (
 from activelearning.sampler.sampler import Sampler
 from activelearning.selector.selector import Selector
 from activelearning.surrogate.surrogate import Surrogate
+from activelearning.utils.types import filter_finite_target_observations
+
+_logger = logging.getLogger(__name__)
 
 
 def active_learning(
@@ -104,13 +109,18 @@ def active_learning(
         if surrogate.is_fitted():
             acquisition.update(surrogate, observations)
 
-        # Sampler can use acquisition for scoring candidates and observations to avoid re-sampling
-        samples = sampler.sample(acquisition=acquisition, observations=observations)
+        # Let the sampler build its candidate pool from the current acquisition,
+        # observations, and oracle cost model.
+        samples = sampler.sample(
+            acquisition=acquisition,
+            observations=observations,
+            cost_fn=oracle.get_costs,
+        )
 
-        # Get round budget and pass to selector along with cost function
+        # Get the current round budget and pass the same oracle cost model to
+        # the selector for ranking/filtering.
         round_budget = budget.get_round_budget(num_rounds)
 
-        # Pass acquisition, cost_fn, and round budget to selector for cost-aware selection
         selected_samples = selector(
             samples,
             acquisition=acquisition,
@@ -131,10 +141,22 @@ def active_learning(
             # Budget exhausted - stop iteration
             break
 
-        # Consume budget and query oracle for new observations, then add to dataset
+        # Consume budget and query oracle for new observations.
+        # Filter out any observations with invalid targets (None, NaN, or infinite)
+        # before adding to the dataset.
+        # Budget is consumed regardless: a failed evaluation still costs compute time.
         budget.consume(total_cost)
         new_observations = oracle.query(selected_samples)
-        dataset.add_observations(new_observations)
+        valid_observations = filter_finite_target_observations(new_observations)
+        num_dropped = len(new_observations) - len(valid_observations)
+        if num_dropped > 0:
+            _logger.warning(
+                "Dropped %d/%d oracle observation(s) with invalid targets "
+                "(None, NaN, or infinite). Budget was already consumed.",
+                num_dropped,
+                len(new_observations),
+            )
+        dataset.add_observations(valid_observations)
 
         num_rounds += 1
 

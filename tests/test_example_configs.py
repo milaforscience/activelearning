@@ -71,3 +71,80 @@ def test_aim_logging_overlay_parses_when_merged_with_base_config() -> None:
     assert config.runtime.seed == 42
     assert config.logger is not None
     assert config.logger.type == "MultiLogger"
+
+
+def test_molecule_dkl_exact_gflownet_config_parses() -> None:
+    """Ensure the SELFIES GFlowNet molecule tutorial config matches the schema."""
+    config_path = REPOSITORY_ROOT / "config" / "molecules" / "gflownet_exact.yaml"
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "GFlowNetSampler"
+    assert config.sampler.fidelities == [1]
+    assert config.selector.type == "TopKAcquisitionSelector"
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.acquisition.type == "UpperConfidenceBound"
+
+
+def test_molecule_dkl_exact_multi_fidelity_gflownet_config_parses() -> None:
+    """Ensure the exact SELFIES multi-fidelity GFlowNet config matches the schema."""
+    config_path = (
+        REPOSITORY_ROOT / "config" / "molecules" / "gflownet_exact_multi_fidelity.yaml"
+    )
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "GFlowNetSampler"
+    assert config.sampler.fidelities == [1, 2, 3]
+    assert config.selector.type == "TopKAcquisitionSelector"
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
+    assert config.oracle.num_conformers == 2
+    assert config.oracle.per_fidelity_num_conformers == {1: 1, 2: 2, 3: 4}
+
+
+def test_molecule_dkl_variational_multi_fidelity_gflownet_config_parses() -> None:
+    """Ensure the variational SELFIES multi-fidelity GFlowNet config matches the schema."""
+    config_path = (
+        REPOSITORY_ROOT
+        / "config"
+        / "molecules"
+        / "gflownet_variational_multi_fidelity.yaml"
+    )
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "GFlowNetSampler"
+    assert config.sampler.fidelities == [1, 2, 3]
+    assert config.selector.type == "TopKAcquisitionSelector"
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
+    assert config.oracle.num_conformers == 2
+    assert config.oracle.per_fidelity_num_conformers == {1: 1, 2: 2, 3: 4}
+
+
+def test_molecule_dkl_exact_pool_config_parses() -> None:
+    """Ensure the exact single-fidelity pool-based molecule example matches the schema."""
+    config_path = REPOSITORY_ROOT / "config" / "molecules" / "exact.yaml"
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "PoolFileSampler"
+    assert config.surrogate.type == "ExactSelfiesDKLSurrogate"
+    assert config.acquisition.type == "UpperConfidenceBound"
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.sampler.fidelities == [1]
+
+
+def test_molecule_dkl_exact_multi_fidelity_pool_config_parses() -> None:
+    """Ensure the exact multi-fidelity pool-based molecule example matches the schema."""
+    config_path = REPOSITORY_ROOT / "config" / "molecules" / "exact_multi_fidelity.yaml"
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "PoolFileSampler"
+    assert config.surrogate.type == "ExactSelfiesDKLSurrogate"
+    assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
+    assert config.selector.type == "CostAwareSelector"
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.sampler.fidelities == [1, 2, 3]

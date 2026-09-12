@@ -35,7 +35,6 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         project_to_target_fidelity_fn: Optional[
             Callable[[torch.Tensor], torch.Tensor]
         ] = None,
-        cost_aware_utility: Optional[Any] = None,
     ) -> None:
         """Initialize the BoTorch acquisition base.
 
@@ -58,22 +57,13 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
             fidelity coordinate to a fixed value (e.g. the highest fidelity),
             but more general transformations are supported. If ``None``, a
             default projection is constructed from the surrogate.
-        cost_aware_utility : object, optional
-            A BoTorch-compatible cost-aware utility that adjusts acquisition
-            values to account for the cost of querying at different fidelity
-            levels. This encapsulates both the cost model and the utility
-            transformation (e.g. dividing information gain by query cost).
-            If ``None``, acquisition values are not cost-adjusted.
-            See :class:`botorch.acquisition.cost_aware.CostAwareUtility`
-            for the expected interface.
         """
         super().__init__()
         self.maximize = maximize
 
-        # User-specified multi-fidelity / cost-aware configuration
+        # User-specified multi-fidelity configuration
         self._target_fidelity_value_override = target_fidelity_value
         self._project_to_target_fidelity_fn_override = project_to_target_fidelity_fn
-        self._cost_aware_utility_override = cost_aware_utility
 
         # Typed runtime state populated during update()
         self._botorch_surrogate: Optional[BoTorchGPSurrogate] = None
@@ -136,7 +126,7 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         self._botorch_surrogate = surrogate
         self._observations_cache = obs_list
 
-        # Resolve shared MF / cost-aware helpers before building the acqf.
+        # Resolve shared multi-fidelity helpers before building the acqf.
         self._resolved_target_fidelity_value = self._resolve_target_fidelity_value()
         self._resolved_project_to_target_fidelity_fn = (
             self._resolve_projection_to_target_fidelity()
@@ -252,7 +242,7 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         -------
         result : Any
             Concrete BoTorch acquisition object built from the current surrogate
-            state, observations cache, and any resolved MF / cost-aware helpers.
+            state, observations cache, and any resolved multi-fidelity helpers.
         """
         pass
 
@@ -340,7 +330,6 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
             If provided, called as ``cost_weighting(raw_scores, candidates)``
             after scoring and its return value is used in place of the raw
             scores. Not applied before ``update()`` has been called.
-
         Returns
         -------
         result : list[float]
