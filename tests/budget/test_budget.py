@@ -40,6 +40,28 @@ def test_budget_initialization(constant_schedule):
     budget = Budget(available_budget=100.0, schedule=constant_schedule)
     assert budget.available_budget == 100.0
     assert budget.schedule == constant_schedule
+    assert budget.max_rounds is None
+
+
+def test_budget_initialization_with_max_rounds(constant_schedule):
+    """Test that Budget stores an optional round limit."""
+    budget = Budget(
+        available_budget=100.0,
+        schedule=constant_schedule,
+        max_rounds=3,
+    )
+    assert budget.max_rounds == 3
+
+
+@pytest.mark.parametrize("max_rounds", [0, -1])
+def test_budget_rejects_non_positive_max_rounds(constant_schedule, max_rounds):
+    """Test that a configured round limit must be positive."""
+    with pytest.raises(ValueError, match="max_rounds must be a positive integer"):
+        Budget(
+            available_budget=100.0,
+            schedule=constant_schedule,
+            max_rounds=max_rounds,
+        )
 
 
 def test_get_round_budget_constant_schedule(constant_schedule):
@@ -259,6 +281,20 @@ class TestValidateSchedule:
         """Schedule allocating exactly min_query_cost should pass."""
         budget = Budget(available_budget=50.0, schedule=lambda r: 5.0)
         # Should not raise — exactly at the threshold
+        budget.validate_schedule(min_query_cost=5.0)
+
+    def test_capped_schedule_need_not_cover_full_budget(self):
+        """A capped run may intentionally leave part of the total budget unused."""
+
+        def schedule(round_index: int) -> float:
+            return 10.0 if round_index < 3 else 0.0
+
+        budget = Budget(
+            available_budget=100.0,
+            schedule=schedule,
+            max_rounds=3,
+        )
+
         budget.validate_schedule(min_query_cost=5.0)
 
     def test_schedule_with_leading_zeros_are_underfunded(self):

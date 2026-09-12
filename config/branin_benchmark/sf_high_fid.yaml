@@ -1,0 +1,37 @@
+# Benchmark overlay: high-fidelity single-fidelity baseline for Branin.
+#
+# Run with:
+#   uv run activelearning config/branin_benchmark/base.yaml config/branin_benchmark/sf_high_fid.yaml runtime.seed=<seed>
+
+dataset:
+  type: ListDataset
+  initial_data:
+    path: ${branin_benchmark.initial_data.single}
+    x_columns: [x1, x2]
+    y_column: y
+    fidelity_column: fidelity
+    metadata_columns: remaining
+
+acquisition:
+  type: QMultiFidelityLowerBoundMaxValueEntropy
+  candidate_set_spec:
+    type: TrainDataCandidateSetSpec
+
+sampler:
+  type: ExactGridSampler
+  bounds: ${branin_benchmark.domain_bounds}
+  points_per_dimension: [100, 100]
+  fidelities: [3]
+  num_samples: ${branin_benchmark.candidate_sample_count}
+  use_acquisition_scores: true
+
+oracle:
+  type: BraninOracle
+  fidelity_costs:
+    3: 1.0
+  fidelity_confidences:
+    3: 1.0
+
+branin_benchmark:
+  method: sf_high_fid
+  method_label: SF-GFN-HIGH

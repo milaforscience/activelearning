@@ -62,24 +62,24 @@ make test
 
 ### Quick Start
 
-Run the Branin toy example:
+Run the Branin multi-fidelity example:
 
 ```sh
-uv run activelearning config/branin_toy_example.yaml
+uv run activelearning config/branin/multi_fidelity.yaml
 ```
 
 ### What the Example Does
 
-`config/branin_toy_example.yaml` runs a multi-fidelity active learning loop on the discretized (100x100) Augmented Branin benchmark. Key components:
+`config/branin/multi_fidelity.yaml` runs a multi-fidelity active learning loop on the Augmented Branin benchmark. Key components:
 
 | Component | Details |
 |-----------|---------|
 | **Oracles** | Negated Augmented Branin with 3 fidelity levels (costs: 0.01 / 0.1 / 1.0) |
 | **Surrogate** | BoTorch GP (`SingleTaskMultiFidelityGP`) |
 | **Acquisition** | qMFLBMES (lower-bound multi-fidelity max-value entropy search) |
-| **Sampler** | Latin Hypercube Sampling over the 100x100 design space |
+| **Sampler** | Latin Hypercube Sampling over the 2D design space |
 | **Selector** | Cost-aware greedy (bang-per-buck within round budget) |
-| **Budget** | 100.0 total, 5.0 allocated per round (constant schedule) |
+| **Budget** | 100.0 total, 10.0 allocated per round (constant schedule) |
 
 ### Config Structure
 
@@ -102,7 +102,7 @@ Every experiment is defined by a single YAML file with these top-level sections:
 Append [OmegaConf dotlist](https://omegaconf.readthedocs.io/en/latest/usage.html#from-a-dot-list) overrides directly to the command:
 
 ```sh
-uv run activelearning config/branin_toy_example.yaml \
+uv run activelearning config/branin/multi_fidelity.yaml \
   budget.available_budget=50.0 \
   acquisition.num_mv_samples=20
 ```
@@ -129,7 +129,7 @@ uv sync --extra aim     # Aim
 Example — switch to Weights & Biases:
 
 ```sh
-uv run activelearning config/branin_toy_example.yaml \
+uv run activelearning config/branin/multi_fidelity.yaml \
   logger.type=WandbLogger \
   logger.project_name=my_project
 ```
