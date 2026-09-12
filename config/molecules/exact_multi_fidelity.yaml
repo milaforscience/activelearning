@@ -2,7 +2,7 @@
 #
 # This extends the single-fidelity pool example (exact.yaml) by adding multi-fidelity
 # surrogate models and acquisition functions. The main differences are:
-# - ExactSelfiesDKLSurrogate is reused but with multi_fidelity enabled, so the GP also
+# - ExactDKLSurrogate is reused but with multi_fidelity enabled, so the GP also
 #   conditions on a fidelity confidence embedding alongside molecule features.
 # - PoolFileSampler proposes (molecule, fidelity) pairs from a fixed candidate file,
 #   covering all three xTB fidelity levels (1 = cheapest / fastest, 3 = most accurate).
@@ -25,12 +25,11 @@ dataset:
   type: ListDataset
 
 surrogate:
-  type: ExactSelfiesDKLSurrogate
-  is_multi_fidelity: true
+  type: ExactDKLSurrogate
   target_fidelity: 3
   encoder:
     type: SelfiesTransformerEncoder
-    max_mol_tokens: 64
+    max_mol_tokens: 66
     embed_dim: 64
     ff_dim: 256
     num_heads: 8
