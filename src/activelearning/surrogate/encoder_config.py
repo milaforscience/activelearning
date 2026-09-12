@@ -7,11 +7,16 @@ Concrete ``build()`` methods keep application imports lazy.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Union
 
 from pydantic import BaseModel, Field
 
+from activelearning.surrogate.sequence.config import HuggingFaceEncoderConfig
+
 if TYPE_CHECKING:
+    from activelearning.surrogate.sequence.huggingface_encoder import (
+        HuggingFaceSequenceEncoder,
+    )
     from activelearning.surrogate.sequence.transformer_encoder import (
         TransformerSequenceEncoder,
     )
@@ -53,6 +58,7 @@ class SelfiesTransformerEncoderConfig(BaseModel):
     """
 
     type: Literal["SelfiesTransformerEncoder"] = "SelfiesTransformerEncoder"
+    input_representation: ClassVar[str] = "selfies"
     vocab: list[str] = Field(default_factory=_default_selfies_vocab)
     max_mol_tokens: int = 66
     embed_dim: int = 64
@@ -95,7 +101,46 @@ class SelfiesTransformerEncoderConfig(BaseModel):
         )
 
 
+class GPMoLFormerSmilesEncoderConfig(HuggingFaceEncoderConfig):
+    """Configuration for the frozen causal GP-MoLFormer SMILES encoder."""
+
+    type: Literal["GPMoLFormerSmilesEncoder"] = "GPMoLFormerSmilesEncoder"
+    input_representation: ClassVar[str] = "smiles"
+    model_name_or_path: str = "ibm-research/GP-MoLFormer-Uniq"
+    tokenizer_name_or_path: str = "ibm-research/MoLFormer-XL-both-10pct"
+    pooling: Literal["last", "mean"] = "last"
+
+    def _encoder_class(self) -> type[HuggingFaceSequenceEncoder]:
+        """Return the pretrained GP-MoLFormer encoder class."""
+        from activelearning.applications.molecules.smiles_transformer_encoder import (
+            GPMoLFormerSmilesEncoder,
+        )
+
+        return GPMoLFormerSmilesEncoder
+
+
+class MoLFormerSmilesEncoderConfig(HuggingFaceEncoderConfig):
+    """Configuration for the frozen bidirectional MoLFormer SMILES encoder."""
+
+    type: Literal["MoLFormerSmilesEncoder"] = "MoLFormerSmilesEncoder"
+    input_representation: ClassVar[str] = "smiles"
+    model_name_or_path: str = "ibm-research/MoLFormer-XL-both-10pct"
+    tokenizer_name_or_path: str = "ibm-research/MoLFormer-XL-both-10pct"
+
+    def _encoder_class(self) -> type[HuggingFaceSequenceEncoder]:
+        """Return the pretrained MoLFormer encoder class."""
+        from activelearning.applications.molecules.smiles_transformer_encoder import (
+            MoLFormerSmilesEncoder,
+        )
+
+        return MoLFormerSmilesEncoder
+
+
 EncoderConfig = Annotated[
-    SelfiesTransformerEncoderConfig,
+    Union[
+        SelfiesTransformerEncoderConfig,
+        GPMoLFormerSmilesEncoderConfig,
+        MoLFormerSmilesEncoderConfig,
+    ],
     Field(discriminator="type"),
 ]
