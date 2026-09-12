@@ -30,7 +30,7 @@ dataset:
 
 surrogate:
   type: VariationalSelfiesDKLSurrogate
-  multi_fidelity: true
+  is_multi_fidelity: true
   target_fidelity: 3
   encoder:
     type: SelfiesTransformerEncoder

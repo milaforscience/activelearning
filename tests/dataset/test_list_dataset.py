@@ -11,7 +11,7 @@ def dataset():
     return ListDataset()
 
 
-@pytest.fixture(params=[None, 0, 1])
+@pytest.fixture(params=[0, 1, 2])
 def fidelity(request):
     return request.param
 
@@ -126,8 +126,7 @@ def test_get_latest_observations_empty_dataset(dataset):
 def test_get_latest_observations_single_add(dataset, sample_x_values, sample_y_values):
     """Test that get_latest_observations_iterable returns all observations after single add."""
     observations_to_add = [
-        Observation(x=x, y=y, fidelity=None)
-        for x, y in zip(sample_x_values, sample_y_values)
+        Observation(x=x, y=y) for x, y in zip(sample_x_values, sample_y_values)
     ]
 
     dataset.add_observations(observations_to_add)
@@ -135,7 +134,7 @@ def test_get_latest_observations_single_add(dataset, sample_x_values, sample_y_v
 
     assert len(latest) == len(sample_x_values)
     for i, (x, y) in enumerate(zip(sample_x_values, sample_y_values)):
-        assert latest[i] == Observation(x=x, y=y, fidelity=None)
+        assert latest[i] == Observation(x=x, y=y)
 
 
 def test_get_latest_observations_multiple_adds(dataset):

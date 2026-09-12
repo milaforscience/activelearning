@@ -103,7 +103,7 @@ The sections below document every significant knob in the multi-fidelity config 
 sampler:
   type: GFlowNetGridSampler   # grid-based GFlowNet for bounded continuous spaces
   n_samples: 100              # candidates returned per sample() call
-  fidelities: [1, 2, 3]      # list of fidelity levels; omit or set to null for single-fidelity
+  fidelities: [1, 2, 3]      # list of fidelity levels; use [<id>] for single-fidelity (omitting auto-fills from oracle)
 ```
 
 ### Grid environment

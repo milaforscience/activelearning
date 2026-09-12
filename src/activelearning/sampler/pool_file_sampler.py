@@ -1,12 +1,12 @@
 import random
 from pathlib import Path
-from typing import Callable, Iterable, Optional, Sequence, Union
+from typing import Callable, Iterable, Optional, Sequence
 
 import torch
 
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.sampler import Sampler
-from activelearning.utils.types import Candidate, Observation
+from activelearning.utils.types import Candidate, DEFAULT_FIDELITY, Observation
 from activelearning.utils.warnings import warn_ignored_args
 
 
@@ -20,7 +20,7 @@ class PoolFileSampler(Sampler):
 
     Fidelity assignment mirrors :class:`~activelearning.sampler.hypercube_sampler.HypercubeSampler`:
 
-    * ``None`` — every candidate gets ``fidelity=None``.
+    * ``[DEFAULT_FIDELITY]`` — the default single-fidelity configuration.
     * ``[1, 2, 3]`` — each candidate is assigned a uniformly random fidelity
       from the list.
     * ``{1: 1.0, 2: 5.0}`` — fidelities are sampled with probability inversely
@@ -32,40 +32,43 @@ class PoolFileSampler(Sampler):
         Path to a text file containing one candidate per line.
     num_samples : int
         Maximum number of candidates to return per ``sample()`` call.
-    fidelities : list[int] or dict[int, float] or None
+    fidelities : Sequence[int] or dict[int, float]
         Fidelity assignment strategy (see above).
     """
 
     def __init__(
         self,
-        candidate_pool_file: Union[Path, str],
+        candidate_pool_file: Path | str,
         num_samples: int,
-        fidelities: Union[None, Sequence[int], dict[int, float]] = None,
+        fidelities: Sequence[int] | dict[int, float] = (DEFAULT_FIDELITY,),
     ) -> None:
         self._pool_file = Path(candidate_pool_file)
         self.num_samples = num_samples
 
-        self._fidelity_levels: Optional[list[int]] = None
+        self._fidelity_levels: list[int]
         self._fidelity_costs: Optional[dict[int, float]] = None
 
         if isinstance(fidelities, dict):
-            if not fidelities:
-                raise ValueError("fidelities dict must not be empty")
-            for fid, cost in fidelities.items():
-                if cost <= 0:
-                    raise ValueError(
-                        f"All fidelity costs must be positive; fidelity {fid} has cost {cost}"
-                    )
-            self._fidelity_levels = sorted(fidelities.keys())
+            self._fidelity_levels = sorted(fidelities)
             self._fidelity_costs = fidelities
-        elif fidelities is not None:
-            fidelities = list(fidelities)
-            if not fidelities:
-                raise ValueError("fidelities list must not be empty")
-            self._fidelity_levels = fidelities
+        else:
+            self._fidelity_levels = list(fidelities)
 
     def _load_pool(self) -> list[str]:
-        """Read and return all non-empty lines from the pool file."""
+        """Read and return all non-empty lines from the pool file.
+
+        Returns
+        -------
+        list[str]
+            Non-empty, stripped lines from the pool file.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the pool file does not exist.
+        ValueError
+            If the pool file contains no non-empty lines.
+        """
         if not self._pool_file.exists():
             raise FileNotFoundError(f"Candidate pool file not found: {self._pool_file}")
         lines = [line.strip() for line in self._pool_file.read_text().splitlines()]
@@ -74,11 +77,20 @@ class PoolFileSampler(Sampler):
             raise ValueError(f"Candidate pool file is empty: {self._pool_file}")
         return pool
 
-    def _assign_fidelities(self, n: int) -> list[Optional[int]]:
-        """Sample ``n`` fidelity assignments using the configured strategy."""
-        if self._fidelity_levels is None:
-            return [None] * n
+    def _assign_fidelities(self, n: int) -> list[int]:
+        """Sample ``n`` fidelity assignments using the configured strategy.
 
+        Parameters
+        ----------
+        n : int
+            Number of fidelity values to draw.
+
+        Returns
+        -------
+        list[int]
+            List of ``n`` integer fidelity levels drawn according to the
+            configured strategy (uniform or cost-inverse weighted).
+        """
         fidelity_tensor = torch.tensor(self._fidelity_levels, dtype=torch.long)
 
         if self._fidelity_costs is not None:

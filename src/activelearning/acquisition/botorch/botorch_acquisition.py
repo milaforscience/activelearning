@@ -6,7 +6,7 @@ import torch
 
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
-from activelearning.surrogate.surrogate import Surrogate
+from activelearning.surrogate.surrogate import Surrogate, TargetFidelityProjector
 from activelearning.utils.types import Candidate, Observation
 
 
@@ -172,7 +172,9 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
         if self._botorch_surrogate is None:
             return None
 
-        return self._botorch_surrogate.get_target_fidelity_value()
+        if isinstance(self._botorch_surrogate, TargetFidelityProjector):
+            return self._botorch_surrogate.get_target_fidelity_value()
+        return None
 
     def _resolve_projection_to_target_fidelity(
         self,
@@ -201,6 +203,12 @@ class BoTorchAcquisitionBase(Acquisition, ABC):
 
         if self._project_to_target_fidelity_fn_override is not None:
             return self._project_to_target_fidelity_fn_override
+
+        if not isinstance(self._botorch_surrogate, TargetFidelityProjector):
+            raise RuntimeError(
+                "Multi-fidelity target projection requires a "
+                "TargetFidelityProjector surrogate."
+            )
 
         fidelity_dim = self._botorch_surrogate.get_fidelity_dimension()
         target_value = self._resolved_target_fidelity_value

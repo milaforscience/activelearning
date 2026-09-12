@@ -143,6 +143,25 @@ class TestGFlowNetGridSamplerOutputBounds:
             assert 100.0 <= x1 <= 200.0, f"x1={x1} outside [100, 200]"
             assert 0.0 <= x2 <= 1.0, f"x2={x2} outside [0, 1]"
 
+    def test_single_explicit_fidelity_preserves_domain_bounds(self, gflownet_conf_2d):
+        """A non-default sole fidelity must still use the single-env bounds path."""
+        conf, _ = gflownet_conf_2d
+        bounds = [[100.0, 200.0], [500.0, 600.0]]
+        sampler = GFlowNetGridSampler(
+            n_samples=8,
+            conf=conf,
+            fidelities=[7],
+            domain_bounds=bounds,
+        )
+
+        candidates = sampler.sample(acquisition=_ConstantAcquisition())
+
+        assert all(candidate.fidelity == 7 for candidate in candidates)
+        assert all(
+            100.0 <= candidate.x[0] <= 200.0 and 500.0 <= candidate.x[1] <= 600.0
+            for candidate in candidates
+        )
+
     def test_no_domain_bounds_uses_cell_min_max(self, gflownet_conf_2d):
         """Without domain_bounds, candidates stay within cell_min/cell_max (0.0–1.0)."""
         conf, _ = gflownet_conf_2d  # cell_min=0.0, cell_max=1.0

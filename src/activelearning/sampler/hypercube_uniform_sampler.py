@@ -4,7 +4,7 @@ from typing import Callable, Iterable, Optional, Sequence
 
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.sampler import Sampler
-from activelearning.utils.types import Candidate, Observation
+from activelearning.utils.types import Candidate, DEFAULT_FIDELITY, Observation
 from activelearning.utils.warnings import warn_ignored_args
 
 
@@ -24,7 +24,7 @@ class HypercubeUniformSampler(Sampler):
         self,
         bounds: Sequence[tuple[float, float]],
         num_samples: int,
-        fidelities: Optional[Sequence[int]] = None,
+        fidelities: Sequence[int] = (DEFAULT_FIDELITY,),
     ) -> None:
         """Initialize the hypercube uniform sampler.
 
@@ -36,10 +36,11 @@ class HypercubeUniformSampler(Sampler):
             The length determines the input dimensionality.
         num_samples : int
             Number of candidates to generate per ``sample()`` call. Must be > 0.
-        fidelities : Optional[Sequence[int]]
+        fidelities : Sequence[int]
             Fidelity levels to sample from uniformly at random. Each generated
-            candidate is assigned one level drawn with equal probability. When
-            ``None``, candidates are created with ``fidelity=None``.
+            candidate is assigned one level drawn with equal probability.
+            Defaults to the single level
+            :data:`~activelearning.utils.types.DEFAULT_FIDELITY`.
 
         Raises
         ------
@@ -55,11 +56,9 @@ class HypercubeUniformSampler(Sampler):
             if lower >= upper:
                 raise ValueError(f"Bound {i} has lower >= upper: ({lower}, {upper})")
 
-        if fidelities is not None and len(fidelities) == 0:
-            raise ValueError("fidelities must not be empty when specified")
         self.bounds = bounds
         self.num_samples = num_samples
-        self.fidelities = list(fidelities) if fidelities is not None else None
+        self.fidelities = list(fidelities)
 
         # Store raw scalars; tensors are materialized in sample() using self.dtype
         # so that any RuntimeContext dtype binding is respected (same pattern as
@@ -105,14 +104,8 @@ class HypercubeUniformSampler(Sampler):
         uniform = torch.rand(self.num_samples, len(self.bounds), dtype=self.dtype)
         points = lower + uniform * range_  # broadcast scaling
 
-        if self.fidelities is not None:
-            fidelity_indices = torch.randint(
-                0, len(self.fidelities), (self.num_samples,)
-            )
-            fidelities = [self.fidelities[idx] for idx in fidelity_indices.tolist()]
-        else:
-            fidelities = [None] * self.num_samples
-
+        fidelity_indices = torch.randint(0, len(self.fidelities), (self.num_samples,))
+        fidelities = [self.fidelities[idx] for idx in fidelity_indices.tolist()]
         return [
             Candidate(x=points[i].tolist(), fidelity=fidelities[i])
             for i in range(self.num_samples)
