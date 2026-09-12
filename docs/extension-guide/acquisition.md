@@ -36,28 +36,55 @@ Source: `src/activelearning/acquisition/`.
 
 ## **Config model and registration**
 
-Add a Pydantic config model in `src/activelearning/acquisition/config.py` and extend the `AcquisitionConfig` union. See the existing models in that file as reference.
+Add a `BuildableConfig` model and list it in the acquisition catalog in the
+same file. External packages do not edit core's `AcquisitionConfig`.
 
 ```python
-class MyAcquisitionConfig(BaseModel):
+from typing import Literal
+
+from activelearning.config_registry import BuildableConfig
+
+
+class MyAcquisitionConfig(BuildableConfig):
     type: Literal["MyAcquisition"] = "MyAcquisition"
     # your parameters here
 
     def build(self) -> Acquisition:
         return MyAcquisition(...)
 
-AcquisitionConfig = Annotated[
-    Union[..., MyAcquisitionConfig],
-    Field(discriminator="type"),
-]
+
+ACQUISITION_CONFIGS = (MyAcquisitionConfig,)
 ```
 
-Then in your YAML:
+Add `ACQUISITION_CONFIGS` to the package's `CONFIG_CATALOGS` mapping in
+`my_package/config_catalogs.py` as shown in the
+[extension overview](overview.md#the-common-extension-recipe).
+
+Then compose the application command with this mapping and use the type in
+your YAML:
+
+```python
+from activelearning.main import run
+from my_package.config_catalogs import CONFIG_CATALOGS
+
+run(catalogs={"my-package": CONFIG_CATALOGS}, program_name="my-package")
+```
 
 ```yaml
 acquisition:
   type: MyAcquisition
 ```
+
+If the acquisition requires a BoTorch-backed surrogate, declare that contract
+without checking a concrete config class:
+
+```python
+from typing import ClassVar
+
+requires_botorch_surrogate: ClassVar[bool] = True
+```
+
+Compatible surrogate configs declare `is_botorch_compatible = True`.
 
 ## **BoTorch acquisitions**
 
