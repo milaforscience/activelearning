@@ -342,9 +342,9 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
         self.round_metrics.generation_duration_s = (
             time.perf_counter() - generation_started
         )
-        self._log_round_metrics(
-            positive_buffer=positive_buffer,
-            negative_buffer=negative_buffer,
+        self.round_metrics.positive_buffer_size = len(positive_buffer)
+        self.round_metrics.negative_buffer_size = (
+            len(negative_buffer) if negative_buffer is not None else 0
         )
         _logger.info(
             "S3-GFN round %d complete: generated %d candidate(s).",

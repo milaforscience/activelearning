@@ -77,21 +77,21 @@ class TestConsoleLogger:
         assert json.loads(out.split("[Config]\n")[1]) == config
 
     def test_log_metric_buffered(self, logger, capsys):
-        logger.log_metric("loss", 0.5)
+        logger.log_metric("surrogate/general/loss", 0.5)
         out = capsys.readouterr().out
         assert out == ""  # nothing printed until log_step
 
     def test_log_step_flushes_metrics(self, logger, capsys):
-        logger.log_metric("loss", 0.5)
-        logger.log_metric("acc", 0.9)
+        logger.log_metric("surrogate/general/loss", 0.5)
+        logger.log_metric("surrogate/general/accuracy", 0.9)
         logger.log_step(1)
         out = capsys.readouterr().out
         assert "loss" in out
-        assert "acc" in out
+        assert "accuracy" in out
         assert "Step 1" in out
 
     def test_log_step_clears_buffer(self, logger, capsys):
-        logger.log_metric("loss", 0.5)
+        logger.log_metric("surrogate/general/loss", 0.5)
         logger.log_step(1)
         capsys.readouterr()
         logger.log_step(2)
@@ -100,9 +100,36 @@ class TestConsoleLogger:
 
     def test_log_figure_prints_key(self, logger, capsys):
         mock_fig = MagicMock()
-        logger.log_figure("my_plot", mock_fig)
+        logger.log_figure("surrogate/general/plot", mock_fig)
         out = capsys.readouterr().out
-        assert "my_plot" in out
+        assert "surrogate/general/plot" in out
+
+    def test_log_metric_rejects_bare_key(self, logger):
+        """Metrics must identify their owning component."""
+        with pytest.raises(ValueError, match="component-qualified namespace"):
+            logger.log_metric("loss", 0.5)
+
+    def test_log_figure_rejects_bare_key(self, logger):
+        """Figures must identify their owning component."""
+        with pytest.raises(ValueError, match="component-qualified namespace"):
+            logger.log_figure("loss", MagicMock())
+
+    def test_log_metric_rejects_shallow_component_key(self, logger):
+        """Component output must include a scope as well as a metric name."""
+        with pytest.raises(ValueError, match="component-qualified namespace"):
+            logger.log_metric("sampler/loss", 0.5)
+
+    def test_log_metric_rejects_unsafe_namespace_segment(self, logger):
+        """Namespace segments must remain stable safe identifiers."""
+        with pytest.raises(ValueError, match="component-qualified namespace"):
+            logger.log_metric("sampler/general/training loss", 0.5)
+
+        with pytest.raises(ValueError, match="component-qualified namespace"):
+            logger.log_metric("Sampler/general/loss", 0.5)
+
+    def test_log_metric_accepts_custom_component_namespace(self, logger):
+        """Custom components may use valid namespaces without logger changes."""
+        logger.log_metric("custom_component/general/metric", 0.5)
 
     def test_end_prints_message(self, logger, capsys):
         logger.end()
@@ -155,19 +182,25 @@ class TestWandbLogger:
 
     def test_log_metric_buffered(self, logger):
         wandb_logger, mock, mock_run = logger
-        wandb_logger.log_metric("loss", 0.5)
+        wandb_logger.log_metric("surrogate/general/loss", 0.5)
         mock_run.log.assert_not_called()
 
     def test_log_step_flushes_metrics(self, logger):
         wandb_logger, mock, mock_run = logger
-        wandb_logger.log_metric("loss", 0.5)
-        wandb_logger.log_metric("acc", 0.9)
+        wandb_logger.log_metric("surrogate/general/loss", 0.5)
+        wandb_logger.log_metric("surrogate/general/accuracy", 0.9)
         wandb_logger.log_step(3)
-        mock_run.log.assert_called_once_with({"loss": 0.5, "acc": 0.9}, step=3)
+        mock_run.log.assert_called_once_with(
+            {
+                "surrogate/general/loss": 0.5,
+                "surrogate/general/accuracy": 0.9,
+            },
+            step=3,
+        )
 
     def test_log_step_clears_buffer(self, logger):
         wandb_logger, mock, mock_run = logger
-        wandb_logger.log_metric("loss", 0.5)
+        wandb_logger.log_metric("surrogate/general/loss", 0.5)
         wandb_logger.log_step(1)
         mock_run.log.reset_mock()
         wandb_logger.log_step(2)
@@ -176,9 +209,9 @@ class TestWandbLogger:
     def test_log_figure_buffers_image(self, logger):
         wandb_logger, mock, mock_run = logger
         mock_fig = MagicMock()
-        wandb_logger.log_figure("plot", mock_fig)
+        wandb_logger.log_figure("surrogate/general/plot", mock_fig)
         mock.Image.assert_called_once_with(mock_fig)
-        assert "plot" in wandb_logger._buffer
+        assert "surrogate/general/plot" in wandb_logger._buffer
 
     def test_end_calls_run_finish(self, logger):
         wandb_logger, mock, mock_run = logger
@@ -219,7 +252,10 @@ class TestCometLogger:
         with patch.dict("sys.modules", {"comet_ml": mock}):
             CometLogger(project_name="proj", run_name="run_x", workspace="ws")
         mock.Experiment.assert_called_once_with(
-            project_name="proj", workspace="ws", api_key=None
+            project_name="proj",
+            workspace="ws",
+            api_key=None,
+            auto_metric_logging=False,
         )
         mock_experiment.set_name.assert_called_once_with("run_x")
 
@@ -229,7 +265,10 @@ class TestCometLogger:
             with patch.object(Logger, "__init__", new=_override_parent_names):
                 CometLogger(project_name="proj", run_name="run_x", workspace="ws")
         mock.Experiment.assert_called_once_with(
-            project_name="proj_normalized", workspace="ws", api_key=None
+            project_name="proj_normalized",
+            workspace="ws",
+            api_key=None,
+            auto_metric_logging=False,
         )
 
     def test_log_config_calls_log_parameters(self, logger):
@@ -240,37 +279,41 @@ class TestCometLogger:
 
     def test_log_metric_buffered(self, logger):
         comet_logger, mock, mock_experiment = logger
-        comet_logger.log_metric("loss", 0.5)
+        comet_logger.log_metric("surrogate/general/loss", 0.5)
         mock_experiment.log_metric.assert_not_called()
-        assert "loss" in comet_logger._buffer
+        assert "surrogate/general/loss" in comet_logger._buffer
 
     def test_log_figure_buffered(self, logger):
         comet_logger, mock, mock_experiment = logger
         mock_fig = MagicMock()
-        comet_logger.log_figure("my_plot", mock_fig)
+        comet_logger.log_figure("surrogate/general/plot", mock_fig)
         mock_experiment.log_figure.assert_not_called()
-        assert "my_plot" in comet_logger._figure_buffer
+        assert "surrogate/general/plot" in comet_logger._figure_buffer
 
     def test_log_step_flushes_metrics(self, logger):
         comet_logger, mock, mock_experiment = logger
-        comet_logger.log_metric("loss", 0.5)
-        comet_logger.log_metric("acc", 0.9)
+        comet_logger.log_metric("surrogate/general/loss", 0.5)
+        comet_logger.log_metric("surrogate/general/accuracy", 0.9)
         comet_logger.log_step(3)
-        mock_experiment.log_metric.assert_any_call("loss", 0.5, step=3)
-        mock_experiment.log_metric.assert_any_call("acc", 0.9, step=3)
+        mock_experiment.log_metric.assert_any_call(
+            "surrogate/general/loss", 0.5, step=3
+        )
+        mock_experiment.log_metric.assert_any_call(
+            "surrogate/general/accuracy", 0.9, step=3
+        )
 
     def test_log_step_flushes_figures(self, logger):
         comet_logger, mock, mock_experiment = logger
         mock_fig = MagicMock()
-        comet_logger.log_figure("my_plot", mock_fig)
+        comet_logger.log_figure("surrogate/general/plot", mock_fig)
         comet_logger.log_step(3)
         mock_experiment.log_figure.assert_called_once_with(
-            figure_name="my_plot", figure=mock_fig
+            figure_name="surrogate/general/plot", figure=mock_fig, step=3
         )
 
     def test_log_step_clears_buffer(self, logger):
         comet_logger, mock, mock_experiment = logger
-        comet_logger.log_metric("loss", 0.5)
+        comet_logger.log_metric("surrogate/general/loss", 0.5)
         comet_logger.log_step(1)
         mock_experiment.reset_mock()
         comet_logger.log_step(2)
@@ -334,21 +377,21 @@ class TestAimLogger:
 
     def test_log_metric_buffered(self, logger):
         aim_logger, mock, mock_run = logger
-        aim_logger.log_metric("loss", 0.5)
+        aim_logger.log_metric("surrogate/general/loss", 0.5)
         mock_run.track.assert_not_called()
 
     def test_log_step_flushes_metrics(self, logger):
         aim_logger, mock, mock_run = logger
-        aim_logger.log_metric("loss", 0.5)
-        aim_logger.log_metric("acc", 0.9)
+        aim_logger.log_metric("surrogate/general/loss", 0.5)
+        aim_logger.log_metric("surrogate/general/accuracy", 0.9)
         aim_logger.log_step(3)
         assert mock_run.track.call_count == 2
-        mock_run.track.assert_any_call(0.5, name="loss", step=3)
-        mock_run.track.assert_any_call(0.9, name="acc", step=3)
+        mock_run.track.assert_any_call(0.5, name="surrogate/general/loss", step=3)
+        mock_run.track.assert_any_call(0.9, name="surrogate/general/accuracy", step=3)
 
     def test_log_step_clears_buffer(self, logger):
         aim_logger, mock, mock_run = logger
-        aim_logger.log_metric("loss", 0.5)
+        aim_logger.log_metric("surrogate/general/loss", 0.5)
         aim_logger.log_step(1)
         mock_run.track.reset_mock()
         aim_logger.log_step(2)
@@ -357,17 +400,17 @@ class TestAimLogger:
     def test_log_figure_buffers_aim_figure(self, logger):
         aim_logger, mock, mock_run = logger
         mock_fig = MagicMock()
-        aim_logger.log_figure("my_plot", mock_fig)
+        aim_logger.log_figure("surrogate/general/plot", mock_fig)
         mock.Figure.assert_called_once_with(mock_fig)
-        assert "my_plot" in aim_logger._buffer
+        assert "surrogate/general/plot" in aim_logger._buffer
 
     def test_log_figure_tracked_on_step(self, logger):
         aim_logger, mock, mock_run = logger
         mock_fig = MagicMock()
-        aim_logger.log_figure("my_plot", mock_fig)
+        aim_logger.log_figure("surrogate/general/plot", mock_fig)
         aim_logger.log_step(2)
         mock_run.track.assert_called_once_with(
-            mock.Figure.return_value, name="my_plot", step=2
+            mock.Figure.return_value, name="surrogate/general/plot", step=2
         )
 
     def test_end_closes_run(self, logger):
@@ -399,15 +442,15 @@ class TestMultiLogger:
             child.log_config.assert_called_once_with(config)
 
     def test_log_metric_delegates_to_all(self, composite, child_loggers):
-        composite.log_metric("loss", 0.5)
+        composite.log_metric("surrogate/general/loss", 0.5)
         for child in child_loggers:
-            child.log_metric.assert_called_once_with("loss", 0.5)
+            child.log_metric.assert_called_once_with("surrogate/general/loss", 0.5)
 
     def test_log_figure_delegates_to_all(self, composite, child_loggers):
         mock_fig = MagicMock()
-        composite.log_figure("plot", mock_fig)
+        composite.log_figure("surrogate/general/plot", mock_fig)
         for child in child_loggers:
-            child.log_figure.assert_called_once_with("plot", mock_fig)
+            child.log_figure.assert_called_once_with("surrogate/general/plot", mock_fig)
 
     def test_log_step_delegates_to_all(self, composite, child_loggers):
         composite.log_step(5)
@@ -522,9 +565,9 @@ class TestActiveLearningLoopIntegration:
         )
 
         expected_keys = {
-            "round",
-            "round_cost",
-            "total_cost",
-            "budget_remaining",
+            "active_learning/round",
+            "active_learning/cost/round",
+            "active_learning/cost/cumulative",
+            "active_learning/budget/remaining",
         }
         assert expected_keys.issubset(set(logged_keys))

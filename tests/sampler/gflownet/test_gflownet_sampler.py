@@ -7,6 +7,7 @@ import torch
 
 from activelearning.runtime import RuntimeContext
 from activelearning.sampler.gflownet.gflownet_sampler import GFlowNetSampler
+from activelearning.sampler.gflownet.logger_wrapper import RuntimeGFlowNetLoggerWrapper
 from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
     MultiFidelityGFlowNetEnvWrapper,
     MultiFidelityGFlowNetEnvWrapperFidFirst,
@@ -183,7 +184,9 @@ class TestGFlowNetSamplerFidelityActionWrapperSelection:
         mock_agent = Mock()
         mock_agent.proxy = Mock()
         mock_agent.env = Mock()
-        mock_agent.logger = Mock()
+        mock_agent.logger = RuntimeGFlowNetLoggerWrapper.__new__(
+            RuntimeGFlowNetLoggerWrapper
+        )
 
         with (
             patch(
@@ -297,19 +300,72 @@ class TestGFlowNetSamplerSmokeTest:
 
 class TestGFlowNetSamplerRuntimeLogger:
     def test_runtime_logger_metrics_and_lifecycle_contract(self, gflownet_conf_2d):
-        """Sampler logs metrics but never advances or ends the runtime logger."""
+        """Sampler drains metrics without advancing or ending the runtime logger."""
         conf, _ = gflownet_conf_2d
         sampler = GFlowNetSampler(n_samples=3, conf=conf)
         runtime_logger = Mock()
         sampler.bind_runtime_context(RuntimeContext(logger=runtime_logger))
 
         sampler.sample(acquisition=_ConstantAcquisition())
+        metrics, figures = sampler.drain_round_diagnostics(
+            include_figures=False,
+            max_points=1000,
+        )
 
-        runtime_logger.log_metric.assert_called()
-        # log_step/end belong to the AL loop, not the sampler.
+        assert metrics
+        assert figures == {}
+        runtime_logger.log_metric.assert_not_called()
+        # log_step/end belong exclusively to the AL loop.
         runtime_logger.log_step.assert_not_called()
-
         runtime_logger.end.assert_not_called()
+
+    def test_evaluator_uses_namespaced_runtime_wrapper(self, gflownet_conf_2d):
+        """Evaluator emissions must use the same wrapper as the agent."""
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=3, conf=conf)
+
+        agent = sampler._build_agent(_ConstantAcquisition())
+
+        assert agent.evaluator.logger is agent.logger
+
+    def test_evaluator_metric_is_namespaced(self, gflownet_conf_2d):
+        """Metrics emitted through the evaluator cannot bypass the wrapper."""
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=3, conf=conf)
+        agent = sampler._build_agent(_ConstantAcquisition())
+        wrapper = agent.logger
+
+        with patch(
+            "activelearning.sampler.gflownet.logger_wrapper.GFlowNetLogger.log_metrics"
+        ) as upstream_log_metrics:
+            wrapper.log_metrics({"loss": 0.5}, step=1, use_context=True)
+
+        assert upstream_log_metrics.call_args.args[0] == {
+            "sampler/gflownet/0/gflownet_loss": 0.5
+        }
+
+    def test_failed_sample_closes_pending_logger(self, gflownet_conf_2d):
+        """A failed GFlowNet round must not leave its backend or figures open."""
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=3, conf=conf)
+        wrapper = Mock()
+        agent = Mock()
+        agent.train.side_effect = RuntimeError("training failed")
+
+        def build_agent(*args, **kwargs):
+            sampler._round_logger_wrapper = wrapper
+            return agent
+
+        with patch.object(sampler, "_build_agent", side_effect=build_agent):
+            with pytest.raises(RuntimeError, match="training failed"):
+                sampler.sample(acquisition=_ConstantAcquisition())
+
+        wrapper.drain_round_diagnostics.assert_called_once_with(
+            include_figures=False,
+            max_points=1,
+        )
+        wrapper.end.assert_called_once_with()
+        assert sampler._round_logger_wrapper is None
 
 
 # ---------------------------------------------------------------------------

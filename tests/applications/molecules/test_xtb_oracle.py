@@ -532,16 +532,14 @@ class TestXTBIPEAOracleQuery:
 
         build_figure.assert_not_called()
 
-    def test_query_logs_visualization_when_enabled(self):
-        """When visualizations are enabled and a logger is bound, the figure is built and logged."""
+    def test_query_defers_visualization_until_round_diagnostics_drain(self):
+        """Enabled visualizations should be rendered only at the round boundary."""
         oracle = XTBIPEAOracle(
             task="ea",
             fidelity_costs={1: 1.0},
             log_molecule_visualizations=True,
             molecule_visualization_limit=7,
         )
-        logger = MagicMock()
-        oracle.bind_runtime_context(RuntimeContext(logger=logger))
         candidates = [Candidate(x=BENZENE_SELFIES, fidelity=1)]
         figure = MagicMock()
 
@@ -552,21 +550,22 @@ class TestXTBIPEAOracleQuery:
                 "build_xtb_query_molecule_figure",
                 return_value=figure,
             ) as build_figure,
-            patch(
-                "activelearning.applications.molecules.xtb_oracle.plt.close"
-            ) as close,
         ):
             observations = oracle.query(candidates)
+            metrics, figures = oracle.drain_round_diagnostics(
+                include_figures=True,
+                max_points=1000,
+            )
 
         build_figure.assert_called_once_with(
-            candidates=candidates,
-            observations=observations,
+            candidates=tuple(candidates),
+            observations=tuple(observations),
             task="ea",
             mol_repr="selfies",
             limit=7,
         )
-        logger.log_figure.assert_called_once_with("xtb_ea_query_molecules", figure)
-        close.assert_called_once_with(figure)
+        assert metrics == {}
+        assert figures == {"oracle/xtb/ea/query_molecules": figure}
 
 
 class TestXTBMoleculeVisualization:
@@ -619,7 +618,9 @@ class TestXTBMoleculeVisualization:
             assert captured["mols_per_row"] == 5
             assert legends[0].startswith("#2 IP@fid=1: 3.000 eV")
             assert legends[1].startswith("#3 IP@fid=2: 2.000 eV")
-            assert figure.axes[0].get_title() == "xTB IP queried molecules (top 2 of 3)"
+            assert figure.axes[0].get_title() == (
+                "Oracle xTB IP: queried molecules (top 2 of 3)"
+            )
         finally:
             import matplotlib.pyplot as plt
 
@@ -661,7 +662,7 @@ class TestXTBMoleculeVisualization:
             assert legends[0].startswith("#2 EA@fid=1: 3.000 eV")
             assert legends[1].startswith("#3 EA@fid=2: 2.000 eV")
             assert legends[2].startswith("#1 EA@fid=1: 1.000 eV")
-            assert figure.axes[0].get_title() == "xTB EA queried molecules"
+            assert figure.axes[0].get_title() == "Oracle xTB EA: queried molecules"
         finally:
             import matplotlib.pyplot as plt
 

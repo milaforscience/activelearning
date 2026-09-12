@@ -154,7 +154,7 @@ def load_run_checkpoints(
     The loader follows the artifact contract of ``JSONLinesRunWriter``:
     ``run_manifest.json`` contributes ``initial_data.initial_observations`` and
     each ``round_history.jsonl`` record contributes its
-    ``new_observations``, ``round_index``, and ``cumulative_cost`` fields.
+    ``valid_observations``, ``round_index``, and ``cumulative_cost`` fields.
     Observation payloads are kept opaque to this generic layer.
     """
 
@@ -201,15 +201,15 @@ def load_run_checkpoints(
                 )
                 continue
 
-            new_observations = record.get("new_observations", [])
-            if not isinstance(new_observations, list):
+            valid_observations = record.get("valid_observations", [])
+            if not isinstance(valid_observations, list):
                 warn_fn(
-                    f"Skipping malformed new_observations on line {line_number} "
+                    f"Skipping malformed valid_observations on line {line_number} "
                     f"in {history_path}"
                 )
                 continue
 
-            cumulative_observations.extend(new_observations)
+            cumulative_observations.extend(valid_observations)
             observations = tuple(cumulative_observations)
             metrics = {
                 name: _coerce_metric_value(callback(observations))

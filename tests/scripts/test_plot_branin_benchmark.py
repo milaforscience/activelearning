@@ -87,7 +87,7 @@ def make_round(
     return {
         "round_index": round_index,
         "cumulative_cost": cumulative_cost,
-        "new_observations": [
+        "valid_observations": [
             make_observation(point, y=y_value)
             for point, y_value in zip(new_points, y_values, strict=True)
         ],
