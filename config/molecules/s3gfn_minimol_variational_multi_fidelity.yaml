@@ -1,5 +1,5 @@
-# S3-GFN molecule experiment: MiniMol fingerprints + variational SMILES DKL
-# with explicit fidelity actions.
+# GPU-optimized S3-GFN experiment: MiniMol fingerprints + variational SMILES
+# DKL with explicit fidelity actions.
 #
 # Prerequisites:
 #   - uv sync --extra molecules
@@ -11,7 +11,7 @@
 # and a sparse variational GP.
 
 runtime:
-  device: cpu
+  device: cuda
   precision: 64
   seed: 42
 
@@ -48,9 +48,10 @@ sampler:
   model_name_or_path: ibm-research/GP-MoLFormer-Uniq
   tokenizer_name_or_path: ibm-research/MoLFormer-XL-both-10pct
   trust_remote_code: true
+  performance_mode: optimized
   max_length: 140
-  batch_size: 16
-  replay_batch_size: 16
+  batch_size: 64
+  replay_batch_size: 64
   n_train_steps: 25
   num_warmup_steps: 5
   beta: 25.0

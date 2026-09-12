@@ -458,6 +458,16 @@ def test_molecule_s3gfn_minimol_variational_multi_fidelity_config_parses() -> No
     assert config.oracle.per_fidelity_num_conformers == {1: 1, 2: 2, 3: 4}
     assert config.oracle.type == "XTBIPEAOracle"
     assert config.oracle.mol_repr == "smiles"
+    assert config.sampler.performance_mode == "optimized"
+    assert config.sampler.compile_strategy == "training_and_generation"
+    assert config.sampler.torch_compile_mode == "default"
+    assert config.sampler.torch_compile_dynamic is None
+    assert config.sampler.attention_mask_adapter is True
+    assert config.sampler.compile_prior_scorer is True
+    assert config.sampler.model_dtype == "bfloat16"
+    assert config.sampler.batch_size == 64
+    assert config.sampler.replay_batch_size == 64
+    assert config.sampler.generation_batch_size is None
 
 
 def test_molecule_s3gfn_minimol_ampc_variational_multi_fidelity_config_parses() -> None:
