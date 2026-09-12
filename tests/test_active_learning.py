@@ -6,6 +6,7 @@ from activelearning.acquisition.dummy_acquisition import DummyAcquisition
 from activelearning.budget.budget import Budget
 from activelearning.dataset.list_dataset import ListDataset
 from activelearning.oracle.multi_fidelity_oracle import MultiFidelityOracle
+from activelearning.run_writer import RunWriter
 from activelearning.sampler.pool_score_sampler import PoolScoreSampler
 from activelearning.selector.score_selector import TopKAcquisitionSelector
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
@@ -15,6 +16,51 @@ from activelearning.active_learning import active_learning
 from activelearning.utils.types import Candidate, Observation
 from activelearning.logger.logger import ConsoleLogger
 from activelearning.runtime import RuntimeContext
+
+
+class RecordingRunWriter(RunWriter):
+    """In-memory run writer for asserting active-learning integration."""
+
+    def __init__(self) -> None:
+        self.start_metadata: dict | None = None
+        self.rounds: list[dict] = []
+        self.summary: dict | None = None
+
+    def start_run(self, metadata: dict) -> None:
+        """Store the run-start metadata."""
+        self.start_metadata = metadata
+
+    def record_round(
+        self,
+        *,
+        round_index: int,
+        sampled_candidates: Sequence[Candidate],
+        sampled_scores: Sequence[float],
+        selected_candidates: Sequence[Candidate],
+        selected_scores: Sequence[float],
+        selected_costs: Sequence[float],
+        observations: Sequence[Observation],
+        cumulative_cost: float,
+        remaining_budget: float,
+    ) -> None:
+        """Store one round payload."""
+        self.rounds.append(
+            {
+                "round_index": round_index,
+                "sampled_candidates": list(sampled_candidates),
+                "sampled_scores": list(sampled_scores),
+                "selected_candidates": list(selected_candidates),
+                "selected_scores": list(selected_scores),
+                "selected_costs": list(selected_costs),
+                "observations": list(observations),
+                "cumulative_cost": cumulative_cost,
+                "remaining_budget": remaining_budget,
+            }
+        )
+
+    def end_run(self, summary: dict) -> None:
+        """Store the final run summary."""
+        self.summary = summary
 
 
 @pytest.fixture
@@ -512,3 +558,40 @@ def test_al_loop_warns_when_invalid_observations_dropped(caplog):
         )
 
     assert any("Dropped" in record.message for record in caplog.records)
+
+
+def test_active_learning_run_writer_records_only_valid_observations():
+    """Run-writer round records must match the filtered observations added."""
+    mixed_oracle = _make_mixed_oracle()
+    run_writer = RecordingRunWriter()
+
+    dataset_out, cost, num_iter = active_learning(
+        dataset=ListDataset(),
+        surrogate=DummyMeanSurrogate(),
+        acquisition=DummyAcquisition(),
+        sampler=PoolScoreSampler(
+            candidate_pool=[Candidate(i, fidelity=0) for i in range(5)],
+            num_samples=5,
+        ),
+        selector=TopKAcquisitionSelector(num_samples=3),
+        oracle=mixed_oracle,
+        budget=Budget(available_budget=3.0, schedule=lambda _: 3.0),
+        run_writer=run_writer,
+    )
+
+    stored_observations = list(dataset_out.get_observations_iterable())
+
+    assert num_iter == 1
+    assert cost == 3.0
+    assert run_writer.start_metadata == {
+        "initial_budget": 3.0,
+        "initial_data": {"initial_observations": []},
+    }
+    assert run_writer.summary == {
+        "num_rounds": 1,
+        "total_cost": 3.0,
+        "budget_remaining": 0.0,
+    }
+    assert len(run_writer.rounds) == 1
+    assert run_writer.rounds[0]["observations"] == stored_observations
+    assert [observation.x for observation in stored_observations] == [0, 2]
