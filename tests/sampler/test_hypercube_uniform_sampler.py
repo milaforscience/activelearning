@@ -49,10 +49,12 @@ def test_samples_within_bounds_hartmann():
 
 
 def test_fidelity_is_none_by_default():
-    """Fidelity defaults to None when fidelities not specified."""
+    """Fidelity defaults to DEFAULT_FIDELITY when fidelities not specified."""
+    from activelearning.utils.types import DEFAULT_FIDELITY
+
     sampler = HypercubeUniformSampler(bounds=BRANIN_BOUNDS, num_samples=5)
     for candidate in sampler.sample():
-        assert candidate.fidelity is None
+        assert candidate.fidelity == DEFAULT_FIDELITY
 
 
 def test_fidelity_sampled_from_list():

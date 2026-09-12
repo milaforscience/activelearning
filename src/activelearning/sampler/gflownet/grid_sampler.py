@@ -1,7 +1,7 @@
 """GFlowNet sampler for grid domains."""
 
 from types import MethodType
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, Sequence
 
 import numpy as np
 import torch
@@ -14,6 +14,7 @@ from activelearning.sampler.gflownet.gflownet_sampler import GFlowNetSampler
 from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
     MultiFidelityGFlowNetEnvWrapperBase,
 )
+from activelearning.utils.types import DEFAULT_FIDELITY
 
 
 class GFlowNetGridSampler(GFlowNetSampler):
@@ -48,11 +49,11 @@ class GFlowNetGridSampler(GFlowNetSampler):
     conf : DictConfig
         Complete GFlowNet configuration tree (env, policy, gflownet, loss,
         buffer, evaluator, logger, proxy).
-    fidelities : list[int] or None
+    fidelities : Sequence[int]
         See :class:`~activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler`.
     fidelity_action : {"any", "first", "last"}
         Controls when fidelity is chosen during a trajectory. Only used when
-        ``fidelities`` is not ``None``. See
+        more than one fidelity is configured. See
         :class:`~activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler`
         for full semantics.
     domain_bounds : list of [lo, hi] pairs, optional
@@ -74,7 +75,7 @@ class GFlowNetGridSampler(GFlowNetSampler):
         self,
         n_samples: int,
         conf: DictConfig,
-        fidelities: Optional[List[int]] = None,
+        fidelities: Sequence[int] = (DEFAULT_FIDELITY,),
         fidelity_action: Literal["any", "first", "last"] = "any",
         domain_bounds: Optional[List[List[float]]] = None,
     ) -> None:
@@ -137,7 +138,7 @@ class GFlowNetGridSampler(GFlowNetSampler):
         """Build agent, applying per-dimension coordinate bounds to the env if set."""
         agent = super()._build_agent(acquisition, cost_fn=cost_fn)
         # For multi-fidelity, bounds are applied inside _build_multi_fidelity_env.
-        if self.domain_bounds is not None and self.fidelities is None:
+        if self.domain_bounds is not None and self._n_fidelities == 1:
             _apply_per_dimension_bounds(agent.env, self.domain_bounds)
         return agent
 

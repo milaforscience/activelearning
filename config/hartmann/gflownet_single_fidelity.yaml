@@ -37,6 +37,7 @@ acquisition:
 sampler:
   type: GFlowNetGridSampler
   n_samples: 100
+  fidelities: [1]  # single fidelity — auto-derived from oracle but stated here for clarity
   # Hartmann domain: [0, 1]^6.
   domain_bounds:
     - [0.0, 1.0]
