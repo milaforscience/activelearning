@@ -1,0 +1,530 @@
+"""Configuration-level tests for the checked-in tutorial examples."""
+
+from pathlib import Path
+
+import pytest
+from omegaconf import DictConfig, OmegaConf
+from pydantic import ValidationError
+
+from activelearning.config import ActiveLearningConfig
+from activelearning.monitoring.run_writer import JSONLinesRunWriter
+from activelearning.utils.config_loader import load_and_parse, load_config, parse_config
+from activelearning_molecules.config_catalogs import CONFIG_CATALOGS
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+MOLECULE_CONFIG_ROOT = REPOSITORY_ROOT / "applications" / "molecules" / "config"
+
+
+def parse_molecule_config(
+    cfg: DictConfig,
+    model: type[ActiveLearningConfig],
+):
+    """Parse a config with the molecular application's catalogs."""
+    return parse_config(
+        cfg,
+        model,
+        catalogs={"activelearning-molecules": CONFIG_CATALOGS},
+    )
+
+
+def load_and_parse_molecule_config(
+    path,
+    model: type[ActiveLearningConfig],
+    overrides=None,
+):
+    """Load and parse a config with the molecular application's catalogs."""
+    return load_and_parse(
+        path,
+        model,
+        overrides=overrides,
+        catalogs={"activelearning-molecules": CONFIG_CATALOGS},
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "overlay_name",
+        "sampler_type",
+        "sampler_fidelities",
+        "acquisition_type",
+        "oracle_costs",
+        "oracle_confidences",
+        "surrogate_is_multi_fidelity",
+    ),
+    [
+        pytest.param(
+            "mf_gfn",
+            "ExactGridSampler",
+            [1, 2, 3],
+            "QMultiFidelityLowerBoundMaxValueEntropy",
+            {1: 0.01, 2: 0.1, 3: 1.0},
+            {1: 0.1, 2: 0.5, 3: 1.0},
+            True,
+            id="mf-gfn",
+        ),
+        pytest.param(
+            "random",
+            "HypercubeSampler",
+            [1, 2, 3],
+            "QMultiFidelityLowerBoundMaxValueEntropy",
+            {1: 0.01, 2: 0.1, 3: 1.0},
+            {1: 0.1, 2: 0.5, 3: 1.0},
+            True,
+            id="random",
+        ),
+        pytest.param(
+            "sf_low_fid",
+            "ExactGridSampler",
+            [1],
+            "QMultiFidelityLowerBoundMaxValueEntropy",
+            {1: 0.01},
+            {1: 0.1},
+            False,
+            id="sf-low",
+        ),
+        pytest.param(
+            "sf_mid_fid",
+            "ExactGridSampler",
+            [2],
+            "QMultiFidelityLowerBoundMaxValueEntropy",
+            {2: 0.1},
+            {2: 0.5},
+            False,
+            id="sf-mid",
+        ),
+        pytest.param(
+            "sf_high_fid",
+            "ExactGridSampler",
+            [3],
+            "QMultiFidelityLowerBoundMaxValueEntropy",
+            {3: 1.0},
+            {3: 1.0},
+            False,
+            id="sf-high",
+        ),
+    ],
+)
+def test_branin_benchmark_configs_parse(
+    overlay_name: str,
+    sampler_type: str,
+    sampler_fidelities: list[int],
+    acquisition_type: str,
+    oracle_costs: dict[int, float],
+    oracle_confidences: dict[int, float],
+    surrogate_is_multi_fidelity: bool,
+) -> None:
+    """Ensure each public Branin benchmark overlay resolves as intended."""
+    config = load_and_parse(
+        [
+            REPOSITORY_ROOT / "config" / "branin_benchmark" / "base.yaml",
+            REPOSITORY_ROOT / "config" / "branin_benchmark" / f"{overlay_name}.yaml",
+        ],
+        ActiveLearningConfig,
+    )
+
+    assert config.oracle.type == "BraninOracle"
+    assert config.sampler.type == sampler_type
+    assert config.sampler.fidelities == sampler_fidelities
+    assert config.acquisition.type == acquisition_type
+    assert config.oracle.fidelity_costs == oracle_costs
+    assert config.oracle.fidelity_confidences == oracle_confidences
+    assert config.surrogate.is_multi_fidelity is surrogate_is_multi_fidelity
+    assert config.budget.available_budget == 100.0
+    assert config.budget.max_rounds == 300
+    assert config.diagnostics.enabled is True
+    assert config.diagnostics.figure_interval == 1
+    assert config.diagnostics.max_points == 1000
+    assert config.run_writer is not None
+    assert config.run_writer.output_dir == Path(
+        f"outputs/branin_benchmark/{overlay_name}/seed_42"
+    )
+
+
+def test_branin_benchmark_base_config_parses_run_writer(tmp_path) -> None:
+    """The public Branin benchmark config should resolve a runnable JSON-lines writer."""
+    config = load_and_parse(
+        [
+            REPOSITORY_ROOT / "config" / "branin_benchmark" / "base.yaml",
+            REPOSITORY_ROOT / "config" / "branin_benchmark" / "mf_gfn.yaml",
+        ],
+        ActiveLearningConfig,
+    )
+
+    assert config.run_writer is not None
+    assert config.run_writer.output_dir == Path(
+        "outputs/branin_benchmark/mf_gfn/seed_42"
+    )
+
+    run_writer = config.run_writer.model_copy(
+        update={"output_dir": tmp_path / "benchmark-run"}
+    ).build()
+
+    assert isinstance(run_writer, JSONLinesRunWriter)
+
+
+def test_branin_single_fidelity_tutorial_config_parses() -> None:
+    """Ensure the standalone single-fidelity Branin tutorial config matches the schema."""
+    config_path = REPOSITORY_ROOT / "config" / "branin" / "single_fidelity.yaml"
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.oracle.type == "BraninOracle"
+    assert config.sampler.type == "HypercubeSampler"
+    assert config.sampler.fidelities == [1]
+    assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
+    assert config.oracle.fidelity_costs == {1: 1.0}
+    assert config.surrogate.is_multi_fidelity is False
+
+
+def test_branin_multi_fidelity_tutorial_config_parses() -> None:
+    """Ensure the standalone multi-fidelity Branin tutorial config matches the schema."""
+    config_path = REPOSITORY_ROOT / "config" / "branin" / "multi_fidelity.yaml"
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.oracle.type == "BraninOracle"
+    assert config.sampler.type == "HypercubeSampler"
+    assert config.sampler.fidelities == [1, 2, 3]
+    assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
+    assert config.oracle.fidelity_costs == {1: 0.01, 2: 0.1, 3: 1.0}
+    assert config.surrogate.is_multi_fidelity is True
+
+
+def test_single_fidelity_config_derives_sampler_level_and_surrogate_mode() -> None:
+    """The oracle's sole level must drive omitted sampler and surrogate settings."""
+    config_path = REPOSITORY_ROOT / "config" / "hartmann" / "single_fidelity.yaml"
+    raw_config = load_config(config_path)
+    raw_config.sampler.fidelities = None
+
+    config = parse_config(raw_config, ActiveLearningConfig)
+
+    assert config.sampler.fidelities == [1]
+    assert config.surrogate.is_multi_fidelity is False
+
+
+def test_multi_fidelity_config_rejects_fidelity_agnostic_surrogate() -> None:
+    """A multi-level oracle requires a fidelity-aware surrogate config."""
+    config_path = REPOSITORY_ROOT / "config" / "hartmann" / "multi_fidelity.yaml"
+    raw_config = load_config(config_path)
+    raw_config.surrogate = {"type": "DummyMeanSurrogate"}
+
+    with pytest.raises(ValidationError, match="does not support multi-fidelity"):
+        parse_config(raw_config, ActiveLearningConfig)
+
+
+def test_single_fidelity_dkl_config_clears_target_level() -> None:
+    """A target level is irrelevant and unsafe when DKL fidelity input is disabled."""
+    config_path = MOLECULE_CONFIG_ROOT / "exact.yaml"
+    raw_config = load_config(config_path)
+    raw_config.surrogate.target_fidelity = 99
+
+    config = parse_molecule_config(raw_config, ActiveLearningConfig)
+
+    assert config.surrogate.is_multi_fidelity is False
+    assert config.surrogate.target_fidelity is None
+
+
+def test_multi_fidelity_hartmann_tutorial_config_parses() -> None:
+    """Ensure the multi-fidelity Hartmann tutorial config matches the current schema."""
+    config_path = REPOSITORY_ROOT / "config" / "hartmann" / "multi_fidelity.yaml"
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.oracle.type == "Hartmann6DOracle"
+    assert config.budget.available_budget == 100.0
+    assert config.budget.schedule.type == "constant"
+    assert config.runtime.seed == 42
+    assert config.logger is not None
+
+
+def test_single_fidelity_hartmann_tutorial_config_parses() -> None:
+    """Ensure the single-fidelity Hartmann tutorial config matches the current schema."""
+    config_path = REPOSITORY_ROOT / "config" / "hartmann" / "single_fidelity.yaml"
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.oracle.type == "Hartmann6DOracle"
+    assert config.budget.schedule.type == "constant"
+    assert config.runtime.seed == 42
+    assert config.logger is not None
+
+
+def test_aim_logging_overlay_parses_when_merged_with_base_config() -> None:
+    """Ensure the Aim logging overlay remains schema-valid when merged with a base config."""
+    config = load_and_parse(
+        [
+            REPOSITORY_ROOT / "config" / "hartmann" / "single_fidelity.yaml",
+            REPOSITORY_ROOT / "config" / "aim_logging.yaml",
+        ],
+        ActiveLearningConfig,
+    )
+
+    assert config.runtime.seed == 42
+    assert config.logger is not None
+    assert config.logger.type == "MultiLogger"
+
+
+def test_molecule_dkl_exact_gflownet_config_parses() -> None:
+    """Ensure the SELFIES GFlowNet molecule tutorial config matches the schema."""
+    config_path = MOLECULE_CONFIG_ROOT / "gflownet_exact.yaml"
+
+    config = load_and_parse_molecule_config(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "GFlowNetSampler"
+    assert config.sampler.fidelities == [1]
+    assert config.selector.type == "TopKAcquisitionSelector"
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.acquisition.type == "UpperConfidenceBound"
+
+
+def test_molecule_dkl_exact_multi_fidelity_gflownet_config_parses() -> None:
+    """Ensure the exact SELFIES multi-fidelity GFlowNet config matches the schema."""
+    config_path = MOLECULE_CONFIG_ROOT / "gflownet_exact_multi_fidelity.yaml"
+
+    config = load_and_parse_molecule_config(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "GFlowNetSampler"
+    assert config.sampler.fidelities == [1, 2, 3]
+    assert config.selector.type == "TopKAcquisitionSelector"
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
+    assert config.oracle.num_conformers == 2
+    assert config.oracle.per_fidelity_num_conformers == {1: 1, 2: 2, 3: 4}
+
+
+def test_dkl_target_is_derived_from_highest_oracle_confidence() -> None:
+    """Explicit confidences, rather than costs, determine an omitted DKL target."""
+    config_path = MOLECULE_CONFIG_ROOT / "exact_multi_fidelity.yaml"
+    raw_config = load_config(config_path)
+    raw_config.surrogate.target_fidelity = None
+    raw_config.oracle.fidelity_confidences = {1: 0.2, 2: 1.0, 3: 0.7}
+
+    config = parse_molecule_config(raw_config, ActiveLearningConfig)
+
+    assert config.surrogate.is_multi_fidelity is True
+    assert config.surrogate.target_fidelity == 2
+
+
+def test_dkl_target_is_derived_through_composite_oracle() -> None:
+    """Composite oracle metadata must support the same target derivation."""
+    config_path = MOLECULE_CONFIG_ROOT / "exact_multi_fidelity.yaml"
+    raw_config = load_config(config_path)
+    raw_config.surrogate.target_fidelity = None
+    raw_config.oracle.fidelity_confidences = {1: 0.2, 2: 1.0, 3: 0.7}
+    sub_oracle = OmegaConf.to_container(raw_config.oracle, resolve=True)
+    raw_config.oracle = {
+        "type": "CompositeOracle",
+        "sub_oracles": [sub_oracle],
+    }
+
+    config = parse_molecule_config(raw_config, ActiveLearningConfig)
+
+    assert config.surrogate.is_multi_fidelity is True
+    assert config.surrogate.target_fidelity == 2
+
+
+def test_dkl_target_must_be_declared_by_oracle() -> None:
+    """An explicit target outside the oracle fidelity set must be rejected."""
+    config_path = MOLECULE_CONFIG_ROOT / "exact_multi_fidelity.yaml"
+    raw_config = load_config(config_path)
+    raw_config.surrogate.target_fidelity = 99
+
+    with pytest.raises(ValidationError, match="target_fidelity 99"):
+        parse_molecule_config(raw_config, ActiveLearningConfig)
+
+
+def test_sampler_fidelities_must_not_be_empty() -> None:
+    """An empty configured fidelity set must fail during parsing."""
+    config_path = REPOSITORY_ROOT / "config" / "hartmann" / "multi_fidelity.yaml"
+    raw_config = load_config(config_path)
+    raw_config.sampler.fidelities = []
+
+    with pytest.raises(ValidationError):
+        parse_config(raw_config, ActiveLearningConfig)
+
+
+def test_sampler_fidelities_must_not_contain_duplicates() -> None:
+    """Duplicate IDs must not change the sampler's derived fidelity mode."""
+    config_path = REPOSITORY_ROOT / "config" / "hartmann" / "single_fidelity.yaml"
+    raw_config = load_config(config_path)
+    raw_config.sampler.fidelities = [1, 1]
+
+    with pytest.raises(ValidationError, match="duplicate"):
+        parse_config(raw_config, ActiveLearningConfig)
+
+
+@pytest.mark.parametrize("cost", [0.0, -1.0])
+def test_sampler_fidelity_costs_must_be_positive(cost: float) -> None:
+    """Invalid sampler costs must fail during parsing."""
+    config_path = REPOSITORY_ROOT / "config" / "hartmann" / "single_fidelity.yaml"
+    raw_config = load_config(config_path)
+    raw_config.sampler.fidelities = {1: cost}
+
+    with pytest.raises(ValidationError):
+        parse_config(raw_config, ActiveLearningConfig)
+
+
+def test_sampler_fidelities_must_belong_to_oracle() -> None:
+    """Sampler levels outside the oracle's authoritative set must be rejected."""
+    config_path = REPOSITORY_ROOT / "config" / "hartmann" / "multi_fidelity.yaml"
+    raw_config = load_config(config_path)
+    raw_config.sampler.fidelities = [1, 4]
+
+    with pytest.raises(ValidationError, match=r"Sampler fidelities \[4\]"):
+        parse_config(raw_config, ActiveLearningConfig)
+
+
+def test_composite_oracle_rejects_conflicting_confidences() -> None:
+    """Sub-oracles must agree when they expose the same fidelity level."""
+    config_path = REPOSITORY_ROOT / "config" / "hartmann" / "multi_fidelity.yaml"
+    raw_config = load_config(config_path)
+    first_oracle = OmegaConf.to_container(raw_config.oracle, resolve=True)
+    second_oracle = OmegaConf.to_container(raw_config.oracle, resolve=True)
+    first_oracle["fidelity_confidences"] = {1: 0.1, 2: 0.5, 3: 1.0}
+    second_oracle["fidelity_confidences"] = {1: 0.2, 2: 0.5, 3: 1.0}
+    raw_config.oracle = {
+        "type": "CompositeOracle",
+        "sub_oracles": [first_oracle, second_oracle],
+    }
+
+    with pytest.raises(ValidationError, match="inconsistent confidence"):
+        parse_config(raw_config, ActiveLearningConfig)
+
+
+def test_molecule_dkl_variational_multi_fidelity_gflownet_config_parses() -> None:
+    """Ensure the variational SELFIES multi-fidelity GFlowNet config matches the schema."""
+    config_path = MOLECULE_CONFIG_ROOT / "gflownet_variational_multi_fidelity.yaml"
+
+    config = load_and_parse_molecule_config(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "GFlowNetSampler"
+    assert config.sampler.fidelities == [1, 2, 3]
+    assert config.selector.type == "TopKAcquisitionSelector"
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
+    assert config.oracle.num_conformers == 2
+    assert config.oracle.per_fidelity_num_conformers == {1: 1, 2: 2, 3: 4}
+
+
+def test_molecule_s3gfn_exact_config_parses() -> None:
+    """Ensure the single-fidelity S3-GFN molecule config matches the schema."""
+    config_path = MOLECULE_CONFIG_ROOT / "s3gfn_exact.yaml"
+
+    config = load_and_parse_molecule_config(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "S3GFNSampler"
+    assert config.sampler.fidelities == [1]
+    assert config.sampler.trust_remote_code is True
+    assert config.sampler.aux_coefficient == 0.001
+    assert config.surrogate.type == "ExactDKLSurrogate"
+    assert config.surrogate.encoder.type == "GPMoLFormerSmilesEncoder"
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.oracle.mol_repr == "smiles"
+
+
+def test_molecule_s3gfn_multi_fidelity_config_parses() -> None:
+    """Ensure the multi-fidelity S3-GFN molecule config matches the schema."""
+    config_path = MOLECULE_CONFIG_ROOT / "s3gfn_exact_multi_fidelity.yaml"
+
+    config = load_and_parse_molecule_config(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "S3GFNSampler"
+    assert config.sampler.fidelities == [1, 2, 3]
+    assert config.surrogate.is_multi_fidelity is True
+    assert config.surrogate.type == "ExactDKLSurrogate"
+    assert config.surrogate.encoder.type == "GPMoLFormerSmilesEncoder"
+    assert config.oracle.fidelity_costs == {1: 1.0, 2: 3.5, 3: 7.0}
+    assert config.oracle.mol_repr == "smiles"
+
+
+def test_molecule_s3gfn_minimol_exact_config_parses() -> None:
+    """Ensure the standalone S3-GFN MiniMol example matches the schema."""
+    config_path = MOLECULE_CONFIG_ROOT / "s3gfn_minimol_exact.yaml"
+
+    config = load_and_parse_molecule_config(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "S3GFNSampler"
+    assert config.sampler.fidelities == [1]
+    assert config.surrogate.type == "ExactDKLSurrogate"
+    assert config.surrogate.encoder.type == "MiniMolSmilesEncoder"
+    assert config.surrogate.encoder.latent_dim == 32
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.oracle.mol_repr == "smiles"
+
+
+def test_molecule_s3gfn_minimol_variational_multi_fidelity_config_parses() -> None:
+    """Ensure the variational multi-fidelity MiniMol example matches the schema."""
+    config_path = MOLECULE_CONFIG_ROOT / "s3gfn_minimol_variational_multi_fidelity.yaml"
+
+    config = load_and_parse_molecule_config(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "S3GFNSampler"
+    assert config.sampler.fidelities == [1, 2, 3]
+    assert config.surrogate.is_multi_fidelity is True
+    assert config.surrogate.type == "VariationalDKLSurrogate"
+    assert config.surrogate.target_fidelity == 3
+    assert config.surrogate.encoder.type == "MiniMolSmilesEncoder"
+    assert config.surrogate.encoder.latent_dim == 32
+    assert config.surrogate.num_inducing == 64
+    assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
+    assert config.oracle.fidelity_costs == {1: 1.0, 2: 3.5, 3: 7.0}
+    assert config.oracle.per_fidelity_num_conformers == {1: 1, 2: 2, 3: 4}
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.oracle.mol_repr == "smiles"
+    assert config.sampler.compile_strategy == "training_and_generation"
+    assert config.sampler.torch_compile_mode == "default"
+    assert config.sampler.model_dtype == "bfloat16"
+    assert config.sampler.batch_size == 64
+    assert config.sampler.replay_batch_size == 64
+    assert config.sampler.generation_batch_size is None
+
+
+def test_molecule_s3gfn_minimol_fixed_variational_multi_fidelity_config_parses() -> (
+    None
+):
+    """Ensure the fixed-feature MiniMol example matches the schema."""
+    config_path = (
+        MOLECULE_CONFIG_ROOT / "s3gfn_minimol_fixed_variational_multi_fidelity.yaml"
+    )
+
+    config = load_and_parse_molecule_config(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "S3GFNSampler"
+    assert config.sampler.fidelities == [1, 2, 3]
+    assert config.surrogate.is_multi_fidelity is True
+    assert config.surrogate.type == "VariationalGPSurrogate"
+    assert config.surrogate.target_fidelity == 3
+    assert config.surrogate.encoder.type == "MiniMolSmilesFixedEncoder"
+    assert config.surrogate.encoder.batch_size == 16
+    assert config.surrogate.num_inducing == 64
+    assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.oracle.mol_repr == "smiles"
+
+
+def test_molecule_dkl_exact_pool_config_parses() -> None:
+    """Ensure the exact single-fidelity pool-based molecule example matches the schema."""
+    config_path = MOLECULE_CONFIG_ROOT / "exact.yaml"
+
+    config = load_and_parse_molecule_config(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "PoolFileSampler"
+    assert config.surrogate.type == "ExactDKLSurrogate"
+    assert config.acquisition.type == "UpperConfidenceBound"
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.sampler.fidelities == [1]
+
+
+def test_molecule_dkl_exact_multi_fidelity_pool_config_parses() -> None:
+    """Ensure the exact multi-fidelity pool-based molecule example matches the schema."""
+    config_path = MOLECULE_CONFIG_ROOT / "exact_multi_fidelity.yaml"
+
+    config = load_and_parse_molecule_config(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "PoolFileSampler"
+    assert config.surrogate.type == "ExactDKLSurrogate"
+    assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
+    assert config.selector.type == "CostAwareSelector"
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.sampler.fidelities == [1, 2, 3]
