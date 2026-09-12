@@ -150,6 +150,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         budget=budget,
         runtime_context=runtime_context,
         run_writer=run_writer,
+        diagnostics_config=cfg.diagnostics,
     )
 
     print(f"Done. Rounds: {num_rounds} | Total cost: {total_cost:.4f}")

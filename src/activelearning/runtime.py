@@ -8,7 +8,13 @@ from activelearning.logger.logger import Logger
 
 @dataclass
 class RuntimeContext:
-    """Shared runtime settings available to active learning components."""
+    """Shared runtime settings available to active-learning components.
+
+    The optional logger is part of the runtime context so components can submit
+    live telemetry during their own work. Durable ``RunWriter`` persistence is
+    intentionally owned by the loop, so components cannot write partial round
+    records.
+    """
 
     logger: Logger | None = None
     device: torch.device = torch.device("cpu")
@@ -29,14 +35,14 @@ def resolve_torch_dtype(precision: int) -> torch.dtype:
 
 
 class RuntimeContextConfig(BaseModel):
-    """Configuration for global torch runtime defaults."""
+    """Configuration for global torch runtime defaults and shared live telemetry."""
 
     device: str = "cpu"
     precision: Literal[32, 64] = 64
     seed: int = Field(default=42, ge=0)
 
     def build(self, logger: Logger | None = None) -> RuntimeContext:
-        """Materialize the configured runtime context."""
+        """Materialize runtime settings and attach the optional shared logger."""
         return RuntimeContext(
             logger=logger,
             device=torch.device(self.device),

@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pytest
 
-from activelearning.run_writer import JSONLinesRunWriter
+from activelearning.monitoring.run_writer import JSONLinesRunWriter, RoundRecord
 from activelearning.utils.plotting import (
     AggregatedCheckpoint,
     MethodStyle,
@@ -21,6 +21,35 @@ from activelearning.utils.plotting import (
     plot_metric,
 )
 from activelearning.utils.types import Candidate, Observation
+
+
+def _round_record(
+    *,
+    round_index: int,
+    selected_candidate: Candidate,
+    observation: Observation,
+    selected_cost: float,
+    cumulative_cost: float,
+    remaining_budget: float,
+) -> RoundRecord:
+    """Build a minimal round record for benchmark-reader fixtures."""
+    return RoundRecord(
+        round_index=round_index,
+        observations_before=[],
+        observations_after=[observation],
+        sampled_candidates=[],
+        selected_candidates=[selected_candidate],
+        selected_costs=[selected_cost],
+        queried_observations=[observation],
+        valid_observations=[observation],
+        round_budget=selected_cost,
+        initial_budget=cumulative_cost + remaining_budget,
+        cumulative_cost=cumulative_cost,
+        remaining_budget=remaining_budget,
+        metrics={},
+        profiling={},
+        diagnostics={},
+    )
 
 
 def test_compute_mean_top_k_accepts_numpy_arrays() -> None:
@@ -48,26 +77,24 @@ def test_loading_reads_jsonlines_run_writer_artifacts(tmp_path: Path) -> None:
         }
     )
     writer.record_round(
-        round_index=1,
-        sampled_candidates=[],
-        sampled_scores=None,
-        selected_candidates=[Candidate(x=[1.0, 2.0])],
-        selected_scores=None,
-        selected_costs=[2.0],
-        observations=[Observation(x=[1.0, 2.0], y=0.5)],
-        cumulative_cost=2.0,
-        remaining_budget=3.0,
+        _round_record(
+            round_index=1,
+            selected_candidate=Candidate(x=[1.0, 2.0]),
+            observation=Observation(x=[1.0, 2.0], y=0.5),
+            selected_cost=2.0,
+            cumulative_cost=2.0,
+            remaining_budget=3.0,
+        )
     )
     writer.record_round(
-        round_index=2,
-        sampled_candidates=[],
-        sampled_scores=None,
-        selected_candidates=[Candidate(x=[2.0, 3.0])],
-        selected_scores=None,
-        selected_costs=[1.0],
-        observations=[Observation(x=[2.0, 3.0], y=0.75)],
-        cumulative_cost=3.0,
-        remaining_budget=2.0,
+        _round_record(
+            round_index=2,
+            selected_candidate=Candidate(x=[2.0, 3.0]),
+            observation=Observation(x=[2.0, 3.0], y=0.75),
+            selected_cost=1.0,
+            cumulative_cost=3.0,
+            remaining_budget=2.0,
+        )
     )
 
     rows = load_run_checkpoints(
@@ -106,7 +133,7 @@ def test_loading_preserves_cumulative_opaque_observations(tmp_path: Path) -> Non
             {
                 "round_index": 1,
                 "cumulative_cost": 1.0,
-                "new_observations": [{"kind": "round-1"}],
+                "valid_observations": [{"kind": "round-1"}],
             }
         )
         + "\n",
@@ -146,14 +173,14 @@ def test_loading_warns_and_skips_malformed_artifacts(tmp_path: Path) -> None:
                     {
                         "round_index": 1,
                         "cumulative_cost": 1.0,
-                        "new_observations": [],
+                        "valid_observations": [],
                     }
                 ),
                 json.dumps(
                     {
                         "round_index": 2,
                         "cumulative_cost": 2.0,
-                        "new_observations": "not-a-list",
+                        "valid_observations": "not-a-list",
                     }
                 ),
             ]
@@ -176,7 +203,7 @@ def test_loading_warns_and_skips_malformed_artifacts(tmp_path: Path) -> None:
     assert any("Missing run manifest" in message for message in warnings)
     assert any("malformed JSONL line" in message for message in warnings)
     assert any("empty JSONL line" in message for message in warnings)
-    assert any("malformed new_observations" in message for message in warnings)
+    assert any("malformed valid_observations" in message for message in warnings)
 
 
 def test_aggregation_supports_arbitrary_metrics_and_sample_std() -> None:

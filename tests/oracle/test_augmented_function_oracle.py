@@ -125,27 +125,26 @@ class TestBraninOracleQuery:
         build_figure.assert_not_called()
         logger.log_figure.assert_not_called()
 
-    def test_query_logs_landscape_when_enabled(self, branin_fidelity_costs):
+    def test_query_defers_landscape_until_round_diagnostics_drain(
+        self, branin_fidelity_costs
+    ):
         oracle = BraninOracle(fidelity_costs=branin_fidelity_costs, log_landscape=True)
-        logger = Mock()
-        oracle.bind_runtime_context(RuntimeContext(logger=logger))
         figure = Mock()
 
-        with (
-            patch(
-                "activelearning.oracle.augmented_function_oracle."
-                "build_augmented_2d_landscape_figure",
-                return_value=figure,
-            ) as build_figure,
-            patch(
-                "activelearning.oracle.augmented_function_oracle.plt.close"
-            ) as close_figure,
-        ):
+        with patch(
+            "activelearning.oracle.augmented_function_oracle."
+            "build_augmented_2d_landscape_figure",
+            return_value=figure,
+        ) as build_figure:
             oracle.query([Candidate(x=[0.5, 7.5], fidelity=3)])
+            metrics, figures = oracle.drain_round_diagnostics(
+                include_figures=True,
+                max_points=1000,
+            )
 
         build_figure.assert_called_once()
-        logger.log_figure.assert_called_once_with("branin_landscape_query", figure)
-        close_figure.assert_called_once_with(figure)
+        assert metrics == {}
+        assert figures == {"oracle/branin/query_landscape": figure}
 
 
 class TestHartmann6DOracleQuery:

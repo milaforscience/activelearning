@@ -42,19 +42,38 @@ class TopKAcquisitionSelector(Selector):
         Returns
         -------
         result : list[Candidate]
-            List of top candidates by ranking score.
+            Selected candidates in descending ranking-score order.
         """
+        self._clear_selection_scores()
         if acquisition is None:
             raise ValueError("Acquisition function is required for ScoreSelector.")
         if not candidates:
             return []
 
         if cost_fn is None:
-            acq_values = acquisition.score(candidates)
+            acquisition_scores = list(acquisition.score(candidates))
+            ranking_scores = acquisition_scores
         else:
-            acq_values = acquisition.score(
-                candidates,
-                cost_weighting=cost_weighting_from_cost_fn(cost_fn),
+            acquisition_scores = list(acquisition.score(candidates))
+            ranking_scores = list(
+                cost_weighting_from_cost_fn(cost_fn)(
+                    acquisition_scores,
+                    candidates,
+                )
             )
-        ranked = sorted(zip(candidates, acq_values), key=lambda cv: cv[1], reverse=True)
-        return [candidate for candidate, _ in ranked[: self.num_samples]]
+        if len(acquisition_scores) != len(candidates):
+            raise ValueError("Acquisition scores must match the candidate pool.")
+        if len(ranking_scores) != len(candidates):
+            raise ValueError("Ranking scores must match the candidate pool.")
+        selected_indices = sorted(
+            range(len(candidates)),
+            key=lambda index: ranking_scores[index],
+            reverse=True,
+        )[: self.num_samples]
+        if selected_indices:
+            self._record_selection_scores(
+                acquisition_scores,
+                ranking_scores,
+                selected_indices,
+            )
+        return [candidates[index] for index in selected_indices]

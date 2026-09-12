@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from collections.abc import Hashable, Mapping
+import math
 from typing import Any, Iterable, Optional
 
 import torch
@@ -61,6 +63,92 @@ class Observation:
     y: Any
     fidelity: int = DEFAULT_FIDELITY
     metadata: Optional[dict[str, Any]] = None
+
+
+_UNSUPPORTED_IDENTITY = object()
+
+
+def candidate_identity(
+    candidate_or_observation: Candidate | Observation,
+) -> Hashable | None:
+    """Return a deterministic identity for a candidate or observation.
+
+    Primitive values and nested list, tuple, mapping, NumPy, and tensor values
+    are supported. Domain-specific objects return ``None`` so generic
+    diagnostics do not impose a representation on them.
+    """
+    canonical = _canonical_identity(candidate_or_observation.x)
+    if canonical is _UNSUPPORTED_IDENTITY:
+        return None
+    return candidate_or_observation.fidelity, canonical
+
+
+def candidate_inputs_match(
+    candidate: Candidate,
+    observation: Observation,
+) -> bool | None:
+    """Compare candidate and observation inputs when their identities are known."""
+    candidate_key = candidate_identity(candidate)
+    observation_key = candidate_identity(observation)
+    if candidate_key is None or observation_key is None:
+        return None
+    return candidate_key == observation_key
+
+
+def _canonical_identity(value: Any) -> Hashable | object:
+    """Convert a supported input value into a tagged hashable structure."""
+    if value is None:
+        return ("none",)
+    if isinstance(value, bool):
+        return ("bool", value)
+    if isinstance(value, int):
+        return ("int", value)
+    if isinstance(value, float):
+        if not math.isfinite(value):
+            return _UNSUPPORTED_IDENTITY
+        return ("float", value)
+    if isinstance(value, str):
+        return ("str", value)
+    if isinstance(value, bytes):
+        return ("bytes", value)
+
+    if hasattr(value, "detach") and callable(value.detach):
+        try:
+            value = value.detach().cpu().tolist()
+        except (AttributeError, TypeError, ValueError, RuntimeError):
+            return _UNSUPPORTED_IDENTITY
+    elif hasattr(value, "tolist") and callable(value.tolist):
+        try:
+            converted_value = value.tolist()
+        except (AttributeError, TypeError, ValueError, RuntimeError):
+            return _UNSUPPORTED_IDENTITY
+        if converted_value is value:
+            return _UNSUPPORTED_IDENTITY
+        return _canonical_identity(converted_value)
+
+    if isinstance(value, Mapping):
+        items: list[tuple[Hashable, Hashable]] = []
+        for key, item in value.items():
+            canonical_key = _canonical_identity(key)
+            canonical_item = _canonical_identity(item)
+            if (
+                canonical_key is _UNSUPPORTED_IDENTITY
+                or canonical_item is _UNSUPPORTED_IDENTITY
+            ):
+                return _UNSUPPORTED_IDENTITY
+            items.append((canonical_key, canonical_item))
+        return ("mapping", tuple(sorted(items, key=repr)))
+    if isinstance(value, list):
+        items = [_canonical_identity(item) for item in value]
+        if any(item is _UNSUPPORTED_IDENTITY for item in items):
+            return _UNSUPPORTED_IDENTITY
+        return ("sequence", tuple(items))
+    if isinstance(value, tuple):
+        items = [_canonical_identity(item) for item in value]
+        if any(item is _UNSUPPORTED_IDENTITY for item in items):
+            return _UNSUPPORTED_IDENTITY
+        return ("sequence", tuple(items))
+    return _UNSUPPORTED_IDENTITY
 
 
 def has_finite_target(observation: Observation) -> bool:
