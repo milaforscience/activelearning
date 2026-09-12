@@ -3,7 +3,7 @@
 import logging
 import hydra
 import torch
-from typing import Any, Iterable, Literal, Optional
+from typing import Any, Callable, Iterable, Literal, Optional, Sequence
 from omegaconf import DictConfig, OmegaConf
 from gflownet.gflownet import GFlowNetAgent
 from gflownet.utils.common import gflownet_from_config
@@ -80,7 +80,11 @@ class GFlowNetSampler(Sampler):
         """Return floating-point precision as an integer (32 or 64)."""
         return 32 if self.dtype == torch.float32 else 64
 
-    def _build_agent(self, acquisition: Acquisition) -> GFlowNetAgent:
+    def _build_agent(
+        self,
+        acquisition: Acquisition,
+        cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
+    ) -> GFlowNetAgent:
         """Build and return a ``GFlowNetAgent`` ready for training.
 
         Merges runtime device/precision into the config, then calls
@@ -95,6 +99,9 @@ class GFlowNetSampler(Sampler):
         ----------
         acquisition : Acquisition
             Acquisition function used as the GFlowNet reward proxy.
+        cost_fn : callable, optional
+            Candidate cost function forwarded to the proxy so acquisition
+            scores can be reweighted before GFlowNet uses them as rewards.
 
         Returns
         -------
@@ -114,6 +121,8 @@ class GFlowNetSampler(Sampler):
 
         agent = gflownet_from_config(conf, env=env)
         agent.proxy.set_acquisition(acquisition)
+        agent.proxy.set_cost_fn(cost_fn)
+        agent.proxy.set_fidelity_map(self.fidelities)
 
         if self.logger is not None:
             agent.logger = RuntimeGFlowNetLoggerWrapper(
@@ -194,6 +203,7 @@ class GFlowNetSampler(Sampler):
         self,
         acquisition: Optional[Any] = None,
         observations: Optional[Iterable[Observation]] = None,
+        cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
     ) -> list[Candidate]:
         """Train a GFlowNet agent and return sampled candidates.
 
@@ -203,6 +213,9 @@ class GFlowNetSampler(Sampler):
             Acquisition function used as the GFlowNet reward proxy. Required.
         observations : Optional[Iterable[Observation]]
             Unused; reserved for future warm-starting.
+        cost_fn : Optional[Callable[[Sequence[Candidate]], list[float]]]
+            Optional candidate cost function forwarded to the proxy so
+            acquisition scores can be reweighted before sampling.
 
         Returns
         -------
@@ -217,7 +230,7 @@ class GFlowNetSampler(Sampler):
         if acquisition is None:
             raise ValueError("GFlowNetSampler requires an acquisition function.")
 
-        agent = self._build_agent(acquisition)
+        agent = self._build_agent(acquisition, cost_fn=cost_fn)
         agent.train()
 
         batch, _ = agent.sample_batch(n_forward=self.n_samples, train=False)

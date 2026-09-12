@@ -279,7 +279,6 @@ def test_pydantic_gflownet_grid_sampler_config_builds_with_compose(tmp_path):
 
     cfg = GFlowNetGridSamplerConfig(
         n_samples=5,
-        n_fidelities=1,
         log_dir=str(tmp_path),
         conf={
             "env": {

@@ -27,15 +27,21 @@ class _ConstantAcquisition:
     def __init__(self, value: float = 2.0) -> None:
         self.value = value
 
-    def score(self, candidates: list[Candidate]) -> list[float]:
-        return [self.value] * len(candidates)
+    def score(self, candidates: list[Candidate], cost_weighting=None) -> list[float]:
+        values = [self.value] * len(candidates)
+        if cost_weighting is not None:
+            return cost_weighting(values, candidates)
+        return values
 
 
 class _CoordSumAcquisition:
     """Returns the sum of each candidate's coordinates."""
 
-    def score(self, candidates: list[Candidate]) -> list[float]:
-        return [sum(c.x) for c in candidates]
+    def score(self, candidates: list[Candidate], cost_weighting=None) -> list[float]:
+        values = [sum(c.x) for c in candidates]
+        if cost_weighting is not None:
+            return cost_weighting(values, candidates)
+        return values
 
 
 class _FidelityCapturingAcquisition:
@@ -43,10 +49,29 @@ class _FidelityCapturingAcquisition:
 
     def __init__(self) -> None:
         self.seen: list[int | None] = []
+        self.used_cost_weighting = False
 
-    def score(self, candidates: list[Candidate]) -> list[float]:
+    def score(self, candidates: list[Candidate], cost_weighting=None) -> list[float]:
         self.seen.extend(c.fidelity for c in candidates)
-        return [1.0] * len(candidates)
+        values = [1.0] * len(candidates)
+        if cost_weighting is not None:
+            self.used_cost_weighting = True
+            return cost_weighting(values, candidates)
+        return values
+
+
+class _StringCapturingAcquisition:
+    """Records candidate proxy values to verify string inputs are preserved."""
+
+    def __init__(self) -> None:
+        self.seen: list[object] = []
+
+    def score(self, candidates: list[Candidate], cost_weighting=None) -> list[float]:
+        self.seen.extend(c.x for c in candidates)
+        values = [1.0] * len(candidates)
+        if cost_weighting is not None:
+            return cost_weighting(values, candidates)
+        return values
 
 
 class _StubMFEnv(MultiFidelityGFlowNetEnvWrapperBase):
@@ -100,6 +125,10 @@ class TestAcquisitionProxyInit:
         env = object()
         proxy.setup(env)
         assert proxy._env is env
+
+    def test_cost_fn_defaults_to_none(self):
+        proxy = _make_proxy()
+        assert proxy.cost_fn is None
 
     def test_setup_none_clears_env(self):
         proxy = _make_proxy()
@@ -171,6 +200,19 @@ class TestAcquisitionProxyCallSingleFidelity:
     def test_list_of_sequences_input(self):
         result = self.proxy([[0.1, 0.2], [0.3, 0.4]])
         assert result.shape == (2,)
+
+    def test_list_of_strings_preserves_candidate_proxy_value(self):
+        acq = _StringCapturingAcquisition()
+        self.proxy.set_acquisition(acq)
+        self.proxy(["[C][=O][N]"])
+        assert acq.seen == ["[C][=O][N]"]
+
+    def test_cost_fn_is_forwarded_through_cost_weighting(self):
+        acq = _FidelityCapturingAcquisition()
+        proxy = _make_proxy(cost_fn=lambda candidates: [2.0 for _ in candidates])
+        proxy.set_acquisition(acq)
+        proxy(torch.tensor([[0.1, 0.2]]))
+        assert acq.used_cost_weighting is True
 
 
 # ---------------------------------------------------------------------------

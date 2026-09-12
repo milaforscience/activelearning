@@ -26,35 +26,28 @@ from tests.sampler.gflownet.conftest import _make_minimal_gflownet_conf
 class _ConstantAcquisition:
     """Returns a fixed scalar for every candidate."""
 
-    def score(self, candidates: Sequence[Candidate]) -> list[float]:
-        return [1.0] * len(candidates)
+    def score(
+        self, candidates: Sequence[Candidate], cost_weighting=None
+    ) -> list[float]:
+        scores = [1.0] * len(candidates)
+        return (
+            cost_weighting(scores, candidates) if cost_weighting is not None else scores
+        )
 
 
 class _CountingAcquisition:
     """Returns the sum of absolute coordinates as a proxy score."""
 
-    def score(self, candidates: Sequence[Candidate]) -> list[float]:
-        return [sum(abs(v) for v in c.x) for c in candidates]
+    def score(
+        self, candidates: Sequence[Candidate], cost_weighting=None
+    ) -> list[float]:
+        scores = [sum(abs(v) for v in c.x) for c in candidates]
+        return (
+            cost_weighting(scores, candidates) if cost_weighting is not None else scores
+        )
 
     def update(self, surrogate, observations) -> None:  # noqa: ARG002
         pass
-
-
-# ---------------------------------------------------------------------------
-# Selector wrapper: assigns a fidelity to each selected candidate
-# ---------------------------------------------------------------------------
-
-
-class _FidelityAssigningSelector:
-    """Delegates to an inner selector, then stamps a fixed fidelity on results."""
-
-    def __init__(self, inner, fidelity: int = 0) -> None:
-        self.inner = inner
-        self.fidelity = fidelity
-
-    def __call__(self, samples, **kwargs):
-        selected = self.inner(samples, **kwargs)
-        return [Candidate(x=c.x, fidelity=self.fidelity) for c in selected]
 
 
 # ---------------------------------------------------------------------------
@@ -314,7 +307,8 @@ class TestGFlowNetGridSamplerActivelearningLoop:
 
     def test_active_learning_loop_runs_at_least_one_round(self):
         """Full AL loop completes at least one round and returns observations."""
-        sampler = GFlowNetGridSampler(n_samples=20, conf=self.conf)
+        # fidelities=[0] stamps fidelity 0 on every candidate, matching the oracle.
+        sampler = GFlowNetGridSampler(n_samples=20, conf=self.conf, fidelities=[0])
         oracle = BraninOracle(
             fidelity_costs={0: 1.0},
             fidelity_confidences={0: 1.0},
@@ -324,9 +318,7 @@ class TestGFlowNetGridSamplerActivelearningLoop:
             surrogate=DummyMeanSurrogate(),
             acquisition=_CountingAcquisition(),
             sampler=sampler,
-            selector=_FidelityAssigningSelector(
-                inner=TopKAcquisitionSelector(num_samples=3), fidelity=0
-            ),
+            selector=TopKAcquisitionSelector(num_samples=3),
             oracle=oracle,
             budget=Budget(available_budget=5.0, schedule=lambda r: 3.0),
         )
@@ -335,7 +327,7 @@ class TestGFlowNetGridSamplerActivelearningLoop:
 
     def test_active_learning_loop_observations_have_correct_dimensionality(self):
         """All oracle observations carry 2-D coordinates."""
-        sampler = GFlowNetGridSampler(n_samples=20, conf=self.conf)
+        sampler = GFlowNetGridSampler(n_samples=20, conf=self.conf, fidelities=[0])
         oracle = BraninOracle(
             fidelity_costs={0: 1.0},
             fidelity_confidences={0: 1.0},
@@ -345,9 +337,7 @@ class TestGFlowNetGridSamplerActivelearningLoop:
             surrogate=DummyMeanSurrogate(),
             acquisition=_CountingAcquisition(),
             sampler=sampler,
-            selector=_FidelityAssigningSelector(
-                inner=TopKAcquisitionSelector(num_samples=3), fidelity=0
-            ),
+            selector=TopKAcquisitionSelector(num_samples=3),
             oracle=oracle,
             budget=Budget(available_budget=5.0, schedule=lambda r: 3.0),
         )
@@ -359,7 +349,7 @@ class TestGFlowNetGridSamplerActivelearningLoop:
         """logger.end() must be called exactly once — by the AL loop, not the sampler."""
         from unittest.mock import Mock
 
-        sampler = GFlowNetGridSampler(n_samples=20, conf=self.conf)
+        sampler = GFlowNetGridSampler(n_samples=20, conf=self.conf, fidelities=[0])
         runtime_logger = Mock()
         runtime_context = RuntimeContext(logger=runtime_logger)
         oracle = BraninOracle(
@@ -371,9 +361,7 @@ class TestGFlowNetGridSamplerActivelearningLoop:
             surrogate=DummyMeanSurrogate(),
             acquisition=_CountingAcquisition(),
             sampler=sampler,
-            selector=_FidelityAssigningSelector(
-                inner=TopKAcquisitionSelector(num_samples=3), fidelity=0
-            ),
+            selector=TopKAcquisitionSelector(num_samples=3),
             oracle=oracle,
             budget=Budget(available_budget=5.0, schedule=lambda r: 3.0),
             runtime_context=runtime_context,

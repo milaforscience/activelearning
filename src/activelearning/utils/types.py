@@ -9,14 +9,25 @@ class Candidate:
     """Represents a candidate item to be evaluated or sampled.
 
     Uses maximum type flexibility to support various data representations.
+
+    Attributes
+    ----------
+    x : Any
+        Input feature or identifier. Commonly: primitives (int, float, str),
+        arrays (numpy.ndarray), tensors (torch.Tensor), or structured data (dict, tuple).
+    fidelity : Optional[int]
+        Optional fidelity level for multi-fidelity optimization.
+        Higher fidelity typically means more accurate but more expensive.
+    metadata : Optional[dict[str, Any]]
+        Domain-specific auxiliary data carried alongside the candidate.
+        Not consumed by the core AL loop but available to user components
+        (e.g., provenance tracking, auxiliary scores, or domain-specific
+        annotations).
     """
 
-    #: Input feature or identifier. Commonly: primitives (int, float, str),
-    #: arrays (numpy.ndarray), tensors (torch.Tensor), or structured data (dict, tuple).
     x: Any
-    #: Optional fidelity level for multi-fidelity optimization.
-    #: Higher fidelity typically means more accurate but more expensive.
     fidelity: Optional[int] = None
+    metadata: Optional[dict[str, Any]] = None
 
 
 @dataclass(frozen=True)
@@ -24,15 +35,79 @@ class Observation:
     """Represents an observed (x, y) pair, optionally at a fidelity.
 
     Uses maximum type flexibility to support various data representations.
+
+    Attributes
+    ----------
+    x : Any
+        Input feature or identifier. Same semantics as Candidate.x.
+    y : Any
+        Observed output or label. Commonly: scalar (float), vector (list, array),
+        or categorical label (str, int).
+    fidelity : Optional[int]
+        Optional fidelity level at which the observation was made.
+    metadata : Optional[dict[str, Any]]
+        Domain-specific auxiliary data carried alongside the observation.
+        See :class:`Candidate` for usage details.
     """
 
-    #: Input feature or identifier. Same semantics as Candidate.x.
     x: Any
-    #: Observed output or label. Commonly: scalar (float), vector (list, array),
-    #: or categorical label (str, int).
     y: Any
-    #: Optional fidelity level at which the observation was made.
     fidelity: Optional[int] = None
+    metadata: Optional[dict[str, Any]] = None
+
+
+def has_finite_target(observation: Observation) -> bool:
+    """Return True if the observation has a usable label for model training.
+
+    Returns False when:
+
+    - ``y`` is ``None`` (explicit absence of a label, e.g. a failed oracle evaluation)
+    - ``y`` is a numeric scalar, list, or array that contains NaN or infinite values
+
+    Non-numeric targets (strings, dicts, etc.) cannot be checked for finiteness
+    and are treated as valid (``True``).
+
+    Parameters
+    ----------
+    observation : Observation
+        The observation to check.
+
+    Returns
+    -------
+    bool
+        ``True`` if the target is usable, ``False`` if it should be excluded
+        from model training.
+    """
+    value = observation.y
+    if value is None:
+        return False
+    try:
+        tensor = torch.as_tensor(value, dtype=torch.float64)
+        return bool(torch.isfinite(tensor).all())
+    except (TypeError, ValueError, RuntimeError):
+        return True
+
+
+def filter_finite_target_observations(
+    observations: Iterable[Observation],
+) -> list[Observation]:
+    """Return only observations with finite numeric or non-numeric targets.
+
+    Drops observations where ``y`` is ``None`` or a numeric value containing NaN
+    or infinite entries. Non-numeric targets (strings, dicts, etc.) pass through
+    unchanged.
+
+    Parameters
+    ----------
+    observations : Iterable[Observation]
+        Iterable of observations to filter.
+
+    Returns
+    -------
+    list[Observation]
+        Filtered list containing only valid observations.
+    """
+    return [obs for obs in observations if has_finite_target(obs)]
 
 
 def label_candidates(
@@ -58,7 +133,12 @@ def label_candidates(
     if len(candidates_list) != len(labels_list):
         raise ValueError("Length of candidates and labels must match.")
     return [
-        Observation(x=candidate.x, y=label, fidelity=candidate.fidelity)
+        Observation(
+            x=candidate.x,
+            y=label,
+            fidelity=candidate.fidelity,
+            metadata=candidate.metadata,
+        )
         for candidate, label in zip(candidates_list, labels_list)
     ]
 
