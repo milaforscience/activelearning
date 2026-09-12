@@ -54,12 +54,13 @@ Every core component in this loop is designed to be strictly modular. This means
     [:octicons-arrow-right-24: Extension Guide](extension-guide/overview.md)
     · [API Reference](reference/)
 
--   :material-flask-outline:{ .lg .middle } [**Run Experiments**](tutorials/synthetic_function_experiment.md)
+-   :material-flask-outline:{ .lg .middle } [**Run Experiments**](tutorials/running_experiments.md)
 
     ---
 
     Start with standard benchmark tutorials (like Branin or Hartmann), then learn how to plug in your own custom oracles.
 
-    [:octicons-arrow-right-24: Synthetic Function Examples](tutorials/synthetic_function_experiment.md)
+    [:octicons-arrow-right-24: Running Experiments](tutorials/running_experiments.md)
+    · [Branin Benchmark](tutorials/branin_benchmark.md)
 
 </div>

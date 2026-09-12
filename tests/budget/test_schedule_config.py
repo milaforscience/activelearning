@@ -8,6 +8,7 @@ import pytest
 
 from activelearning.budget.budget import Budget
 from activelearning.budget.budget_schedule import sigmoid_iteration_schedule
+from activelearning.budget.config import BudgetConfig
 
 
 class TestSigmoidIterationSchedule:
@@ -83,6 +84,40 @@ class TestSigmoidIterationSchedule:
         early = sum(schedule(i) for i in range(3))
         late = sum(schedule(i) for i in range(7, 10))
         assert late > early
+
+
+class TestBudgetConfig:
+    """Tests for parsing and building optional budget round limits."""
+
+    def test_max_rounds_is_optional(self):
+        config = BudgetConfig(
+            available_budget=100.0,
+            schedule={"type": "constant", "value": 10.0},
+        )
+
+        budget = config.build()
+
+        assert budget.max_rounds is None
+
+    def test_build_preserves_max_rounds(self):
+        config = BudgetConfig(
+            available_budget=100.0,
+            max_rounds=3,
+            schedule={"type": "constant", "value": 10.0},
+        )
+
+        budget = config.build()
+
+        assert budget.max_rounds == 3
+
+    @pytest.mark.parametrize("max_rounds", [0, -1])
+    def test_rejects_non_positive_max_rounds(self, max_rounds):
+        with pytest.raises(ValueError, match="greater than 0"):
+            BudgetConfig(
+                available_budget=100.0,
+                max_rounds=max_rounds,
+                schedule={"type": "constant", "value": 10.0},
+            )
 
 
 class TestSigmoidParameterValidation:

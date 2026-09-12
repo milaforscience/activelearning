@@ -154,6 +154,31 @@ def test_active_learning_loop(
     assert surrogate.get_fidelity_confidences() == oracle.get_fidelity_confidences()
 
 
+def test_active_learning_stops_at_configured_max_rounds(
+    dataset, surrogate, acquisition, sampler, selector, oracle
+):
+    """A round cap stops the loop while unused total budget remains."""
+    budget = Budget(
+        available_budget=100.0,
+        schedule=lambda _: 20.0,
+        max_rounds=1,
+    )
+
+    _, cost, num_iter = active_learning(
+        dataset=dataset,
+        surrogate=surrogate,
+        acquisition=acquisition,
+        sampler=sampler,
+        selector=selector,
+        oracle=oracle,
+        budget=budget,
+    )
+
+    assert num_iter == 1
+    assert cost > 0.0
+    assert budget.available_budget > 0.0
+
+
 def test_active_learning_rejects_unsupported_multi_fidelity_surrogate(
     dataset, acquisition, sampler, selector, oracle, budget
 ):
