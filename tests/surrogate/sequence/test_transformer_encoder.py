@@ -1,4 +1,4 @@
-"""Tests for SelfiesTransformerEncoder."""
+"""Tests for the reusable TransformerSequenceEncoder."""
 
 import math
 
@@ -6,10 +6,10 @@ import pytest
 import selfies as sf
 import torch
 
-from activelearning.applications.molecules.selfies_transformer_encoder import (
+from activelearning.surrogate.sequence.transformer_encoder import (
     MaskedMeanPool,
     PositionalEncoding,
-    SelfiesTransformerEncoder,
+    TransformerSequenceEncoder,
 )
 from activelearning.applications.molecules.selfies_tokenizer import (
     SELFIES_VOCAB_SMALL,
@@ -29,10 +29,10 @@ def tokenizer() -> SelfiesTokenizer:
 
 
 @pytest.fixture
-def encoder(tokenizer: SelfiesTokenizer) -> SelfiesTransformerEncoder:
-    return SelfiesTransformerEncoder(
+def encoder(tokenizer: SelfiesTokenizer) -> TransformerSequenceEncoder:
+    return TransformerSequenceEncoder(
         tokenizer=tokenizer,
-        max_mol_tokens=32,
+        max_tokens=32,
         embed_dim=16,
         ff_dim=32,
         num_heads=2,
@@ -43,13 +43,13 @@ def encoder(tokenizer: SelfiesTokenizer) -> SelfiesTransformerEncoder:
 
 @pytest.fixture
 def token_batch(tokenizer: SelfiesTokenizer) -> torch.Tensor:
-    return tokenizer.batch_from_selfies([BENZENE, ALANINE], max_mol_tokens=32)
+    return tokenizer.batch_from_selfies([BENZENE, ALANINE], max_tokens=32)
 
 
 @pytest.fixture
 def short_token_batch(tokenizer: SelfiesTokenizer) -> torch.Tensor:
     """A batch with very short sequences: ethanol (len 3) and methane (len 1)."""
-    return tokenizer.batch_from_selfies([ETHANOL, METHANE], max_mol_tokens=16)
+    return tokenizer.batch_from_selfies([ETHANOL, METHANE], max_tokens=16)
 
 
 class TestPositionalEncoding:
@@ -161,9 +161,9 @@ class TestMaskedMeanPool:
         assert out.dtype == dtype
 
 
-class TestSelfiesTransformerEncoder:
+class TestTransformerSequenceEncoder:
     def test_forward_shape(
-        self, encoder: SelfiesTransformerEncoder, token_batch: torch.Tensor
+        self, encoder: TransformerSequenceEncoder, token_batch: torch.Tensor
     ):
         out = encoder(token_batch)
         assert out.shape == (2, 8)  # (batch, latent_dim)
@@ -171,7 +171,7 @@ class TestSelfiesTransformerEncoder:
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
     def test_forward_output_dtype_matches(
         self,
-        encoder: SelfiesTransformerEncoder,
+        encoder: TransformerSequenceEncoder,
         token_batch: torch.Tensor,
         dtype: torch.dtype,
     ) -> None:
@@ -180,21 +180,21 @@ class TestSelfiesTransformerEncoder:
         assert out.dtype == dtype
 
     def test_encode_tokens_shapes(
-        self, encoder: SelfiesTransformerEncoder, token_batch: torch.Tensor
+        self, encoder: TransformerSequenceEncoder, token_batch: torch.Tensor
     ):
         features, mask = encoder.encode_tokens(token_batch)
         assert features.shape[:2] == token_batch.shape  # (B, seq_len, latent_dim)
         assert mask.shape == token_batch.shape
 
     def test_mlm_loss_scalar(
-        self, encoder: SelfiesTransformerEncoder, token_batch: torch.Tensor
+        self, encoder: TransformerSequenceEncoder, token_batch: torch.Tensor
     ):
         loss = encoder.mlm_loss(token_batch, mask_ratio=0.15)
         assert loss.ndim == 0
         assert float(loss) >= 0.0
 
     def test_mlm_loss_zero_mask_ratio_handled(
-        self, encoder: SelfiesTransformerEncoder, token_batch: torch.Tensor
+        self, encoder: TransformerSequenceEncoder, token_batch: torch.Tensor
     ) -> None:
         """Zero mask ratio → no tokens masked → zero loss (graceful skip)."""
         loss = encoder.mlm_loss(token_batch, mask_ratio=0.0)
@@ -202,7 +202,7 @@ class TestSelfiesTransformerEncoder:
 
     def test_sample_mask_positions_ratio(
         self,
-        encoder: SelfiesTransformerEncoder,
+        encoder: TransformerSequenceEncoder,
         token_batch: torch.Tensor,
         tokenizer: SelfiesTokenizer,
     ) -> None:
@@ -238,32 +238,32 @@ class TestSelfiesTransformerEncoder:
             padding_positions = token_batch[row] == tokenizer.padding_idx
             assert not mask[row, padding_positions].any()
 
-    def test_max_seq_len_attribute(self, encoder: SelfiesTransformerEncoder):
-        # max_seq_len = max_mol_tokens + 2
-        assert encoder.max_seq_len == 32 + 2
-        assert encoder.max_mol_tokens == 32
+    def test_max_tokens_attribute(self, encoder: TransformerSequenceEncoder):
+        # max_tokens includes the CLS and EOS positions.
+        assert encoder.max_tokens == 32
+        assert encoder.max_tokens == 32
 
-    def test_latent_dim_attribute(self, encoder: SelfiesTransformerEncoder):
+    def test_latent_dim_attribute(self, encoder: TransformerSequenceEncoder):
         assert encoder.latent_dim == 8
 
     def test_odd_embed_dim_encoder_forward(self, tokenizer: SelfiesTokenizer):
-        odd_encoder = SelfiesTransformerEncoder(
+        odd_encoder = TransformerSequenceEncoder(
             tokenizer=tokenizer,
-            max_mol_tokens=16,
+            max_tokens=16,
             embed_dim=9,
             ff_dim=16,
             num_heads=1,
             num_layers=1,
             latent_dim=5,
         )
-        batch = tokenizer.batch_from_selfies([BENZENE], max_mol_tokens=16)
+        batch = tokenizer.batch_from_selfies([BENZENE], max_tokens=16)
         out = odd_encoder(batch)
         assert out.shape == (1, 5)
 
     def test_encode_tokens_mask_excludes_only_padding(
-        self, encoder: SelfiesTransformerEncoder, tokenizer: SelfiesTokenizer
+        self, encoder: TransformerSequenceEncoder, tokenizer: SelfiesTokenizer
     ) -> None:
-        token_batch = tokenizer.batch_from_selfies([BENZENE], max_mol_tokens=16)
+        token_batch = tokenizer.batch_from_selfies([BENZENE], max_tokens=16)
         _, mask = encoder.encode_tokens(token_batch)
         # CLS at position 0 must be included.
         assert mask[0, 0].item() is True
@@ -277,11 +277,11 @@ class TestSelfiesTransformerEncoder:
             assert mask[0, eos_position + 1 :].any().item() is False
 
     def test_empty_sequence_produces_finite_output(
-        self, encoder: SelfiesTransformerEncoder, tokenizer: SelfiesTokenizer
+        self, encoder: TransformerSequenceEncoder, tokenizer: SelfiesTokenizer
     ) -> None:
         """Empty SELFIES should encode finitely and never receive MLM masks."""
         token_batch = tokenizer.batch_from_selfies(
-            [EMPTY_SELFIES, BENZENE], max_mol_tokens=8
+            [EMPTY_SELFIES, BENZENE], max_tokens=8
         )
 
         out = encoder(token_batch)
@@ -293,7 +293,7 @@ class TestSelfiesTransformerEncoder:
 
     def test_short_sequences_forward_shape(
         self,
-        encoder: SelfiesTransformerEncoder,
+        encoder: TransformerSequenceEncoder,
         short_token_batch: torch.Tensor,
     ) -> None:
         """Very short sequences (ethanol len 3, methane len 1) should produce finite embeddings."""
@@ -303,7 +303,7 @@ class TestSelfiesTransformerEncoder:
 
     def test_short_sequences_encode_tokens_shapes(
         self,
-        encoder: SelfiesTransformerEncoder,
+        encoder: TransformerSequenceEncoder,
         short_token_batch: torch.Tensor,
     ) -> None:
         """encode_tokens should return matching feature and mask shapes for short sequences."""
@@ -322,7 +322,7 @@ class TestSelfiesTransformerEncoder:
     )
     def test_sample_mask_positions_short_sequence_floor(
         self,
-        encoder: SelfiesTransformerEncoder,
+        encoder: TransformerSequenceEncoder,
         tokenizer: SelfiesTokenizer,
         selfies_str: str,
         expected_valid_tokens: int,
@@ -331,7 +331,7 @@ class TestSelfiesTransformerEncoder:
 
         Special tokens (CLS, EOS, padding) must never be masked.
         """
-        batch = tokenizer.batch_from_selfies([selfies_str], max_mol_tokens=16)
+        batch = tokenizer.batch_from_selfies([selfies_str], max_tokens=16)
         mask = encoder.sample_mask_positions(batch, mask_ratio=0.15)
 
         n_masked = int(mask.sum())
@@ -351,7 +351,7 @@ class TestSelfiesTransformerEncoder:
 
     def test_mlm_loss_short_sequence_zero_when_no_tokens_masked(
         self,
-        encoder: SelfiesTransformerEncoder,
+        encoder: TransformerSequenceEncoder,
         short_token_batch: torch.Tensor,
     ) -> None:
         """MLM loss should be zero when strict proportional masking selects no tokens."""

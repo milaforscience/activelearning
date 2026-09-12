@@ -396,7 +396,7 @@ def test_molecule_dkl_exact_single_fidelity_pool_config_parses() -> None:
     config = load_and_parse(config_path, ActiveLearningConfig)
 
     assert config.sampler.type == "PoolFileSampler"
-    assert config.surrogate.type == "ExactSelfiesDKLSurrogate"
+    assert config.surrogate.type == "ExactDKLSurrogate"
     assert config.acquisition.type == "UpperConfidenceBound"
     assert config.oracle.type == "XTBIPEAOracle"
     assert config.sampler.fidelities == [1]
@@ -409,7 +409,7 @@ def test_molecule_dkl_exact_multi_fidelity_pool_config_parses() -> None:
     config = load_and_parse(config_path, ActiveLearningConfig)
 
     assert config.sampler.type == "PoolFileSampler"
-    assert config.surrogate.type == "ExactSelfiesDKLSurrogate"
+    assert config.surrogate.type == "ExactDKLSurrogate"
     assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
     assert config.selector.type == "CostAwareSelector"
     assert config.oracle.type == "XTBIPEAOracle"

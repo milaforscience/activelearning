@@ -8,6 +8,7 @@ from activelearning.applications.molecules.selfies_tokenizer import (
     SELFIES_VOCAB_SMALL,
     SelfiesTokenizer,
 )
+from activelearning.surrogate.sequence.tokenizer import SequenceTokenizer
 
 BENZENE = "[C][=C][C][=C][C][=C][Ring1][=Branch1]"
 ALANINE = "[C][C][Branch1][C][N][C][=Branch1][C][=O][O]"
@@ -31,6 +32,11 @@ class TestSelfiesVocab:
 
 
 class TestSelfiesTokenizer:
+    def test_implements_molecule_tokenizer_protocol(
+        self, tokenizer: SelfiesTokenizer
+    ) -> None:
+        assert isinstance(tokenizer, SequenceTokenizer)
+
     def test_vocab_size(self, tokenizer: SelfiesTokenizer):
         # base_vocab = SELFIES_VOCAB_SMALL + [nop, EOS] + dedup specials
         assert tokenizer.vocab_size > len(SELFIES_VOCAB_SMALL)
@@ -121,15 +127,15 @@ class TestSelfiesTokenizer:
             tokenizer.transform_batch(torch.zeros(10, dtype=torch.long))
 
     def test_batch_from_selfies_shape(self, tokenizer: SelfiesTokenizer):
-        batch = tokenizer.batch_from_selfies([BENZENE, ALANINE], max_mol_tokens=64)
-        assert batch.shape == (2, 66)  # 64 + 2
+        batch = tokenizer.batch_from_selfies([BENZENE, ALANINE], max_tokens=64)
+        assert batch.shape == (2, 64)
         assert batch.dtype == torch.long
 
     def test_batch_from_selfies_mixed_short_and_long_sequences(
         self, tokenizer: SelfiesTokenizer
     ) -> None:
-        batch = tokenizer.batch_from_selfies([BENZENE, LONG_SELFIES], max_mol_tokens=16)
-        assert batch.shape == (2, 18)
+        batch = tokenizer.batch_from_selfies([BENZENE, LONG_SELFIES], max_tokens=16)
+        assert batch.shape == (2, 16)
         assert batch.dtype == torch.long
 
     @pytest.mark.parametrize(
@@ -140,11 +146,9 @@ class TestSelfiesTokenizer:
         self, tokenizer: SelfiesTokenizer, selfies_string: str
     ) -> None:
         """Single-sequence batches place CLS, tokens, EOS, and padding exactly."""
-        max_mol_tokens = 32
+        max_tokens = 32
         real_token_count = sf.len_selfies(selfies_string)
-        batch = tokenizer.batch_from_selfies(
-            [selfies_string], max_mol_tokens=max_mol_tokens
-        )
+        batch = tokenizer.batch_from_selfies([selfies_string], max_tokens=max_tokens)
         row = batch[0]
         eos_index = real_token_count + 1
 
@@ -152,14 +156,12 @@ class TestSelfiesTokenizer:
         assert int(row[eos_index]) == tokenizer.eos_idx
         assert torch.all(row[eos_index + 1 :] == tokenizer.padding_idx)
         assert int((row == tokenizer.padding_idx).sum().item()) == (
-            max_mol_tokens - real_token_count
+            max_tokens - real_token_count - 2
         )
 
     def test_batch_from_selfies_device(self, tokenizer: SelfiesTokenizer):
         device = torch.device("cpu")
-        batch = tokenizer.batch_from_selfies(
-            [BENZENE], max_mol_tokens=32, device=device
-        )
+        batch = tokenizer.batch_from_selfies([BENZENE], max_tokens=32, device=device)
         assert batch.device.type == "cpu"
 
     def test_transform_batch_cls_eos_for_all_rows(

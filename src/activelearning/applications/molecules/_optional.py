@@ -2,14 +2,29 @@
 
 from __future__ import annotations
 
+from activelearning.utils.optional import missing_optional_dependency_error
+
 
 def missing_molecules_dependency_error(
     component: str, error: ImportError
 ) -> ImportError:
-    """Return a consistent ImportError for missing molecules extras."""
-    _ = error
-    return ImportError(
-        f"{component} requires optional molecules dependencies that are not installed.\n"
-        "Install them with:  uv sync --extra molecules\n"
-        "or:                 pip install activelearning[molecules]"
+    """Return a consistent error for a missing molecules extra.
+
+    Parameters
+    ----------
+    component : str
+        Component that could not be initialized.
+    error : ImportError
+        Original import error, used as the cause when the returned error is
+        raised.
+
+    Returns
+    -------
+    ImportError
+        Actionable error explaining how to install the molecules extra.
+    """
+    return missing_optional_dependency_error(
+        component=component,
+        extra="molecules",
+        error=error,
     )
