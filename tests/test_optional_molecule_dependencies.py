@@ -80,7 +80,7 @@ def test_core_config_import_and_branin_parse_work_without_molecule_extras() -> N
 def test_building_molecule_component_raises_helpful_error_without_extras() -> None:
     script = _blocked_imports_prelude() + textwrap.dedent(
         """
-        from activelearning.applications.molecules.config import SelfiesTransformerEncoderConfig
+        from activelearning.surrogate.encoder_config import SelfiesTransformerEncoderConfig
 
         try:
             SelfiesTransformerEncoderConfig().build()

@@ -1,8 +1,8 @@
 """Pydantic models of surrogate models.
 
 Changes in the interface of existing surrogates should be reflected in this
-configuration. New surrogates should define their corresponding pydantic model here and
-be added to ``SurrogateConfig``.
+configuration. New built-in surrogates should be added to the explicit
+discriminated union below.
 """
 
 from typing import (
@@ -20,12 +20,12 @@ from pydantic import BaseModel, Field, ImportString, field_validator, model_vali
 from gpytorch.module import Module
 
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
+from activelearning.surrogate.dkl.config import (
+    ExactDKLSurrogateConfig,
+    VariationalDKLSurrogateConfig,
+)
 from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
 from activelearning.surrogate.surrogate import Surrogate
-from activelearning.applications.molecules.config import (
-    ExactSelfiesDKLSurrogateConfig,
-    VariationalSelfiesDKLSurrogateConfig,
-)
 
 
 @runtime_checkable
@@ -36,17 +36,63 @@ class FidelityAwareSurrogateConfig(Protocol):
         self,
         confidences: dict[int, float],
     ) -> BaseModel:
-        """Return this config with oracle-derived fidelity settings resolved."""
+        """Return this config with oracle-derived fidelity settings resolved.
+
+        Parameters
+        ----------
+        confidences : dict[int, float]
+            Mapping from fidelity levels to their oracle-derived confidence
+            values.
+
+        Returns
+        -------
+        BaseModel
+            Revalidated configuration with fidelity settings resolved.
+        """
 
 
 class DummyMeanSurrogateConfig(BaseModel):
+    """Configuration for the constant-mean baseline surrogate."""
+
     type: Literal["DummyMeanSurrogate"] = "DummyMeanSurrogate"
 
     def build(self) -> Surrogate:
+        """Build the configured dummy surrogate.
+
+        Returns
+        -------
+        Surrogate
+            A new :class:`~activelearning.surrogate.dummy_mean_surrogate.DummyMeanSurrogate`.
+        """
         return DummyMeanSurrogate()
 
 
 class BoTorchGPSurrogateConfig(BaseModel):
+    """Configuration for the numeric-input BoTorch Gaussian process surrogate.
+
+    The optional import-string fields allow callers to provide custom fitting
+    functions or covariance modules through YAML/Pydantic configuration.
+
+    Parameters
+    ----------
+    scale_inputs : bool, default=True
+        Whether BoTorch normalizes model inputs.
+    standardize_outputs : bool, default=True
+        Whether BoTorch standardizes regression targets.
+    optimize_hyperparameters : bool, default=True
+        Whether the configured GP hyperparameters are optimized during fitting.
+    fit_kwargs : dict[str, Any], optional
+        Keyword arguments passed to the fitting function.
+    custom_fit_function : callable, optional
+        Importable custom fitting function.
+    covar_module : gpytorch Module or callable, optional
+        Custom covariance module or constructor.
+    covar_module_kwargs : dict[str, Any], optional
+        Keyword arguments passed to a covariance-module constructor.
+    use_partial_updates : bool, default=False
+        Whether incremental updates use the fast partial-update path.
+    """
+
     type: Literal["BoTorchGPSurrogate"] = "BoTorchGPSurrogate"
     scale_inputs: bool = True
     standardize_outputs: bool = True
@@ -209,8 +255,8 @@ SurrogateConfig = Annotated[
     Union[
         DummyMeanSurrogateConfig,
         BoTorchGPSurrogateConfig,
-        ExactSelfiesDKLSurrogateConfig,
-        VariationalSelfiesDKLSurrogateConfig,
+        ExactDKLSurrogateConfig,
+        VariationalDKLSurrogateConfig,
     ],
     Field(discriminator="type"),
 ]

@@ -1,5 +1,6 @@
 ---
 description: "When a pull request becomes ready for review, update relevant documentation on the same branch."
+model: gpt-5.6-luna?effort=high
 
 on:
   pull_request:
