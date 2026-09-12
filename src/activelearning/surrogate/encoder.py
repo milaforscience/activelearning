@@ -1,4 +1,4 @@
-"""Shared encoder contracts for Deep Kernel Learning surrogates.
+"""Shared encoder contracts for DKL and fixed-feature GP surrogates.
 
 Deep Kernel Learning uses one encoder object for two distinct stages. First,
 ``prepare_inputs()`` converts raw domain values into fixed model-space tensors.
@@ -16,6 +16,8 @@ from typing import Any
 
 import torch
 from torch import Tensor, nn
+
+from activelearning.runtime import ALRuntimeMixin
 
 
 class LatentEncoder(nn.Module, ABC):
@@ -70,3 +72,18 @@ class LatentEncoder(nn.Module, ABC):
         Tensor
             Latent feature tensor with final dimension ``latent_dim``.
         """
+
+
+class FixedEncoder(ABC, ALRuntimeMixin):
+    """Map raw domain values to fixed-width, non-trainable representations."""
+
+    feature_dim: int
+
+    @abstractmethod
+    def encode(
+        self,
+        values: Sequence[Any],
+        *,
+        device: torch.device,
+    ) -> Tensor:
+        """Return a batched fixed representation for raw domain values."""
