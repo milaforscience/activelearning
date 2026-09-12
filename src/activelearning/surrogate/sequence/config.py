@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from activelearning.config_registry import BuildableConfig
 
 if TYPE_CHECKING:
     from activelearning.surrogate.sequence.huggingface_encoder import (
@@ -14,7 +16,7 @@ if TYPE_CHECKING:
 __all__ = ["HuggingFaceEncoderConfig"]
 
 
-class HuggingFaceEncoderConfig(BaseModel):
+class HuggingFaceEncoderConfig(BuildableConfig):
     """Shared configuration for frozen Hugging Face sequence encoders.
 
     Parameters

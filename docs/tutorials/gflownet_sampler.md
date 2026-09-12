@@ -190,5 +190,7 @@ The temperature $\beta$ controls the sharpness of $R$: higher $\beta$ concentrat
 ## **What comes next**
 
 - Adapt the configs to your own oracle — see the [Extension Guide](../extension-guide/overview.md) for how to swap in a custom oracle without touching any other component.
-- Apply the same sampler to molecular strings — see [Molecule Discovery with SMILES, SELFIES, and xTB](molecule_discovery.md) for the molecular GFlowNet examples.
+- Apply the same framework to molecular strings — see the
+  [activelearning-molecules application guide](https://github.com/milaforscience/activelearning/tree/main/applications/molecules)
+  for molecular GFlowNet and S3-GFN examples.
 - Implement a custom sampler architecture (e.g. a continuous-action GFlowNet for unbounded spaces) — see the [Sampler extension guide](../extension-guide/sampler.md).

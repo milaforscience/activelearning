@@ -1,0 +1,14 @@
+sampler:
+  type: HypercubeSampler
+  bounds:
+    - [-5.0, 10.0]
+    - [0.0, 15.0]
+  num_samples: 150
+  point_strategy: uniform
+  fidelity_policy:
+    type: uniform
+    values: [1, 2, 3]
+
+experiment:
+  name: num_samples
+  method: random_n150

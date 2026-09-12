@@ -51,23 +51,38 @@ Source: `src/activelearning/selector/`.
 
 ## **Config model and registration**
 
-Add a Pydantic config model in `src/activelearning/selector/config.py` and extend the `SelectorConfig` union. See the existing models in that file as reference.
+Add a `BuildableConfig` model and list it in the selector catalog in the same
+file. External packages do not edit core's `SelectorConfig`.
 
 ```python
-class MySelectorConfig(BaseModel):
+from typing import Literal
+
+from activelearning.config_registry import BuildableConfig
+
+
+class MySelectorConfig(BuildableConfig):
     type: Literal["MySelector"] = "MySelector"
     # your parameters here
 
     def build(self) -> Selector:
         return MySelector(...)
 
-SelectorConfig = Annotated[
-    Union[..., MySelectorConfig],
-    Field(discriminator="type"),
-]
+
+SELECTOR_CONFIGS = (MySelectorConfig,)
 ```
 
-Then in your YAML:
+Add `SELECTOR_CONFIGS` to the package's `CONFIG_CATALOGS` mapping in
+`my_package/config_catalogs.py` as shown in the
+[extension overview](overview.md#the-common-extension-recipe).
+
+Then compose the application command with this mapping:
+
+```python
+from activelearning.main import run
+from my_package.config_catalogs import CONFIG_CATALOGS
+
+run(catalogs={"my-package": CONFIG_CATALOGS}, program_name="my-package")
+```
 
 ```yaml
 selector:

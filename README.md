@@ -53,10 +53,35 @@ See the [uv documentation](https://docs.astral.sh/uv/concepts/projects/config/#p
 make test
 ```
 
+`make test` runs both the core suite and the molecular application suite.
+Use `make test-core` for a core-only installation or `make test-molecules` for
+the application package after `make setup`.
+
 ## Project Layout
 
-- Package code: `src/activelearning/`
-- Tests: `tests/`
+- Core package: `src/activelearning/`
+- Core tests: `tests/`
+- Molecular application package: `applications/molecules/`
+- Molecular tests and examples: `applications/molecules/tests/` and
+  `applications/molecules/config/`
+
+The `activelearning` distribution is domain-neutral. Install the reusable
+molecular components separately when needed:
+
+```sh
+pip install activelearning
+pip install activelearning-molecules
+```
+
+Run molecular experiments through the application-owned command:
+
+```sh
+uv run activelearning-molecules applications/molecules/config/exact.yaml
+```
+
+The molecular command supplies the molecular configuration catalogs to the
+core framework. Molecular YAML files therefore contain only experiment
+settings; the generic `activelearning` command remains core-only.
 
 ## Running an Experiment
 
@@ -99,12 +124,11 @@ Every experiment is defined by a single YAML file with these top-level sections:
 | `run_writer` | *(Optional)* Durable structured run-output sink |
 | `diagnostics` | *(Optional)* Diagnostic metric and figure controls |
 
-### S3-GFN performance controls
+### Applications
 
-S3-GFN supports BF16 model execution, compiled policy forwards, and independent
-training, replay, and final-generation batch sizes. See the
-[molecule discovery tutorial](docs/tutorials/molecule_discovery.md#s3-gfn-with-smiles)
-for configuration guidance and A100 benchmark results.
+Domain-specific components are maintained as separate workspace packages. See
+the [molecular application guide](applications/molecules/README.md) for
+installation, examples, S3-GFN configuration, and extension guidance.
 
 ### Overriding Config Values
 
@@ -188,7 +212,8 @@ The output directory contains `run_manifest.json`, `round_history.jsonl`,
   ```sh
   make install-uv
   ```
-- CI runs `make setup` and `make test`. Do not rename or remove these targets, as this will break GitHub Actions.
+- CI runs `make test-core` for the core job and `make test-all` for the
+  workspace job. Keep these targets stable when changing automation.
 - If hooks are not running, re-install manually:
   ```sh
   uv run pre-commit install

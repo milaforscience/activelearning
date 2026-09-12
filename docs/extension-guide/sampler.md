@@ -32,28 +32,51 @@ Source: `src/activelearning/sampler/`.
 
 ## **Config model and registration**
 
-Add a Pydantic config model in `src/activelearning/sampler/config.py` and extend the `SamplerConfig` union. See the existing models in that file as reference.
+For a core sampler, add a Pydantic config model in
+`src/activelearning/sampler/config.py` and list it in `SAMPLER_CONFIGS` in that
+same file. For a reusable domain-specific sampler, keep its schema and sampler
+catalog together in the application distribution.
 
 ```python
-class MySamplerConfig(BaseModel):
+from typing import Literal
+
+from activelearning.config_registry import BuildableConfig
+
+
+class MySamplerConfig(BuildableConfig):
     type: Literal["MySampler"] = "MySampler"
     # your parameters here
 
     def build(self) -> Sampler:
         return MySampler(...)
 
-SamplerConfig = Annotated[
-    Union[..., MySamplerConfig],
-    Field(discriminator="type"),
-]
+
+SAMPLER_CONFIGS = (MySamplerConfig,)
 ```
 
-Then reference it in your YAML:
+Add `SAMPLER_CONFIGS` to the package's `CONFIG_CATALOGS` mapping in
+`my_package/config_catalogs.py`, then compose that mapping in the application
+command:
+
+```python
+CONFIG_CATALOGS = {
+    "sampler": SAMPLER_CONFIGS,
+}
+```
+
+```python
+from activelearning.main import run
+from my_package.config_catalogs import CONFIG_CATALOGS
+
+run(catalogs={"my-package": CONFIG_CATALOGS}, program_name="my-package")
+```
 
 ```yaml
 sampler:
   type: MySampler
 ```
+
+Do not edit core registries or add full object paths to YAML.
 
 ## **Fidelity handling**
 

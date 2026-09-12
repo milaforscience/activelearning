@@ -189,9 +189,8 @@ Open the URL shown in the terminal. All runs appear under the
 All framework-owned keys use slash-delimited namespaces. GFlowNet metrics and
 figures mirrored into the active-learning logger use `sampler/gflownet/`;
 their native inner training steps remain available in the upstream GFlowNet
-logger. S3-GFN uses `sampler/s3gfn/` for training, generation, and reward
-metrics, and emits `sampler/s3gfn/training_losses`,
-`sampler/s3gfn/log_z`, and `sampler/s3gfn/reward/trajectory` figures.
+logger. Application packages may reserve their own implementation-specific
+namespaces; see the owning application documentation for those keys.
 
 !!! tip "Comparing runs"
     Because all runs log to the same `activelearning_tutorials` project, you
