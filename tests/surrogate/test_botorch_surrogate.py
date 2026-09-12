@@ -6,6 +6,10 @@ from botorch.models import SingleTaskGP
 from botorch.models.gp_regression_fidelity import SingleTaskMultiFidelityGP
 
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
+from activelearning.surrogate.surrogate import (
+    MultiFidelitySurrogate,
+    TargetFidelityProjector,
+)
 from activelearning.utils.types import Observation, Candidate
 from activelearning.dataset.list_dataset import ListDataset
 
@@ -87,7 +91,7 @@ def test_single_fidelity_fit_and_predict(single_fidelity_observations):
 
 
 def test_multi_fidelity_fit_and_predict(multi_fidelity_observations):
-    surrogate = BoTorchGPSurrogate()
+    surrogate = BoTorchGPSurrogate(is_multi_fidelity=True)
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
 
     # Test Fitting
@@ -107,13 +111,11 @@ def test_multi_fidelity_fit_and_predict(multi_fidelity_observations):
 
 
 def test_tensor_parsing_shapes(multi_fidelity_observations):
-    surrogate = BoTorchGPSurrogate()
+    surrogate = BoTorchGPSurrogate(is_multi_fidelity=True)
     surrogate.set_fidelity_confidences({0: 0.0, 1: 1.0})
 
     # Manually trigger parsing to check internal tensor shapes
-    train_X, train_Y, is_multi_fidelity = surrogate._parse_observations(
-        multi_fidelity_observations
-    )
+    train_X, train_Y = surrogate._parse_observations(multi_fidelity_observations)
 
     # 4 observations. x has 2 dims, plus 1 dim for the fidelity column
     assert train_X.shape == (4, 3)
@@ -130,29 +132,25 @@ def test_scalar_observation_parsing_uses_column_vector(
     """Test that scalar observations are reshaped to ``(N, 1)``."""
     surrogate = BoTorchGPSurrogate()
 
-    train_X, train_Y, is_multi_fidelity = surrogate._parse_observations(
+    train_X, train_Y = surrogate._parse_observations(
         scalar_single_fidelity_observations
     )
 
     assert train_X.shape == (3, 1)
     assert train_Y.shape == (3, 1)
-    assert is_multi_fidelity is False
 
 
 def test_scalar_multi_fidelity_observation_parsing_uses_column_vector(
     scalar_multi_fidelity_observations,
 ):
     """Test that scalar multi-fidelity observations keep the observation axis."""
-    surrogate = BoTorchGPSurrogate()
+    surrogate = BoTorchGPSurrogate(is_multi_fidelity=True)
     surrogate.set_fidelity_confidences({0: 0.25, 1: 0.95})
 
-    train_X, train_Y, is_multi_fidelity = surrogate._parse_observations(
-        scalar_multi_fidelity_observations
-    )
+    train_X, train_Y = surrogate._parse_observations(scalar_multi_fidelity_observations)
 
     assert train_X.shape == (4, 2)
     assert train_Y.shape == (4, 1)
-    assert is_multi_fidelity is True
     assert torch.allclose(
         train_X[:, -1], torch.tensor([0.25, 0.95, 0.25, 0.95], dtype=torch.float64)
     )
@@ -164,13 +162,10 @@ def test_multi_output_observation_parsing_preserves_output_dimension(
     """Test that vector-valued outputs keep their output dimension."""
     surrogate = BoTorchGPSurrogate()
 
-    train_X, train_Y, is_multi_fidelity = surrogate._parse_observations(
-        multi_output_observations
-    )
+    train_X, train_Y = surrogate._parse_observations(multi_output_observations)
 
     assert train_X.shape == (3, 2)
     assert train_Y.shape == (3, 2)
-    assert is_multi_fidelity is False
     assert torch.allclose(
         train_Y,
         torch.tensor(
@@ -180,16 +175,14 @@ def test_multi_output_observation_parsing_preserves_output_dimension(
     )
 
 
-def test_mixed_fidelity_raises_error():
-    surrogate = BoTorchGPSurrogate()
+def test_single_fidelity_surrogate_ignores_fidelity_column(multi_fidelity_observations):
+    """Single-fidelity surrogate ignores fidelity values: no fidelity column in train_X."""
+    surrogate = BoTorchGPSurrogate()  # is_multi_fidelity=False by default
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
-    bad_observations = [
-        Observation(x=[1.0], y=2.0, fidelity=0),
-        Observation(x=[2.0], y=3.0),  # Missing fidelity!
-    ]
-
-    with pytest.raises(ValueError, match="Mixed fidelity specification detected"):
-        surrogate.fit(bad_observations)
+    # Fitting in SF mode should produce 2-column train_X (x-dims only, no fidelity column)
+    surrogate.fit(multi_fidelity_observations)
+    assert surrogate._train_X is not None
+    assert surrogate._train_X.shape[-1] == 2  # no fidelity appended
 
 
 def test_update_unfitted_model(single_fidelity_observations):
@@ -453,14 +446,12 @@ def test_update_predictions_correct_both_modes(single_fidelity_observations):
 
 def test_fidelity_confidence_mapping(multi_fidelity_observations):
     """Test that integer fidelity IDs are correctly mapped to continuous confidences."""
-    surrogate = BoTorchGPSurrogate()
+    surrogate = BoTorchGPSurrogate(is_multi_fidelity=True)
 
     # Map fidelity 0 -> 0.5, fidelity 1 -> 0.95
     surrogate.set_fidelity_confidences({0: 0.5, 1: 0.95})
 
-    train_X, _, is_multi_fidelity = surrogate._parse_observations(
-        multi_fidelity_observations
-    )
+    train_X, _ = surrogate._parse_observations(multi_fidelity_observations)
 
     # The last column should now contain the mapped floats, not the 0 and 1 IDs
     expected_confidences = torch.tensor([0.5, 0.95, 0.5, 0.95], dtype=torch.float64)
@@ -470,10 +461,10 @@ def test_fidelity_confidence_mapping(multi_fidelity_observations):
 def test_multi_fidelity_fit_without_confidences_raises_value_error(
     multi_fidelity_observations,
 ):
-    """Test that missing explicit fidelity mappings fail fast with ValueError."""
-    surrogate = BoTorchGPSurrogate()
-
-    with pytest.raises(ValueError, match="no fidelity_confidences mapping"):
+    """Multi-fidelity surrogate requires fidelity confidences to be set before fit."""
+    surrogate = BoTorchGPSurrogate(is_multi_fidelity=True)
+    # _fidelity_confidences is empty → should raise before any tensor work
+    with pytest.raises(ValueError, match="fidelity confidences"):
         surrogate.fit(multi_fidelity_observations)
 
 
@@ -481,7 +472,7 @@ def test_custom_covar_module_routing(multi_fidelity_observations):
     """Test that providing a covar_module forces routing to SingleTaskGP in MF setting."""
     from gpytorch.kernels import RBFKernel
 
-    surrogate = BoTorchGPSurrogate(covar_module=RBFKernel())
+    surrogate = BoTorchGPSurrogate(is_multi_fidelity=True, covar_module=RBFKernel())
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
 
@@ -490,7 +481,7 @@ def test_custom_covar_module_routing(multi_fidelity_observations):
         "Should use SingleTaskGP when covar_module is provided"
     )
     assert surrogate.is_multi_fidelity is True, (
-        "Should still track that the data has fidelity columns"
+        "is_multi_fidelity is fixed at construction and unchanged by fitting"
     )
 
 
@@ -563,23 +554,25 @@ def test_predict_before_fit_raises():
         surrogate.predict(candidates)
 
 
-def test_parse_candidates_missing_fidelity_raises(multi_fidelity_observations):
-    """Test that predict raises ValueError when multi-fidelity model gets candidates without fidelity."""
-    surrogate = BoTorchGPSurrogate()
+def test_parse_candidates_default_fidelity_in_mf_mode(multi_fidelity_observations):
+    """Candidates with DEFAULT_FIDELITY (0) are accepted when fidelity 0 is in the map."""
+    surrogate = BoTorchGPSurrogate(is_multi_fidelity=True)
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
 
-    # Candidates missing fidelity values
+    # Candidates without explicit fidelity get DEFAULT_FIDELITY (0), which IS in the map
     candidates = [Candidate(x=[1.5, 2.5]), Candidate(x=[2.5, 3.5])]
-    with pytest.raises(ValueError, match="All candidates must provide a fidelity"):
-        surrogate.predict(candidates)
+    test_X = surrogate.encode_candidates(candidates)
+    # Should succeed and have a fidelity column (confidence 0.5 for fidelity 0)
+    assert test_X.shape[-1] == 3  # 2 feature dims + 1 fidelity column
+    assert torch.allclose(test_X[:, -1], torch.tensor([0.5, 0.5], dtype=torch.float64))
 
 
-def test_encode_candidates_mixed_fidelity_candidates_raise(
+def test_encode_candidates_single_fidelity_mode_ignores_fidelity(
     multi_fidelity_observations,
 ):
-    """Test that mixed candidate fidelity specification is rejected explicitly."""
-    surrogate = BoTorchGPSurrogate()
+    """Single-fidelity surrogate encodes candidates without appending a fidelity column."""
+    surrogate = BoTorchGPSurrogate()  # is_multi_fidelity=False
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
 
@@ -587,14 +580,13 @@ def test_encode_candidates_mixed_fidelity_candidates_raise(
         Candidate(x=[1.5, 2.5], fidelity=1),
         Candidate(x=[2.5, 3.5]),
     ]
-
-    with pytest.raises(ValueError, match="Mixed fidelity specification detected"):
-        surrogate.encode_candidates(candidates)
+    test_X = surrogate.encode_candidates(candidates)
+    assert test_X.shape[-1] == 2  # only 2 feature dims, no fidelity column
 
 
 def test_encode_candidates_unknown_fidelity_raises(multi_fidelity_observations):
     """Test that unknown candidate fidelities raise a clear validation error."""
-    surrogate = BoTorchGPSurrogate()
+    surrogate = BoTorchGPSurrogate(is_multi_fidelity=True)
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
 
@@ -604,7 +596,7 @@ def test_encode_candidates_unknown_fidelity_raises(multi_fidelity_observations):
 
 def test_parse_candidates_fidelity_confidence_mapping(multi_fidelity_observations):
     """Test that fidelity confidence mapping is applied to candidates, not just observations."""
-    surrogate = BoTorchGPSurrogate()
+    surrogate = BoTorchGPSurrogate(is_multi_fidelity=True)
     surrogate.set_fidelity_confidences({0: 0.5, 1: 0.95})
     surrogate.fit(multi_fidelity_observations)
 
@@ -634,7 +626,7 @@ def test_scalar_multi_fidelity_candidate_encoding_uses_column_vector(
     scalar_multi_fidelity_observations,
 ):
     """Test that scalar multi-fidelity candidates preserve the candidate axis."""
-    surrogate = BoTorchGPSurrogate()
+    surrogate = BoTorchGPSurrogate(is_multi_fidelity=True)
     surrogate.set_fidelity_confidences({0: 0.25, 1: 0.95})
     surrogate.fit(scalar_multi_fidelity_observations)
 
@@ -723,7 +715,7 @@ def test_set_fidelity_confidences_after_fit_rejects_changes(
     multi_fidelity_observations,
 ):
     """Test that fidelity encodings cannot change after fitting."""
-    surrogate = BoTorchGPSurrogate()
+    surrogate = BoTorchGPSurrogate(is_multi_fidelity=True)
     surrogate.set_fidelity_confidences({0: 0.3, 1: 0.9})
     surrogate.fit(multi_fidelity_observations)
 
@@ -757,30 +749,32 @@ def test_update_ignores_empty_observations(single_fidelity_observations):
     )
 
 
-def test_is_multi_fidelity_resets_between_fits(
+def test_is_multi_fidelity_fixed_at_construction(
     single_fidelity_observations, multi_fidelity_observations
 ):
-    """Test that is_multi_fidelity resets correctly when re-fitting on different data.
+    """Test that is_multi_fidelity is determined at construction and never changes.
 
-    Regression test: previously the flag was never cleared, so fitting on MF data
-    followed by SF data would attempt to build a SingleTaskMultiFidelityGP without
-    a fidelity column and crash.
+    The mode is fixed upfront: a surrogate built in SF mode stays SF regardless
+    of the data it is fitted on, and vice versa for MF mode.
     """
-    surrogate = BoTorchGPSurrogate()
+    mf_surrogate = BoTorchGPSurrogate(is_multi_fidelity=True)
+    mf_surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
 
-    # First fit: multi-fidelity
-    surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
-    surrogate.fit(multi_fidelity_observations)
-    assert surrogate.is_multi_fidelity is True
+    # Fit on MF data — should use SingleTaskMultiFidelityGP
+    mf_surrogate.fit(multi_fidelity_observations)
+    assert mf_surrogate.is_multi_fidelity is True
+    assert isinstance(mf_surrogate.model, SingleTaskMultiFidelityGP)
 
-    # Second fit: single-fidelity — must reset the flag and build SingleTaskGP
-    surrogate.fit(single_fidelity_observations)
-    assert surrogate.is_multi_fidelity is False
-    assert isinstance(surrogate.model, SingleTaskGP)
+    sf_surrogate = BoTorchGPSurrogate(is_multi_fidelity=False)
 
-    # Predictions must work without fidelity values
+    # Fit on the same MF data in SF mode — should use SingleTaskGP (no fidelity column)
+    sf_surrogate.fit(multi_fidelity_observations)
+    assert sf_surrogate.is_multi_fidelity is False
+    assert isinstance(sf_surrogate.model, SingleTaskGP)
+
+    # Predictions must work without providing a fidelity override
     candidates = [Candidate(x=[1.5, 2.5])]
-    predictions = surrogate.predict(candidates)
+    predictions = sf_surrogate.predict(candidates)
     assert len(predictions["mean"]) == 1
 
 
@@ -792,21 +786,21 @@ def test_fit_empty_observations_is_noop():
     assert surrogate.model is None
 
 
-def test_update_raises_on_fidelity_mismatch(multi_fidelity_observations):
-    """Test that update raises when new observations are missing fidelities."""
-    surrogate = BoTorchGPSurrogate(use_partial_updates=True)
+def test_update_with_unknown_fidelity_raises(multi_fidelity_observations):
+    """Test that update raises when new observations have an unknown fidelity level."""
+    surrogate = BoTorchGPSurrogate(is_multi_fidelity=True, use_partial_updates=True)
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
 
-    # New observations without fidelity values — should raise before any tensor ops
-    bad_obs = [Observation(x=[1.5, 2.5], y=5.0)]
-    with pytest.raises(ValueError, match="missing fidelity values"):
+    # Observation with an unknown fidelity level raises KeyError during tensor conversion
+    bad_obs = [Observation(x=[1.5, 2.5], y=5.0, fidelity=999)]
+    with pytest.raises(KeyError):
         surrogate.update(bad_obs)
 
 
 def test_scale_inputs_excludes_fidelity_column(multi_fidelity_observations):
     """Test that Normalize is applied only to feature columns, not the fidelity column."""
-    surrogate = BoTorchGPSurrogate(scale_inputs=True)
+    surrogate = BoTorchGPSurrogate(scale_inputs=True, is_multi_fidelity=True)
     surrogate.set_fidelity_confidences({0: 0.1, 1: 0.95})
     surrogate.fit(multi_fidelity_observations)
 
@@ -823,3 +817,10 @@ def test_scale_inputs_excludes_fidelity_column(multi_fidelity_observations):
     assert transform_indices.tolist() == expected_indices, (
         "Normalize should only cover feature columns, not the fidelity column"
     )
+
+
+def test_botorch_surrogate_declares_multi_fidelity_contract():
+    """BoTorch GP explicitly supports oracle confidence metadata."""
+    surrogate = BoTorchGPSurrogate()
+    assert isinstance(surrogate, MultiFidelitySurrogate)
+    assert isinstance(surrogate, TargetFidelityProjector)

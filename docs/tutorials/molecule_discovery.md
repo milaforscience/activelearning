@@ -274,7 +274,7 @@ The main molecule-specific fields are:
 |-------|---------|
 | `surrogate.encoder.max_mol_tokens` | Maximum number of molecular (SELFIES) tokens before special tokens. |
 | `surrogate.encoder.latent_dim` | Size of the learned molecule embedding passed to the GP. |
-| `surrogate.multi_fidelity` | Whether to append fidelity to the surrogate features. |
+| `surrogate.is_multi_fidelity` | Whether to append fidelity to the surrogate features. |
 | `surrogate.target_fidelity` | Fidelity level used when MF acquisitions project candidates to the target objective. |
 | `sampler.candidate_pool_file` | SELFIES pool used by `PoolFileSampler`. |
 | `sampler.conf.env._target_` | GFlowNet environment class for generated SELFIES. |

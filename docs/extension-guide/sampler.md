@@ -79,7 +79,12 @@ The bundled multi-fidelity configs follow this pattern (e.g.,
 See the [Oracle guide](oracle.md#fidelity-id-alignment-with-the-sampler) for
 details.
 
-For single-fidelity setups, leave `fidelity=None`.
+For single-fidelity setups, single-fidelity is a special case of multi-fidelity
+with exactly one declared level.  The oracle's `fidelity_costs` map has a single
+entry (e.g. `{1: 1.0}`), the sampler emits that same level on every candidate,
+and the surrogate operates in single-fidelity mode (no fidelity column appended
+to inputs).  The top-level config validator automatically derives the fidelity
+level from the oracle and fills in `sampler.fidelities` when it is omitted.
 
 ## **Using acquisition scores in sampling**
 

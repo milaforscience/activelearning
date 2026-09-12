@@ -8,23 +8,13 @@ from activelearning.dataset.list_dataset import ListDataset
 from activelearning.oracle.multi_fidelity_oracle import MultiFidelityOracle
 from activelearning.sampler.pool_score_sampler import PoolScoreSampler
 from activelearning.selector.score_selector import TopKAcquisitionSelector
-from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
+from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
+from activelearning.surrogate.surrogate import MultiFidelitySurrogate
 from activelearning.active_learning import active_learning
 from activelearning.utils.types import Candidate, Observation
 from activelearning.logger.logger import ConsoleLogger
 from activelearning.runtime import RuntimeContext
-
-
-class ConfidenceAwareDummyMeanSurrogate(DummyMeanSurrogate):
-    """Dummy surrogate variant that records fidelity confidences."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.fidelity_confidences: dict[int, float] | None = None
-
-    def set_fidelity_confidences(self, confidences: dict[int, float]) -> None:
-        self.fidelity_confidences = dict(confidences)
 
 
 @pytest.fixture
@@ -34,9 +24,9 @@ def dataset():
 
 
 @pytest.fixture
-def surrogate():
+def surrogate(oracle):
     """Create a BoTorch surrogate for testing the full AL loop end-to-end."""
-    return BoTorchGPSurrogate()
+    return BoTorchGPSurrogate(is_multi_fidelity=True)
 
 
 @pytest.fixture
@@ -115,6 +105,23 @@ def test_active_learning_loop(
     assert isinstance(best, list)
     assert isinstance(cost, float)
     assert isinstance(num_iter, int)
+    assert surrogate.get_fidelity_confidences() == oracle.get_fidelity_confidences()
+
+
+def test_active_learning_rejects_unsupported_multi_fidelity_surrogate(
+    dataset, acquisition, sampler, selector, oracle, budget
+):
+    """Multi-fidelity oracle metadata requires a compatible surrogate."""
+    with pytest.raises(ValueError, match="does not support multi-fidelity"):
+        active_learning(
+            dataset=dataset,
+            surrogate=DummyMeanSurrogate(),
+            acquisition=acquisition,
+            sampler=sampler,
+            selector=selector,
+            oracle=oracle,
+            budget=budget,
+        )
 
 
 def test_active_learning_logs_metrics_with_console_logger(
@@ -145,23 +152,6 @@ def test_active_learning_logs_metrics_with_console_logger(
     assert "total_cost=" in out
     assert "budget_remaining=" in out
     assert "[Logger] Run 'console_test_run' finished." in out
-
-
-def test_active_learning_passes_fidelity_confidences_to_surrogate(
-    dataset, acquisition, sampler, selector, oracle, budget
-):
-    """Test the active learning loop passes oracle confidences to surrogate."""
-    surrogate = ConfidenceAwareDummyMeanSurrogate()
-    active_learning(
-        dataset=dataset,
-        surrogate=surrogate,
-        acquisition=acquisition,
-        sampler=sampler,
-        selector=selector,
-        oracle=oracle,
-        budget=budget,
-    )
-    assert surrogate.fidelity_confidences == oracle.get_fidelity_confidences()
 
 
 def test_active_learning_stops_when_selector_returns_empty(
@@ -238,8 +228,11 @@ class RuntimeLoggingDataset(ListDataset):
             self.logger.log_metric("dataset_records", len(self._records))
 
 
-class RuntimeLoggingSurrogate(DummyMeanSurrogate):
+class RuntimeLoggingSurrogate(DummyMeanSurrogate, MultiFidelitySurrogate):
     """Surrogate test double that emits metrics through the bound runtime logger."""
+
+    def set_fidelity_confidences(self, confidences: dict[int, float]) -> None:
+        """Accept fidelity metadata without using it."""
 
     def fit(self, observations: Iterable[Observation]) -> None:
         super().fit(observations)

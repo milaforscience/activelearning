@@ -9,7 +9,7 @@ from botorch.models.transforms.outcome import Standardize
 from gpytorch.mlls import ExactMarginalLogLikelihood
 from gpytorch.module import Module
 
-from activelearning.surrogate.surrogate import Surrogate
+from activelearning.surrogate.surrogate import MultiFidelitySurrogate
 from activelearning.utils.types import (
     Candidate,
     Observation,
@@ -18,7 +18,7 @@ from activelearning.utils.types import (
 )
 
 
-class BoTorchGPSurrogate(Surrogate):
+class BoTorchGPSurrogate(MultiFidelitySurrogate):
     """A highly flexible Gaussian Process surrogate using BoTorch.
 
     Automatically handles single-fidelity and multi-fidelity configurations,
@@ -34,6 +34,7 @@ class BoTorchGPSurrogate(Surrogate):
         custom_fit_function: Optional[Callable[..., Any]] = None,
         covar_module: Optional[Module] = None,
         use_partial_updates: bool = False,
+        is_multi_fidelity: bool = False,
     ) -> None:
         """Initialize the BoTorch GP surrogate.
 
@@ -69,6 +70,12 @@ class BoTorchGPSurrogate(Surrogate):
             If True, update() uses fast incremental Cholesky updates when the model is
             already fitted. If False, update() always performs full retraining for
             maximum reliability. Beginners should use False.
+        is_multi_fidelity : bool, default=False
+            Whether this surrogate operates in multi-fidelity mode.  Set at
+            construction time (typically by the top-level config validator).
+            When ``True``, a fidelity confidence column is appended to input
+            tensors and ``SingleTaskMultiFidelityGP`` is used (unless a custom
+            ``covar_module`` is provided).
         """
         if custom_fit_function is not None and not optimize_hyperparameters:
             raise ValueError(
@@ -88,7 +95,7 @@ class BoTorchGPSurrogate(Surrogate):
         # Internal state tracking
         self.model: Optional[SingleTaskGP | SingleTaskMultiFidelityGP] = None
         self.mll: Optional[ExactMarginalLogLikelihood] = None
-        self._is_multi_fidelity: bool = False
+        self._is_multi_fidelity: bool = is_multi_fidelity
         self._train_X: Optional[torch.Tensor] = None
         self._train_Y: Optional[torch.Tensor] = None
         self._fidelity_confidences: dict[int, float] = {}
@@ -132,12 +139,14 @@ class BoTorchGPSurrogate(Surrogate):
         Raises
         ------
         ValueError
-            If observations is empty or structurally incompatible.
+            If operating in multi-fidelity mode and fidelity confidences have
+            not been set via :meth:`set_fidelity_confidences`.
 
         Notes
         -----
-        This method updates the internal state: ``self._train_X``, ``self._train_Y``,
-        and ``self._is_multi_fidelity`` are set based on the observations.
+        An empty observation iterable is treated as a no-op: the surrogate
+        remains unfitted.  ``self._is_multi_fidelity`` is fixed at
+        construction and is not changed by this method.
         """
         obs_list = list(observations)
         if not obs_list:
@@ -145,9 +154,13 @@ class BoTorchGPSurrogate(Surrogate):
             # is_fitted() and will use random candidate selection for this round.
             return
 
-        self._train_X, self._train_Y, self._is_multi_fidelity = (
-            self._parse_observations(obs_list)
-        )
+        if self._is_multi_fidelity and not self._fidelity_confidences:
+            raise ValueError(
+                "Multi-fidelity mode requires fidelity confidences to be set before "
+                "fitting. Call set_fidelity_confidences() first."
+            )
+
+        self._train_X, self._train_Y = self._parse_observations(obs_list)
 
         self._build_model(self._train_X, self._train_Y)
 
@@ -176,12 +189,6 @@ class BoTorchGPSurrogate(Surrogate):
         ----------
         observations : Iterable[Observation]
             Iterable of newly acquired observations.
-
-        Raises
-        ------
-        ValueError
-            If the incoming observations are incompatible with the fitted model
-            mode (single-fidelity vs multi-fidelity).
         """
         if self.model is None or self._train_X is None or self._train_Y is None:
             # Fallback to a full fit if the model hasn't been initialized
@@ -192,21 +199,7 @@ class BoTorchGPSurrogate(Surrogate):
         if not obs_list:
             return
 
-        incoming_is_multi_fidelity = self._infer_is_multi_fidelity(obs_list)
-
-        if self._is_multi_fidelity and not incoming_is_multi_fidelity:
-            missing = [i for i, obs in enumerate(obs_list) if obs.fidelity is None]
-            raise ValueError(
-                "Surrogate was fitted in multi-fidelity mode, but new observations "
-                f"at indices {missing} are missing fidelity values."
-            )
-        if not self._is_multi_fidelity and incoming_is_multi_fidelity:
-            raise ValueError(
-                "Surrogate was fitted in single-fidelity mode, but new observations "
-                "include fidelity values."
-            )
-
-        new_X, new_Y, _ = self._parse_observations(obs_list)
+        new_X, new_Y = self._parse_observations(obs_list)
 
         self._train_X = torch.cat([self._train_X, new_X], dim=0)
         self._train_Y = torch.cat([self._train_Y, new_Y], dim=0)
@@ -397,54 +390,28 @@ class BoTorchGPSurrogate(Surrogate):
         Raises
         ------
         ValueError
-            If candidates are incompatible with the fitted model mode.
+            If a candidate fidelity is not present in the fidelity-confidence map
+            in multi-fidelity mode.
         """
         cand_list = list(candidates)
         if not cand_list:
             raise ValueError("Cannot encode an empty candidate iterable.")
 
-        n_with_fidelity = 0
-        missing: list[int] = []
-        unknown: list[int] = []
+        if self._is_multi_fidelity:
+            unknown = [
+                i
+                for i, cand in enumerate(cand_list)
+                if cand.fidelity not in self._fidelity_confidences
+            ]
+            if unknown:
+                raise ValueError(
+                    "Some candidate fidelities are not present in the fidelity-confidence "
+                    f"map. Invalid candidate indices: {unknown}."
+                )
 
-        for i, cand in enumerate(cand_list):
-            if cand.fidelity is not None:
-                n_with_fidelity += 1
-                if (
-                    self._is_multi_fidelity
-                    and cand.fidelity not in self._fidelity_confidences
-                ):
-                    unknown.append(i)
-            else:
-                missing.append(i)
-
-        if 0 < n_with_fidelity < len(cand_list):
-            raise ValueError(
-                "Mixed fidelity specification detected: either all candidates must "
-                f"provide a fidelity or none should. Missing indices: {missing}."
-            )
-
-        incoming_is_multi_fidelity = n_with_fidelity == len(cand_list)
-
-        if not self._is_multi_fidelity and incoming_is_multi_fidelity:
-            raise ValueError(
-                "Surrogate was fitted in single-fidelity mode. "
-                "Candidates must not provide fidelity values."
-            )
-
-        if self._is_multi_fidelity and not incoming_is_multi_fidelity:
-            raise ValueError(
-                "Surrogate was fitted in multi-fidelity mode. "
-                "All candidates must provide a fidelity."
-            )
-
-        if self._is_multi_fidelity and unknown:
-            raise ValueError(
-                "Some candidate fidelities are not present in the fidelity-confidence "
-                f"map. Invalid candidate indices: {unknown}."
-            )
-
-        fidelity_confidences = self._fidelity_confidences or None
+        fidelity_confidences = (
+            self._fidelity_confidences if self._is_multi_fidelity else None
+        )
         test_X, fidelities = candidates_to_tensor(cand_list, fidelity_confidences)
         test_X = self._ensure_batch_shape(test_X)
 
@@ -545,6 +512,12 @@ class BoTorchGPSurrogate(Surrogate):
         result : Optional[float]
             Encoded target fidelity value, typically the maximum confidence,
             or ``None`` in single-fidelity mode.
+
+        Raises
+        ------
+        RuntimeError
+            If called in multi-fidelity mode before
+            :meth:`set_fidelity_confidences` has been called.
         """
         if not self._is_multi_fidelity:
             return None
@@ -582,7 +555,7 @@ class BoTorchGPSurrogate(Surrogate):
     def _parse_observations(
         self,
         observations: Iterable[Observation],
-    ) -> tuple[torch.Tensor, torch.Tensor, bool]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """Converts generic Observations into BoTorch-ready tensors.
 
         In multi-fidelity mode, fidelity confidence values are appended as the
@@ -593,7 +566,7 @@ class BoTorchGPSurrogate(Surrogate):
         ----------
         observations : Iterable[Observation]
             An iterable of Observation objects containing features, labels, and
-            optional fidelity metadata.
+            fidelity levels.
 
         Returns
         -------
@@ -602,27 +575,28 @@ class BoTorchGPSurrogate(Surrogate):
             confidences are appended as the final column.
         train_Y : torch.Tensor
             A tensor of observed labels reshaped for BoTorch.
-        is_multi_fidelity : bool
-            Whether the observations are structurally multi-fidelity.
 
         Raises
         ------
         ValueError
-            If some but not all observations provide fidelity values.
+            If the observation list is empty.
+        KeyError
+            If a multi-fidelity observation references a fidelity absent from
+            the confidence map.
         """
         obs_list = list(observations)
         if not obs_list:
             raise ValueError("Cannot parse an empty observation iterable.")
 
-        is_multi_fidelity = self._infer_is_multi_fidelity(obs_list)
-
-        fidelity_confidences = self._fidelity_confidences or None
+        fidelity_confidences = (
+            self._fidelity_confidences if self._is_multi_fidelity else None
+        )
         X, y, fidelities = observations_to_tensors(obs_list, fidelity_confidences)
         train_X = self._ensure_batch_shape(X)
         train_Y = self._ensure_batch_shape(y)
         obs_count = len(obs_list)
 
-        if is_multi_fidelity:
+        if self._is_multi_fidelity:
             if len(fidelities) != obs_count:
                 raise ValueError(
                     "If using multi-fidelity observations, all observations must "
@@ -631,7 +605,7 @@ class BoTorchGPSurrogate(Surrogate):
             fid_tensor = torch.tensor(fidelities, dtype=torch.float64).view(-1, 1)
             train_X = torch.cat([train_X, fid_tensor], dim=-1)
 
-        return train_X, train_Y, is_multi_fidelity
+        return train_X, train_Y
 
     def _build_model(self, train_X: torch.Tensor, train_Y: torch.Tensor) -> None:
         """Construct the BoTorch Gaussian Process model and marginal log likelihood.
@@ -692,42 +666,3 @@ class BoTorchGPSurrogate(Surrogate):
         if self._pending_state_dict is not None:
             self.model.load_state_dict(self._pending_state_dict)
             self._pending_state_dict = None
-
-    def _infer_is_multi_fidelity(
-        self,
-        observations: Iterable[Observation],
-    ) -> bool:
-        """Infer whether a batch of observations is structurally multi-fidelity.
-
-        Parameters
-        ----------
-        observations : Iterable[Observation]
-            Iterable of observations to inspect.
-
-        Returns
-        -------
-        result : bool
-            ``True`` if all observations provide a fidelity, ``False`` if none do.
-
-        Raises
-        ------
-        ValueError
-            If only some observations provide fidelity values.
-        """
-        n_with_fidelity = 0
-        missing: list[int] = []
-
-        for i, obs in enumerate(observations):
-            if obs.fidelity is not None:
-                n_with_fidelity += 1
-            else:
-                missing.append(i)
-
-        n_total = n_with_fidelity + len(missing)
-        if 0 < n_with_fidelity < n_total:
-            raise ValueError(
-                "Mixed fidelity specification detected: either all observations must "
-                f"provide a fidelity or none should. Missing indices: {missing}."
-            )
-
-        return n_with_fidelity == n_total
