@@ -74,7 +74,7 @@ def exact_mf_surrogate() -> ExactSelfiesDKLSurrogate:
     surrogate = ExactSelfiesDKLSurrogate(
         encoder=encoder,
         training_params=TRAINING,
-        multi_fidelity=True,
+        is_multi_fidelity=True,
         target_fidelity=3,
     )
     surrogate.set_fidelity_confidences(FIDELITY_CONFIDENCES)
@@ -193,7 +193,7 @@ class TestExactSelfiesDKLSurrogate:
         surrogate = ExactSelfiesDKLSurrogate(
             encoder=ENCODER_CFG.build(),
             training_params=TRAINING,
-            multi_fidelity=True,
+            is_multi_fidelity=True,
             target_fidelity=3,
         )
 
@@ -237,7 +237,7 @@ def var_mf_surrogate() -> VariationalSelfiesDKLSurrogate:
         encoder=encoder,
         training_params=TRAINING,
         num_inducing=8,
-        multi_fidelity=True,
+        is_multi_fidelity=True,
         target_fidelity=3,
     )
     surrogate.set_fidelity_confidences(FIDELITY_CONFIDENCES)
@@ -620,6 +620,20 @@ class TestDKLSurrogateConfigs:
         cfg = VariationalSelfiesDKLSurrogateConfig(encoder=ENCODER_CFG, num_inducing=8)
         surrogate = cfg.build()
         assert isinstance(surrogate, VariationalSelfiesDKLSurrogate)
+
+    def test_standalone_multi_fidelity_config_requires_target_on_build(self):
+        """Top-level derivation is unavailable when a DKL config is built alone."""
+        from activelearning.applications.molecules.config import (
+            ExactSelfiesDKLSurrogateConfig,
+        )
+
+        cfg = ExactSelfiesDKLSurrogateConfig(
+            encoder=ENCODER_CFG,
+            is_multi_fidelity=True,
+        )
+
+        with pytest.raises(ValueError, match="target_fidelity must be set"):
+            cfg.build()
 
 
 class TestSurrogatePredictionCorrectness:

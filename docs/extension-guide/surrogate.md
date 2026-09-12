@@ -26,7 +26,7 @@ or should implement depend on your update strategy:
 | `update(observations)` | If `updates_from_latest()` returns `True` | Incremental update from latest batch |
 | `predict(candidates)` | If acquisition uses `predict()` | Returns `dict` — must include at least a `"mean"` key |
 | `is_fitted()` | If unsafe before training | Override to return `False` until first fit |
-| `set_fidelity_confidences(confidences)` | For multi-fidelity surrogates | Called before `fit()` / `update()` |
+| `set_fidelity_confidences(confidences)` | For `MultiFidelitySurrogate` implementations | Called before `fit()` / `update()` |
 
 ## **Reference implementations**
 
@@ -93,7 +93,38 @@ If `True` is returned without implementing `update()`, the base class raises
 
 ## **Multi-fidelity support**
 
-If your surrogate uses fidelity information, override `set_fidelity_confidences()`. The loop calls this method once at startup with the oracle's confidence mapping. Store the values and use them to weight training data inside `fit()` or `update()`.
+A regular `Surrogate` is single-fidelity only. To support an oracle with more
+than one fidelity level, subclass `MultiFidelitySurrogate` and implement
+`set_fidelity_confidences()`. The CLI composition step calls it once before
+the loop starts with the oracle's `{fidelity_level: confidence}` mapping.
+
+```python
+class MyMultiFidelitySurrogate(MultiFidelitySurrogate):
+    def set_fidelity_confidences(self, confidences: dict[int, float]) -> None:
+        self._fidelity_confidences = dict(confidences)
+```
+
+Its config must implement the structural `FidelityAwareSurrogateConfig`
+contract by providing `resolve_fidelity_confidences(confidences)`. This method
+returns a revalidated config with any mode or target settings derived from the
+oracle. `ActiveLearningConfig` rejects a multi-fidelity run when the surrogate
+config does not implement this method.
+
+```python
+class MyMultiFidelitySurrogateConfig(BaseModel):
+    def resolve_fidelity_confidences(
+        self, confidences: dict[int, float]
+    ) -> "MyMultiFidelitySurrogateConfig":
+        data = self.model_dump()
+        data["is_multi_fidelity"] = len(confidences) > 1
+        return type(self).model_validate(data)
+```
+
+If a multi-fidelity acquisition must project encoded model inputs to a target
+level, also implement the optional `TargetFidelityProjector` protocol:
+`is_multi_fidelity`, `get_fidelity_dimension()`, and
+`get_target_fidelity_value()`. Multi-fidelity surrogates that do not require
+target projection do not need this protocol.
 
 ## **Common Pitfalls**
 

@@ -12,7 +12,7 @@ from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
     MultiFidelityGFlowNetEnvWrapperFidFirst,
     MultiFidelityGFlowNetEnvWrapperFidLast,
 )
-from activelearning.utils.types import Candidate
+from activelearning.utils.types import Candidate, DEFAULT_FIDELITY
 
 
 # ---------------------------------------------------------------------------
@@ -54,17 +54,17 @@ class TestGFlowNetSamplerInstantiation:
         sampler = GFlowNetSampler(n_samples=3, conf=conf, fidelities=[1, 2])
         assert sampler.fidelities == [1, 2]
 
-    def test_default_fidelities_is_none(self, gflownet_conf_2d):
+    def test_default_fidelities_uses_default_level(self, gflownet_conf_2d):
         conf, _ = gflownet_conf_2d
         sampler = GFlowNetSampler(n_samples=3, conf=conf)
-        assert sampler.fidelities is None
+        assert sampler.fidelities == [DEFAULT_FIDELITY]
 
     def test_n_fidelities_derived_from_list(self, gflownet_conf_2d):
         conf, _ = gflownet_conf_2d
         sampler = GFlowNetSampler(n_samples=3, conf=conf, fidelities=[1, 2, 3])
         assert sampler._n_fidelities == 3
 
-    def test_n_fidelities_is_one_when_fidelities_none(self, gflownet_conf_2d):
+    def test_n_fidelities_is_one_by_default(self, gflownet_conf_2d):
         conf, _ = gflownet_conf_2d
         sampler = GFlowNetSampler(n_samples=3, conf=conf)
         assert sampler._n_fidelities == 1
@@ -84,7 +84,7 @@ class TestGFlowNetSamplerInstantiation:
     def test_warns_when_fidelity_action_set_with_single_fidelity(
         self, gflownet_conf_2d, action, caplog
     ):
-        """Warn when fidelity_action is explicitly set but fidelities is None.
+        """Warn when fidelity_action is set with one fidelity.
 
         In single-fidelity mode no multi-fidelity wrapper is used, so
         fidelity_action has no effect.  An explicit "first" or "last" suggests
@@ -98,7 +98,10 @@ class TestGFlowNetSamplerInstantiation:
             logger="activelearning.sampler.gflownet.gflownet_sampler",
         ):
             GFlowNetSampler(
-                n_samples=3, conf=conf, fidelities=None, fidelity_action=action
+                n_samples=3,
+                conf=conf,
+                fidelities=[DEFAULT_FIDELITY],
+                fidelity_action=action,
             )
         assert any("fidelity_action" in r.message for r in caplog.records)
 
@@ -118,7 +121,10 @@ class TestGFlowNetSamplerInstantiation:
             logger="activelearning.sampler.gflownet.gflownet_sampler",
         ):
             GFlowNetSampler(
-                n_samples=3, conf=conf, fidelities=None, fidelity_action="any"
+                n_samples=3,
+                conf=conf,
+                fidelities=[DEFAULT_FIDELITY],
+                fidelity_action="any",
             )
         assert not caplog.records
 
@@ -350,7 +356,12 @@ class TestGFlowNetSamplerConfigRoundTrip:
         from omegaconf import OmegaConf
 
         conf_raw = OmegaConf.to_container(conf_dict, resolve=True)
-        cfg = GFlowNetSamplerConfig(n_samples=3, fidelity_action=action, conf=conf_raw)
+        cfg = GFlowNetSamplerConfig(
+            n_samples=3,
+            fidelities=[DEFAULT_FIDELITY],
+            fidelity_action=action,
+            conf=conf_raw,
+        )
         sampler = cfg.build()
         assert sampler.fidelity_action == action
 
@@ -363,6 +374,26 @@ class TestGFlowNetSamplerConfigRoundTrip:
         cfg = GFlowNetSamplerConfig(n_samples=3, fidelities=[1, 2, 3], conf=conf_raw)
         sampler = cfg.build()
         assert sampler.fidelities == [1, 2, 3]
+
+    def test_config_build_uses_default_fidelity(self, gflownet_conf_2d):
+        from activelearning.sampler.config import GFlowNetSamplerConfig
+        from omegaconf import OmegaConf
+
+        conf_dict, _ = gflownet_conf_2d
+        conf_raw = OmegaConf.to_container(conf_dict, resolve=True)
+        sampler = GFlowNetSamplerConfig(n_samples=3, conf=conf_raw).build()
+
+        assert sampler.fidelities == [DEFAULT_FIDELITY]
+
+    def test_grid_config_build_uses_default_fidelity(self, gflownet_conf_2d):
+        from activelearning.sampler.config import GFlowNetGridSamplerConfig
+        from omegaconf import OmegaConf
+
+        conf_dict, _ = gflownet_conf_2d
+        conf_raw = OmegaConf.to_container(conf_dict, resolve=True)
+        sampler = GFlowNetGridSamplerConfig(n_samples=3, conf=conf_raw).build()
+
+        assert sampler.fidelities == [DEFAULT_FIDELITY]
 
 
 # ---------------------------------------------------------------------------
@@ -411,15 +442,17 @@ class TestGFlowNetSamplerFidelityMapping:
                 f"Expected fidelity in {{3, 7}}, got {c.fidelity}"
             )
 
-    def test_single_fidelity_candidates_have_no_fidelity(self, gflownet_conf_2d):
-        """fidelities=None (single-fidelity) produces candidates with fidelity=None."""
+    def test_single_fidelity_candidates_use_default_fidelity(self, gflownet_conf_2d):
+        """Direct single-fidelity construction stamps the default integer level."""
         conf, _ = gflownet_conf_2d
-        sampler = GFlowNetSampler(n_samples=5, conf=conf, fidelities=None)
+        sampler = GFlowNetSampler(
+            n_samples=5,
+            conf=conf,
+            fidelities=[DEFAULT_FIDELITY],
+        )
         candidates = sampler.sample(acquisition=_ConstantAcquisition())
         for c in candidates:
-            assert c.fidelity is None, (
-                f"Expected fidelity=None for single-fidelity sampler, got {c.fidelity}"
-            )
+            assert c.fidelity == DEFAULT_FIDELITY
 
     def test_fidelity_values_are_integers(self, gflownet_conf_2d):
         """Stamped fidelity values must be plain Python ints."""
