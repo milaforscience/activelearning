@@ -11,10 +11,32 @@ from activelearning.runtime import (
 )
 from activelearning.sampler.sampler import Sampler
 from activelearning.selector.selector import Selector
-from activelearning.surrogate.surrogate import Surrogate
+from activelearning.surrogate.surrogate import MultiFidelitySurrogate, Surrogate
 from activelearning.utils.types import filter_finite_target_observations
 
 _logger = logging.getLogger(__name__)
+
+
+def _initialize_surrogate_fidelities(
+    surrogate: Surrogate,
+    oracle: Oracle,
+) -> None:
+    """Initialize a multi-fidelity surrogate from the oracle's metadata.
+
+    Raises
+    ------
+    ValueError
+        If a multi-fidelity oracle is paired with an unsupported surrogate.
+    """
+    fidelity_confidences = oracle.get_fidelity_confidences()
+    if len(fidelity_confidences) == 1:
+        return
+    if not isinstance(surrogate, MultiFidelitySurrogate):
+        raise ValueError(
+            f"{type(surrogate).__name__} does not support multi-fidelity "
+            "oracles. Use a MultiFidelitySurrogate implementation."
+        )
+    surrogate.set_fidelity_confidences(fidelity_confidences)
 
 
 def active_learning(
@@ -75,6 +97,7 @@ def active_learning(
         [dataset, surrogate, acquisition, sampler, selector, oracle, budget],
         resolved_runtime_context,
     )
+    _initialize_surrogate_fidelities(surrogate, oracle)
 
     initial_budget = budget.available_budget
     num_rounds = 0
@@ -83,10 +106,6 @@ def active_learning(
     # Catches misconfigured schedules (e.g. sigmoid with too-slow start) that
     # would silently terminate the experiment.
     budget.validate_schedule(min_query_cost=oracle.get_min_query_cost())
-
-    # Propagate oracle fidelity confidences to the surrogate before the loop.
-    # Surrogates that don't use fidelity metadata safely ignore this (no-op default).
-    surrogate.set_fidelity_confidences(oracle.get_fidelity_confidences())
 
     while budget.available_budget > 0:
         # Call once per round so all consumers share the same consistent epoch view.

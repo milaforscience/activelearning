@@ -259,6 +259,7 @@ def test_cli_override_takes_effect_over_config_value(base_config, acquisition_co
 
     def _capture_budget(*args, **kwargs):
         captured["budget"] = kwargs.get("budget") or args[5]
+        captured["surrogate"] = kwargs.get("surrogate") or args[1]
         # Return the shape expected by main(): (dataset, total_cost, num_rounds)
         return kwargs.get("dataset") or args[0], 0.0, 0
 

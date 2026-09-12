@@ -279,6 +279,7 @@ def test_pydantic_gflownet_grid_sampler_config_builds_with_compose(tmp_path):
 
     cfg = GFlowNetGridSamplerConfig(
         n_samples=5,
+        fidelities=[0],
         log_dir=str(tmp_path),
         conf={
             "env": {
@@ -302,7 +303,11 @@ def test_pydantic_gflownet_grid_sampler_config_no_conf_uses_defaults(tmp_path):
     """GFlowNetGridSamplerConfig requires env._target_ in conf — omitting it must raise."""
     from activelearning.sampler.config import GFlowNetGridSamplerConfig
 
-    cfg = GFlowNetGridSamplerConfig(n_samples=5, log_dir=str(tmp_path))
+    cfg = GFlowNetGridSamplerConfig(
+        n_samples=5,
+        fidelities=[0],
+        log_dir=str(tmp_path),
+    )
     with pytest.raises(
         ValueError, match="GFlowNetGridSampler requires a Grid environment"
     ):

@@ -54,7 +54,7 @@ def fitted_sf_surrogate(
 def fitted_mf_surrogate(
     multi_fidelity_observations: list[Observation],
 ) -> BoTorchGPSurrogate:
-    surrogate = BoTorchGPSurrogate()
+    surrogate = BoTorchGPSurrogate(is_multi_fidelity=True)
     surrogate.set_fidelity_confidences({0: 0.5, 1: 1.0})
     surrogate.fit(multi_fidelity_observations)
     return surrogate

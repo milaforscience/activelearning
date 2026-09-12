@@ -3,6 +3,7 @@ import torch
 
 from activelearning.utils.types import (
     Candidate,
+    DEFAULT_FIDELITY,
     Observation,
     candidates_to_tensor,
     filter_finite_target_observations,
@@ -12,7 +13,7 @@ from activelearning.utils.types import (
 )
 
 
-@pytest.fixture(params=[None, 1, 2])
+@pytest.fixture(params=[0, 1, 2])
 def fidelity(request):
     return request.param
 
@@ -30,6 +31,24 @@ def observation_x():
 @pytest.fixture
 def observation_y():
     return 5.5
+
+
+def test_default_fidelity_constant():
+    """DEFAULT_FIDELITY should be a non-negative integer."""
+    assert isinstance(DEFAULT_FIDELITY, int)
+    assert DEFAULT_FIDELITY >= 0
+
+
+def test_candidate_default_fidelity():
+    """Candidate.fidelity defaults to DEFAULT_FIDELITY when not specified."""
+    candidate = Candidate(x=42)
+    assert candidate.fidelity == DEFAULT_FIDELITY
+
+
+def test_observation_default_fidelity():
+    """Observation.fidelity defaults to DEFAULT_FIDELITY when not specified."""
+    observation = Observation(x=1, y=2.0)
+    assert observation.fidelity == DEFAULT_FIDELITY
 
 
 def test_candidate_creation(candidate_x, fidelity):
@@ -107,12 +126,14 @@ def test_observations_to_tensors_empty_mapping_raises_key_error():
         observations_to_tensors(observations, fidelity_confidences={})
 
 
-def test_observations_to_tensors_missing_mapping_raises_value_error():
-    """Test that fidelity-bearing observations require an explicit mapping."""
+def test_observations_to_tensors_without_confidences_returns_empty_fidelities():
+    """Without fidelity_confidences (single-fidelity mode), fidelities list is empty."""
     observations = [Observation(x=1, y=10.0, fidelity=0)]
 
-    with pytest.raises(ValueError, match="no fidelity_confidences mapping"):
-        observations_to_tensors(observations)
+    X, y, fidelities = observations_to_tensors(observations)
+    assert X.tolist() == [1.0]
+    assert y.tolist() == [10.0]
+    assert fidelities == []
 
 
 def test_candidates_to_tensor_empty_mapping_raises_key_error():
@@ -123,12 +144,13 @@ def test_candidates_to_tensor_empty_mapping_raises_key_error():
         candidates_to_tensor(candidates, fidelity_confidences={})
 
 
-def test_candidates_to_tensor_missing_mapping_raises_value_error():
-    """Test that fidelity-bearing candidates require an explicit mapping."""
+def test_candidates_to_tensor_without_confidences_returns_empty_fidelities():
+    """Without fidelity_confidences (single-fidelity mode), fidelities list is empty."""
     candidates = [Candidate(x=1, fidelity=0)]
 
-    with pytest.raises(ValueError, match="no fidelity_confidences mapping"):
-        candidates_to_tensor(candidates)
+    X, fidelities = candidates_to_tensor(candidates)
+    assert X.tolist() == [1.0]
+    assert fidelities == []
 
 
 def test_observations_to_tensors_ignores_metadata():
