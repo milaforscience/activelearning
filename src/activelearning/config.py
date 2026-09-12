@@ -28,7 +28,8 @@ from activelearning.acquisition.config import (
 from activelearning.budget.config import BudgetConfig
 from activelearning.dataset.config import DatasetConfig
 from activelearning.logger.config import LoggerConfig
-from activelearning.run_writer import RunWriterConfig
+from activelearning.monitoring.diagnostics_config import DiagnosticsConfig
+from activelearning.monitoring.run_writer import RunWriterConfig
 from activelearning.oracle.config import OracleConfig
 from activelearning.runtime import RuntimeContextConfig
 from activelearning.sampler.config import (
@@ -77,9 +78,11 @@ class ActiveLearningConfig(BaseModel):
     budget : BudgetConfig
         Query and round budget.
     logger : LoggerConfig, optional
-        Logging configuration.
+        Optional live telemetry backend configuration.
     run_writer : RunWriterConfig, optional
-        Persistent run-output configuration.
+        Optional durable structured-output configuration.
+    diagnostics : DiagnosticsConfig
+        Optional diagnostic enrichment controls for either configured sink.
     """
 
     runtime: RuntimeContextConfig = Field(default_factory=RuntimeContextConfig)
@@ -92,6 +95,7 @@ class ActiveLearningConfig(BaseModel):
     budget: BudgetConfig
     logger: LoggerConfig | None = None
     run_writer: RunWriterConfig | None = None
+    diagnostics: DiagnosticsConfig = Field(default_factory=DiagnosticsConfig)
 
     @model_validator(mode="after")
     def _resolve_fidelities(self) -> "ActiveLearningConfig":

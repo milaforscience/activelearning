@@ -253,7 +253,7 @@ def _sort_score(score: Any) -> float:
 
 def _figure_title(task: str, displayed: int, total: int) -> str:
     """Build the figure title, including cap information when relevant."""
-    title = f"xTB {task.upper()} queried molecules"
+    title = f"Oracle xTB {task.upper()}: queried molecules"
     if displayed != total:
         title = f"{title} (top {displayed} of {total})"
     return title

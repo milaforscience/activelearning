@@ -61,6 +61,13 @@ identifiers: S3-GFN fine-tunes its policy, while the surrogate keeps a frozen
 feature prior. They therefore load separate model instances and require
 additional memory.
 
+With a runtime logger enabled, S3-GFN training telemetry is grouped under
+`sampler/s3gfn/`. The scalar metrics include online, replay, and contrastive
+losses, log-Z, raw reward statistics, generation validity and duplicate rates,
+fidelity proportions, and training or generation durations. The corresponding
+trajectory figures are `sampler/s3gfn/training_losses`,
+`sampler/s3gfn/log_z`, and `sampler/s3gfn/reward/trajectory`.
+
 ### **Choosing an encoder for DKL**
 
 An encoder maps each raw molecule to features that the GP can model. A common
@@ -176,8 +183,8 @@ uv run activelearning config/molecules/exact.yaml \
 You should see the same round-level fields as in the synthetic tutorials, plus a figure acknowledgement from the console logger:
 
 ```text
-[Figure] 'xtb_ea_query_molecules' (not rendered in console)
-[Step 1] round=1 | num_new_samples=5 | round_cost=5.0000 | total_cost=5.0000 | budget_remaining=0.0000
+[Figure] 'oracle/xtb/ea/query_molecules' (not rendered in console)
+[Step 1] active_learning/round=1 | active_learning/samples/selected=5 | active_learning/observations/new=5 | active_learning/cost/round=5.0000 | active_learning/cost/cumulative=5.0000 | active_learning/budget/remaining=0.0000 | profiling/...
 Done. Rounds: 1 | Total cost: 5.0000
 ```
 
@@ -235,7 +242,7 @@ Open Aim:
 uv run aim up
 ```
 
-In the Aim UI, open the run and inspect **Images**. For EA runs, the image key is `xtb_ea_query_molecules`; for IP runs, it is `xtb_ip_query_molecules`. Each panel shows the query index, fidelity, observed score in eV, and the decoded molecule identifier.
+In the Aim UI, open the run and inspect **Images**. For EA runs, the image key is `oracle/xtb/ea/query_molecules`; for IP runs, it is `oracle/xtb/ip/query_molecules`. Each panel shows the query index, fidelity, observed score in eV, and the decoded molecule identifier.
 
 The example below was generated from a short fidelity-1 EA run over the bundled SELFIES pool, then ranking the successful xTB evaluations by observed EA and rendering the top four molecules as a 2x2 grid:
 

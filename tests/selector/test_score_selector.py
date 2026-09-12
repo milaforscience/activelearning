@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import Mock
 
 from activelearning.acquisition.dummy_acquisition import DummyAcquisition
 from activelearning.selector.score_selector import TopKAcquisitionSelector
@@ -135,3 +136,47 @@ def test_cost_normalization_selects_correct_candidates(
     )
 
     assert [c.x for c in selected] == expected_xs
+
+
+def test_score_selector_records_raw_ranking_and_selected_indices() -> None:
+    """The transient snapshot should preserve the selector's exact decisions."""
+    selector = TopKAcquisitionSelector(num_samples=2)
+    acquisition = Mock()
+    acquisition.score.return_value = [10.0, 20.0, 30.0]
+    candidates = [Candidate(x=index) for index in range(3)]
+
+    selected = selector(
+        candidates,
+        acquisition=acquisition,
+        cost_fn=lambda values: [2.0, 2.0, 1.0],
+    )
+    snapshot = selector.drain_selection_scores()
+
+    assert [candidate.x for candidate in selected] == [2, 1]
+    assert snapshot is not None
+    assert snapshot.acquisition_scores == (10.0, 20.0, 30.0)
+    assert snapshot.ranking_scores == (5.0, 10.0, 30.0)
+    assert snapshot.selected_indices == (2, 1)
+    acquisition.score.assert_called_once_with(candidates)
+    assert selector.drain_selection_scores() is None
+
+
+def test_score_selector_clears_snapshot_after_empty_and_failed_calls() -> None:
+    """A later empty or failed selection must not expose an earlier snapshot."""
+    selector = TopKAcquisitionSelector(num_samples=1)
+    acquisition = Mock()
+    acquisition.score.return_value = [1.0]
+    candidates = [Candidate(x=0)]
+
+    selector(candidates, acquisition=acquisition)
+    assert selector.drain_selection_scores() is not None
+
+    selector(candidates, acquisition=acquisition)
+    assert selector([], acquisition=acquisition) == []
+    assert selector.drain_selection_scores() is None
+
+    selector(candidates, acquisition=acquisition)
+    acquisition.score.return_value = []
+    with pytest.raises(ValueError, match="match the candidate pool"):
+        selector(candidates, acquisition=acquisition)
+    assert selector.drain_selection_scores() is None

@@ -6,6 +6,7 @@ from unittest.mock import Mock
 import torch
 from torch import nn
 import pytest
+from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 
 from activelearning.runtime import RuntimeContext
@@ -352,8 +353,6 @@ def test_round_metrics_aggregate_scalars_and_figures(
     make_replay_buffer,
 ) -> None:
     sampler = make_sampler(n_train_steps=2)
-    logger = Mock()
-    sampler.bind_runtime_context(RuntimeContext(logger=logger))
     metrics = sampler.round_metrics
     metrics.record_training_step(
         generated_count=4,
@@ -388,45 +387,48 @@ def test_round_metrics_aggregate_scalars_and_figures(
     )
     metrics.training_duration_s = 1.25
     metrics.generation_duration_s = 0.75
+    metrics.positive_buffer_size = 3
 
-    sampler._log_round_metrics(
-        positive_buffer=make_replay_buffer(),
-        negative_buffer=None,
+    logged, figure_calls = sampler.drain_round_diagnostics(
+        include_figures=True,
+        max_points=1000,
     )
 
-    logged = {call.args[0]: call.args[1] for call in logger.log_metric.call_args_list}
-    assert logged["s3gfn/train/generated_total"] == 6
-    assert logged["s3gfn/train/valid_total"] == 5
-    assert logged["s3gfn/train/synthesizable_total"] == 3
-    assert logged["s3gfn/train/validity_rate"] == pytest.approx(5 / 6)
-    assert logged["s3gfn/train/synthesizable_rate"] == pytest.approx(3 / 5)
-    assert logged["s3gfn/train/online_updates"] == 2
-    assert logged["s3gfn/train/replay_updates"] == 1
-    assert logged["s3gfn/train/online_rtb_loss_mean"] == pytest.approx(3.0)
-    assert logged["s3gfn/train/online_rtb_loss_final"] == pytest.approx(4.0)
-    assert logged["s3gfn/train/replay_loss_mean"] == pytest.approx(3.0)
-    assert logged["s3gfn/train/auxiliary_loss_mean"] == pytest.approx(0.5)
-    assert logged["s3gfn/train/log_z_final"] == pytest.approx(0.2)
-    assert logged["s3gfn/reward/raw_mean"] == pytest.approx(6.0)
-    assert logged["s3gfn/reward/raw_max"] == pytest.approx(10.0)
-    assert logged["s3gfn/generation/yield"] == pytest.approx(0.4)
-    assert logged["s3gfn/generation/invalid_rate"] == pytest.approx(0.2)
-    assert logged["s3gfn/generation/duplicate_rate"] == pytest.approx(0.2)
-    assert logged["s3gfn/generation/fidelity_1"] == pytest.approx(0.5)
-    assert logged["s3gfn/generation/fidelity_2"] == pytest.approx(0.5)
+    assert logged["sampler/s3gfn/train/generated_total"] == 6
+    assert logged["sampler/s3gfn/train/valid_total"] == 5
+    assert logged["sampler/s3gfn/train/synthesizable_total"] == 3
+    assert logged["sampler/s3gfn/train/validity_rate"] == pytest.approx(5 / 6)
+    assert logged["sampler/s3gfn/train/synthesizable_rate"] == pytest.approx(3 / 5)
+    assert logged["sampler/s3gfn/train/online_updates"] == 2
+    assert logged["sampler/s3gfn/train/replay_updates"] == 1
+    assert logged["sampler/s3gfn/train/online_rtb_loss_mean"] == pytest.approx(3.0)
+    assert logged["sampler/s3gfn/train/online_rtb_loss_final"] == pytest.approx(4.0)
+    assert logged["sampler/s3gfn/train/replay_loss_mean"] == pytest.approx(3.0)
+    assert logged["sampler/s3gfn/train/contrastive_loss_mean"] == pytest.approx(0.5)
+    assert logged["sampler/s3gfn/train/contrastive_loss_final"] == pytest.approx(0.5)
+    assert logged["sampler/s3gfn/train/log_z_final"] == pytest.approx(0.2)
+    assert logged["sampler/s3gfn/reward/raw_mean"] == pytest.approx(6.0)
+    assert logged["sampler/s3gfn/reward/raw_max"] == pytest.approx(10.0)
+    assert logged["sampler/s3gfn/generation/yield"] == pytest.approx(0.4)
+    assert logged["sampler/s3gfn/generation/invalid_rate"] == pytest.approx(0.2)
+    assert logged["sampler/s3gfn/generation/duplicate_rate"] == pytest.approx(0.2)
     assert all(
         isinstance(value, (int, float)) and not isinstance(value, bool)
         for value in logged.values()
     )
-    figure_calls = {
-        call.args[0]: call.args[1] for call in logger.log_figure.call_args_list
+    assert set(figure_calls) == {
+        "sampler/s3gfn/training_losses",
+        "sampler/s3gfn/log_z",
+        "sampler/s3gfn/reward/trajectory",
     }
-    assert set(figure_calls) == {"s3gfn/training_losses", "s3gfn/log_z"}
     assert all(isinstance(figure, Figure) for figure in figure_calls.values())
-    logger.log_step.assert_not_called()
+    training_axis = figure_calls["sampler/s3gfn/training_losses"].axes[0]
+    assert training_axis.get_ylabel() == "S3-GFN training loss"
+    for figure in figure_calls.values():
+        plt.close(figure)
 
 
-def test_sampler_logs_round_metrics_without_advancing_runtime_step(
+def test_sampler_drains_round_metrics_without_touching_runtime_logger(
     make_sampler,
     fake_model,
     patch_molecule_dependencies,
@@ -439,12 +441,19 @@ def test_sampler_logs_round_metrics_without_advancing_runtime_step(
 
     sampler.sample(acquisition=FakeAcquisition())
 
-    runtime_logger.log_metric.assert_called()
+    metrics, figures = sampler.drain_round_diagnostics(
+        include_figures=False,
+        max_points=1000,
+    )
+
+    assert metrics["sampler/s3gfn/generation/yield"] == pytest.approx(1.0)
+    assert figures == {}
+    runtime_logger.log_metric.assert_not_called()
     runtime_logger.log_step.assert_not_called()
     runtime_logger.end.assert_not_called()
 
 
-def test_round_metrics_are_a_noop_without_runtime_logger(
+def test_round_metrics_drain_without_runtime_logger(
     make_sampler,
     make_replay_buffer,
 ) -> None:
@@ -463,14 +472,17 @@ def test_round_metrics_are_a_noop_without_runtime_logger(
         raw_reward_scores=[1.0],
     )
 
-    sampler._log_round_metrics(
-        positive_buffer=make_replay_buffer(capacity=1),
-        negative_buffer=None,
+    logged, figures = sampler.drain_round_diagnostics(
+        include_figures=False,
+        max_points=1000,
     )
 
-    # The recorded round is left intact for a later bound logger to emit.
-    assert sampler.round_metrics is metrics
-    assert metrics.generated_counts == [1]
+    assert logged["sampler/s3gfn/train/generated_total"] == 1
+    assert figures == {}
+    assert sampler.drain_round_diagnostics(
+        include_figures=False,
+        max_points=1000,
+    ) == ({}, {})
 
 
 def test_prepare_batch_retains_raw_reward_scores(
