@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Iterable, Mapping, Sequence, Any
+from typing import Any, Iterable, Mapping, Protocol, Sequence, runtime_checkable
 
 from activelearning.utils.types import Candidate, Observation
 from activelearning.runtime import ALRuntimeMixin
@@ -103,23 +103,6 @@ class Surrogate(ABC, ALRuntimeMixin):
         """
         return True
 
-    def set_fidelity_confidences(self, confidences: dict[int, float]) -> None:
-        """Set per-fidelity confidence metadata for multi-fidelity surrogate models.
-
-        This method is intended for surrogate models that operate in a multi-fidelity
-        setting, where different fidelity levels have associated confidence values.
-
-        Surrogates that do not support or utilize fidelity-specific metadata can
-        safely ignore this method, as the default implementation is a no-op.
-
-        Parameters
-        ----------
-        confidences : dict[int, float]
-            Mapping of fidelity levels (integer indices) to confidence
-            values in the range [0, 1], where 1 indicates maximum confidence.
-        """
-        return None
-
     def predict(self, candidates: Sequence[Candidate]) -> Mapping[str, Any]:
         """Predict values for candidates (optional method).
 
@@ -156,3 +139,42 @@ class Surrogate(ABC, ALRuntimeMixin):
             f"{self.__class__.__name__} does not implement predict(). "
             "This surrogate may only work with specific acquisition functions."
         )
+
+
+class MultiFidelitySurrogate(Surrogate, ABC):
+    """Runtime contract for surrogates that model multiple fidelity levels.
+
+    Implementations receive the oracle's discrete-level-to-confidence mapping
+    before their first fit or update. They must use the mapping consistently
+    when encoding observations and candidates.
+    """
+
+    @abstractmethod
+    def set_fidelity_confidences(self, confidences: dict[int, float]) -> None:
+        """Set fidelity confidence metadata before fitting.
+
+        Parameters
+        ----------
+        confidences : dict[int, float]
+            Mapping from each declared integer fidelity level to its encoded
+            confidence value.
+        """
+
+
+@runtime_checkable
+class TargetFidelityProjector(Protocol):
+    """Optional contract for model-space target-fidelity projection.
+
+    Multi-fidelity acquisitions use this protocol only when they need to
+    project encoded candidates to a designated target fidelity.
+    """
+
+    @property
+    def is_multi_fidelity(self) -> bool:
+        """Whether the surrogate currently models multiple fidelities."""
+
+    def get_fidelity_dimension(self) -> int | None:
+        """Return the fidelity column index in model-space inputs."""
+
+    def get_target_fidelity_value(self) -> float | None:
+        """Return the encoded model-space target fidelity value."""

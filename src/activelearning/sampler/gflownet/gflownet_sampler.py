@@ -15,7 +15,7 @@ from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.gflownet.utils import proxy_states_to_candidates
 from activelearning.sampler.sampler import Sampler
-from activelearning.utils.types import Candidate, Observation
+from activelearning.utils.types import Candidate, DEFAULT_FIDELITY, Observation
 
 logger = logging.getLogger(__name__)
 
@@ -34,15 +34,14 @@ class GFlowNetSampler(Sampler):
     conf : DictConfig
         GFlowNet config (``env``, ``policy``, ``gflownet``, ``loss``,
         ``buffer``, ``evaluator``, ``logger``, ``proxy``).
-    fidelities : list[int] or None
-        Fidelity levels to generate. ``None`` means single-fidelity (no
-        fidelity is stamped on candidates). A list enables multi-fidelity
-        mode: each sampled candidate is assigned one of these values as its
-        ``fidelity``. Values must match the oracle's ``fidelity_costs`` keys
-        (e.g. ``[1, 2, 3]`` for a three-level oracle).
+    fidelities : Sequence[int]
+        Fidelity levels to generate. Defaults to the single level
+        :data:`~activelearning.utils.types.DEFAULT_FIDELITY`. More than one
+        entry enables multi-fidelity mode: each sampled candidate is assigned
+        one of these values as its ``fidelity``.
     fidelity_action : {"any", "first", "last"}
-        Controls when fidelity is chosen during a trajectory. Only used when
-        ``fidelities`` is not ``None``.
+        Controls when fidelity is chosen during a trajectory.  Only relevant in
+        multi-fidelity mode (``len(fidelities) > 1``).
 
         - ``"any"`` *(default)* — fidelity may be chosen at any point,
           interleaved with base-env actions (SetFix wrapper).
@@ -54,18 +53,20 @@ class GFlowNetSampler(Sampler):
         self,
         n_samples: int,
         conf: DictConfig,
-        fidelities: Optional[list[int]] = None,
+        fidelities: Sequence[int] = (DEFAULT_FIDELITY,),
         fidelity_action: Literal["any", "first", "last"] = "any",
     ) -> None:
         self.n_samples = n_samples
         self.conf = conf
-        self.fidelities = fidelities
-        self._n_fidelities = len(fidelities) if fidelities is not None else 1
+        self.fidelities = list(fidelities)
+        self._n_fidelities = len(self.fidelities)
         self.fidelity_action = fidelity_action
-        if fidelities is None and fidelity_action != "any":
+        if self._n_fidelities == 1 and fidelity_action != "any":
             logger.warning(
-                "fidelity_action=%r has no effect when fidelities=None (single-fidelity).",
+                "fidelity_action=%r has no effect in single-fidelity mode "
+                "(fidelities has %d level).",
                 fidelity_action,
+                self._n_fidelities,
             )
 
     # ------------------------------------------------------------------
@@ -73,11 +74,24 @@ class GFlowNetSampler(Sampler):
     # ------------------------------------------------------------------
 
     def _device_str(self) -> str:
-        """Return the device as a plain string (e.g. ``'cpu'``)."""
+        """Return the device as a plain string (e.g. ``'cpu'``).
+
+        Returns
+        -------
+        str
+            String representation of the runtime device.
+        """
         return str(self.device)
 
     def _float_precision(self) -> int:
-        """Return floating-point precision as an integer (32 or 64)."""
+        """Return floating-point precision as an integer (32 or 64).
+
+        Returns
+        -------
+        int
+            ``32`` when the runtime dtype is :data:`torch.float32`,
+            ``64`` otherwise.
+        """
         return 32 if self.dtype == torch.float32 else 64
 
     def _build_agent(
@@ -115,7 +129,7 @@ class GFlowNetSampler(Sampler):
 
         env = (
             self._build_multi_fidelity_env(conf, device, fp)
-            if self.fidelities is not None
+            if self._n_fidelities > 1
             else None
         )
 
@@ -143,6 +157,15 @@ class GFlowNetSampler(Sampler):
         discrete fidelity-choice env, which cannot be expressed as a single
         Hydra target. This method creates a partial callable from ``conf.env``
         and passes it to the wrapper factory.
+
+        Parameters
+        ----------
+        conf : DictConfig
+            Merged GFlowNet config with device and float precision already set.
+        device : str
+            Device string (e.g. ``'cpu'`` or ``'cuda:0'``).
+        fp : int
+            Floating-point precision (32 or 64).
 
         Returns
         -------
@@ -192,7 +215,9 @@ class GFlowNetSampler(Sampler):
         if len(states) == 0:
             return []
         return proxy_states_to_candidates(
-            env.states2proxy(states), env, fidelity_map=self.fidelities
+            env.states2proxy(states),
+            env,
+            fidelity_map=self.fidelities,
         )
 
     # ------------------------------------------------------------------

@@ -1,11 +1,11 @@
 import torch
 
-from typing import Callable, Iterable, Literal, Optional, Sequence, Union
+from typing import Callable, Iterable, Literal, Optional, Sequence
 
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.sampler.sampler import Sampler
 from activelearning.utils.sampling import latin_hypercube
-from activelearning.utils.types import Candidate, Observation
+from activelearning.utils.types import Candidate, DEFAULT_FIDELITY, Observation
 from activelearning.utils.warnings import warn_ignored_args
 
 
@@ -27,10 +27,10 @@ class HypercubeSampler(Sampler):
         ``lower < upper``. The length determines input dimensionality.
     num_samples : int
         Number of candidates to generate per ``sample()`` call. Must be > 0.
-    fidelities : Sequence[int] or dict[int, float] or None
+    fidelities : Sequence[int] or dict[int, float]
         Controls fidelity assignment for each candidate:
 
-        - ``None`` — no fidelity (``candidate.fidelity = None``).
+        - ``[DEFAULT_FIDELITY]`` — the default single-fidelity configuration.
         - ``[1, 2, 3]`` — uniform sampling across fidelity levels.
         - ``{1: 1.0, 2: 5.0}`` — cost-inverse sampling: each key is a fidelity
           level and each value is its cost. Candidates are assigned fidelities
@@ -44,8 +44,7 @@ class HypercubeSampler(Sampler):
     Raises
     ------
     ValueError
-        If bounds are empty or invalid, ``num_samples <= 0``, ``fidelities`` is
-        an empty sequence or dict, any cost is non-positive, or
+        If bounds are empty or invalid, ``num_samples <= 0``, or
         ``point_strategy`` is unrecognised.
     """
 
@@ -53,7 +52,7 @@ class HypercubeSampler(Sampler):
         self,
         bounds: Sequence[tuple[float, float]],
         num_samples: int,
-        fidelities: Union[None, Sequence[int], dict[int, float]] = None,
+        fidelities: Sequence[int] | dict[int, float] = (DEFAULT_FIDELITY,),
         point_strategy: Literal["uniform", "lhs"] = "uniform",
     ) -> None:
         if len(bounds) == 0:
@@ -72,23 +71,12 @@ class HypercubeSampler(Sampler):
         self.num_samples = num_samples
         self.point_strategy = point_strategy
 
-        # Normalize the fidelities param into internal fields
-        self._fidelity_levels = None
-        self._fidelity_costs = None
         if isinstance(fidelities, dict):
-            if len(fidelities) == 0:
-                raise ValueError("fidelities must not be empty when specified")
-            for fidelity, cost in fidelities.items():
-                if cost <= 0:
-                    raise ValueError(
-                        f"All costs must be positive; fidelity {fidelity} has cost {cost}"
-                    )
-            self._fidelity_levels = sorted(fidelities.keys())
+            self._fidelity_levels = sorted(fidelities)
             self._fidelity_costs = fidelities
-        elif isinstance(fidelities, list):
-            if len(fidelities) == 0:
-                raise ValueError("fidelities must not be empty when specified")
-            self._fidelity_levels = fidelities
+        else:
+            self._fidelity_levels = list(fidelities)
+            self._fidelity_costs = None
 
         # Store scalar values and materialize tensors lazily so a later-bound
         # runtime context can still control dtype.
@@ -97,7 +85,15 @@ class HypercubeSampler(Sampler):
         self._range_values = tuple(diffs)
 
     def _get_bounds_tensors(self) -> tuple[torch.Tensor, torch.Tensor]:
-        """Materialize lower/range tensors using the currently bound runtime dtype."""
+        """Materialize lower/range tensors using the currently bound runtime dtype.
+
+        Returns
+        -------
+        lower : torch.Tensor
+            1-D tensor of per-dimension lower bounds.
+        ranges : torch.Tensor
+            1-D tensor of per-dimension widths (``upper - lower``).
+        """
         return (
             torch.tensor(self._lower_values, dtype=self.dtype),
             torch.tensor(self._range_values, dtype=self.dtype),
@@ -117,17 +113,14 @@ class HypercubeSampler(Sampler):
         # Default: uniform
         return torch.rand(self.num_samples, n_dims, dtype=self.dtype)
 
-    def _assign_fidelities(self) -> list[Optional[int]]:
+    def _assign_fidelities(self) -> list[int]:
         """Assign fidelity levels to ``num_samples`` candidates.
 
         Returns
         -------
-        fidelities : list[Optional[int]]
-            One fidelity per candidate. ``None`` if no fidelities were configured.
+        fidelities : list[int]
+            One fidelity per candidate.
         """
-        if self._fidelity_levels is None:
-            return [None] * self.num_samples
-
         fidelity_tensor = torch.tensor(
             self._fidelity_levels,
             dtype=torch.long,

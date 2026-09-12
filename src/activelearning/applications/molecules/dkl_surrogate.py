@@ -12,8 +12,8 @@ Two variants are provided, both inheriting from :class:`BoTorchGPSurrogate`:
     ``DeepKernelMoleculeRegressor``.  Training minimises
     ``VariationalELBO + MLM loss`` via Adam.
 
-**Multi-fidelity** is controlled via the ``multi_fidelity`` constructor
-argument (and the ``multi_fidelity`` key in the YAML config). When enabled,
+**Multi-fidelity** is controlled via the ``is_multi_fidelity`` constructor
+argument (and the ``is_multi_fidelity`` key in the YAML config). When enabled,
 the surrogate appends the BoTorch-facing **fidelity confidence** from
 ``set_fidelity_confidences()`` as the last column of the feature tensor before
 the GP. This keeps the fidelity coordinate in the continuous space used by
@@ -59,12 +59,12 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         The shared Transformer encoder jointly optimised with the GP.
     training_params : SelfiesTrainingConfig
         Training hyper-parameters (epochs, lr, mask_ratio, pretrain_epochs).
-    multi_fidelity : bool
+    is_multi_fidelity : bool
         Whether to append the encoded fidelity confidence to each feature
-        vector. Should match the ``multi_fidelity`` key in the YAML run config.
+        vector. Should match the ``is_multi_fidelity`` key in the YAML run config.
     target_fidelity : int, optional
         The target (highest) fidelity level.  **Required when
-        ``multi_fidelity=True``**; tells BoTorch's ``project_to_target_fidelity``
+        ``is_multi_fidelity=True``**; tells BoTorch's ``project_to_target_fidelity``
         which encoded fidelity value to project to. Typically this is the
         highest fidelity level, and it is mapped to its configured confidence
         internally.
@@ -91,25 +91,22 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         self,
         encoder: SelfiesTransformerEncoder,
         training_params: Any,
-        multi_fidelity: bool = False,
+        is_multi_fidelity: bool = False,
         target_fidelity: Optional[int] = None,
         **botorch_kwargs: Any,
     ) -> None:
-        if multi_fidelity and target_fidelity is None:
+        if is_multi_fidelity and target_fidelity is None:
             raise ValueError(
-                "target_fidelity must be set when multi_fidelity=True. "
+                "target_fidelity must be set when is_multi_fidelity=True. "
                 "Set it to the maximum fidelity level (e.g. max(fidelity_costs))."
             )
         self._encoder = encoder
         self._training = training_params
-        self._include_fidelity: bool = multi_fidelity
 
-        self._target_fidelity_level = target_fidelity
+        self._target_fidelity_level = target_fidelity if is_multi_fidelity else None
         botorch_kwargs.setdefault("optimize_hyperparameters", False)
+        botorch_kwargs.setdefault("is_multi_fidelity", is_multi_fidelity)
         super().__init__(**botorch_kwargs)
-        # Override the base-class default (False) so is_multi_fidelity() returns
-        # the correct value even before the first fit() call.
-        self._is_multi_fidelity = multi_fidelity
 
     def bind_runtime_context(self, runtime_context: RuntimeContext) -> None:
         """Move the DKL stack onto the shared runtime device and dtype."""
@@ -154,7 +151,7 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         configured target fidelity level is converted through the active
         confidence mapping before BoTorch uses it.
         """
-        if self._target_fidelity_level is None:
+        if not self._is_multi_fidelity or self._target_fidelity_level is None:
             return None
         return self._encode_fidelity_level(self._target_fidelity_level)
 
@@ -190,7 +187,7 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         targets = self._train_Y.squeeze(-1).to(device=self.device, dtype=self.dtype)
         # MLM only sees token IDs -- strip the fidelity column when present
         mlm_tokens = (
-            train_X[:, :-1].long() if self._include_fidelity else train_X.long()
+            train_X[:, :-1].long() if self._is_multi_fidelity else train_X.long()
         )
 
         for _ in range(self._training.pretrain_epochs):
@@ -226,13 +223,13 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         train_Y = torch.as_tensor([o.y for o in obs_list], dtype=self.dtype).unsqueeze(
             -1
         )
-        return tokens, train_Y, self._include_fidelity
+        return tokens, train_Y, self._is_multi_fidelity
 
     def encode_candidates(self, candidates: Iterable[Candidate]) -> torch.Tensor:
         """Tokenise candidates to runtime-dtype token-ID tensors.
 
         Appends the encoded fidelity confidence as the last column when
-        ``multi_fidelity=True``.
+        ``is_multi_fidelity=True``.
         """
         cand_list = list(candidates)
         if not cand_list:
@@ -247,7 +244,7 @@ class SelfiesDeepKernelSurrogate(BoTorchGPSurrogate):
         """Tokenise items and append the encoded fidelity value when active."""
         strings = [self._extract_molecule_string(item) for item in items]
         tokens = self._tokenize_strings(strings)
-        if self._include_fidelity:
+        if self._is_multi_fidelity:
             fidelities = torch.tensor(
                 [
                     self._encode_fidelity_level(item.fidelity)
@@ -333,9 +330,9 @@ class ExactSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
     ----------
     encoder : SelfiesTransformerEncoder
     training_params : SelfiesTrainingConfig
-    multi_fidelity : bool
+    is_multi_fidelity : bool
     target_fidelity : int, optional
-        Required when ``multi_fidelity=True``.
+        Required when ``is_multi_fidelity=True``.
     standardize_outputs : bool
         Normalise GP outputs to mean 0 / variance 1.
     """
@@ -344,27 +341,27 @@ class ExactSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
         self,
         encoder: SelfiesTransformerEncoder,
         training_params: Any,
-        multi_fidelity: bool = False,
+        is_multi_fidelity: bool = False,
         target_fidelity: Optional[int] = None,
         standardize_outputs: bool = True,
     ) -> None:
         super().__init__(
             encoder=encoder,
             training_params=training_params,
-            multi_fidelity=multi_fidelity,
+            is_multi_fidelity=is_multi_fidelity,
             target_fidelity=target_fidelity,
             scale_inputs=False,  # token IDs must not be normalised
             standardize_outputs=standardize_outputs,
         )
 
     def _build_model(self, train_X: torch.Tensor, train_Y: torch.Tensor) -> None:
-        gp_input_dim = self._encoder.latent_dim + (1 if self._include_fidelity else 0)
+        gp_input_dim = self._encoder.latent_dim + (1 if self._is_multi_fidelity else 0)
         self.covar_module = SelfiesKernel(
             encoder=self._encoder,
             base_kernel=gpytorch.kernels.ScaleKernel(
                 gpytorch.kernels.MaternKernel(ard_num_dims=gp_input_dim)
             ),
-            include_fidelity=self._include_fidelity,
+            include_fidelity=self._is_multi_fidelity,
         )
         # Skip the abstract stub and call BoTorchGPSurrogate directly
         BoTorchGPSurrogate._build_model(self, train_X, train_Y)
@@ -503,10 +500,10 @@ class VariationalSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
     ----------
     encoder : SelfiesTransformerEncoder
     training_params : SelfiesTrainingConfig
-    multi_fidelity : bool
+    is_multi_fidelity : bool
         Append fidelity scalar to latent feature vectors.
     target_fidelity : int, optional
-        Required when ``multi_fidelity=True``.
+        Required when ``is_multi_fidelity=True``.
     num_inducing : int
         Number of variational inducing points.
     standardize_outputs : bool
@@ -517,7 +514,7 @@ class VariationalSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
         self,
         encoder: SelfiesTransformerEncoder,
         training_params: Any,
-        multi_fidelity: bool = False,
+        is_multi_fidelity: bool = False,
         target_fidelity: Optional[int] = None,
         num_inducing: int = 64,
         standardize_outputs: bool = True,
@@ -532,14 +529,14 @@ class VariationalSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
         super().__init__(
             encoder=encoder,
             training_params=training_params,
-            multi_fidelity=multi_fidelity,
+            is_multi_fidelity=is_multi_fidelity,
             target_fidelity=target_fidelity,
             scale_inputs=False,
             standardize_outputs=False,  # handled manually via _prepare_targets
         )
 
     def _build_model(self, train_X: torch.Tensor, train_Y: torch.Tensor) -> None:
-        gp_input_dim = self._encoder.latent_dim + (1 if self._include_fidelity else 0)
+        gp_input_dim = self._encoder.latent_dim + (1 if self._is_multi_fidelity else 0)
         self._gp_model = _VariationalDKLGP(
             gp_input_dim,
             self._num_inducing,
@@ -632,7 +629,7 @@ class VariationalSelfiesDKLSurrogate(SelfiesDeepKernelSurrogate):
 
     def _encode_with_fidelity(self, token_X: torch.Tensor) -> torch.Tensor:
         """Encode token IDs → latent features, appending fidelity when active."""
-        if self._include_fidelity:
+        if self._is_multi_fidelity:
             features = self._encoder(token_X[:, :-1].long())
             return torch.cat([features, token_X[:, -1:].to(features.dtype)], dim=-1)
         return self._encoder(token_X.long())

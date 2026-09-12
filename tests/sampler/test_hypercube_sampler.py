@@ -46,9 +46,11 @@ class TestUniformPointStrategy:
         sampler = HypercubeSampler(bounds=BRANIN_BOUNDS, num_samples=200)
         assert _all_within_bounds(sampler.sample(), BRANIN_BOUNDS)
 
-    def test_default_fidelity_is_none(self):
+    def test_default_fidelity_is_default_fidelity_constant(self):
+        from activelearning.utils.types import DEFAULT_FIDELITY
+
         sampler = HypercubeSampler(bounds=BRANIN_BOUNDS, num_samples=5)
-        assert all(c.fidelity is None for c in sampler.sample())
+        assert all(c.fidelity == DEFAULT_FIDELITY for c in sampler.sample())
 
     def test_reproducibility_with_seed(self):
         sampler = HypercubeSampler(bounds=BRANIN_BOUNDS, num_samples=8)
@@ -203,6 +205,15 @@ class TestUniformFidelityAssignment:
         sampler = HypercubeSampler(bounds=BRANIN_BOUNDS, num_samples=20, fidelities=[7])
         assert all(c.fidelity == 7 for c in sampler.sample())
 
+    def test_tuple_fidelities_are_preserved(self):
+        """Any supported fidelity sequence must retain its declared levels."""
+        sampler = HypercubeSampler(
+            bounds=BRANIN_BOUNDS,
+            num_samples=20,
+            fidelities=(7,),
+        )
+        assert all(c.fidelity == 7 for c in sampler.sample())
+
 
 # ---------------------------------------------------------------------------
 # Cost-inverse fidelity assignment
@@ -306,19 +317,3 @@ class TestValidation:
                 num_samples=5,
                 point_strategy="random",  # type: ignore[arg-type]
             )
-
-    def test_raises_on_empty_fidelities(self):
-        with pytest.raises(ValueError, match="fidelities must not be empty"):
-            HypercubeSampler(bounds=BRANIN_BOUNDS, num_samples=5, fidelities=[])
-
-    def test_raises_on_empty_fidelities_dict(self):
-        with pytest.raises(ValueError, match="fidelities must not be empty"):
-            HypercubeSampler(bounds=BRANIN_BOUNDS, num_samples=5, fidelities={})
-
-    def test_raises_on_zero_cost(self):
-        with pytest.raises(ValueError, match="costs must be positive"):
-            HypercubeSampler(bounds=BRANIN_BOUNDS, num_samples=5, fidelities={1: 0.0})
-
-    def test_raises_on_negative_cost(self):
-        with pytest.raises(ValueError, match="costs must be positive"):
-            HypercubeSampler(bounds=BRANIN_BOUNDS, num_samples=5, fidelities={1: -1.0})

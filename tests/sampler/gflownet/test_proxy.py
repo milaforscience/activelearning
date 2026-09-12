@@ -226,24 +226,25 @@ class TestAcquisitionProxyCallMultiFidelity:
         self.env = _StubMFEnv(idx_base_env=0, idx_fidelity=1)
         self.proxy = _make_proxy()
         self.proxy.setup(self.env)
+        self.proxy.set_fidelity_map([0, 2])
         self.proxy.set_acquisition(_ConstantAcquisition(value=1.0))
 
     def test_returns_correct_number_of_values(self):
-        states = _make_mf_states([[0.1, 0.2], [0.3, 0.4]], fidelities=[0, 1])
+        states = _make_mf_states([[0.1, 0.2], [0.3, 0.4]], fidelities=[1, 2])
         result = self.proxy(states)
         assert result.shape == (2,)
 
     def test_acquisition_receives_fidelity(self):
         acq = _FidelityCapturingAcquisition()
         self.proxy.set_acquisition(acq)
-        states = _make_mf_states([[0.1, 0.2], [0.3, 0.4]], fidelities=[0, 2])
+        states = _make_mf_states([[0.1, 0.2], [0.3, 0.4]], fidelities=[1, 2])
         self.proxy(states)
         assert acq.seen == [0, 2]
 
     def test_acquisition_receives_correct_coords(self):
         acq = _CoordSumAcquisition()
         self.proxy.set_acquisition(acq)
-        states = _make_mf_states([[1.0, 2.0]], fidelities=[0])
+        states = _make_mf_states([[1.0, 2.0]], fidelities=[1])
         result = self.proxy(states)
         assert result[0].item() == pytest.approx(3.0, abs=1e-5)
 
@@ -251,6 +252,7 @@ class TestAcquisitionProxyCallMultiFidelity:
         """Works with idx_fidelity=0, idx_base_env=1 (FidFirst wrapper)."""
         env = _StubMFEnv(idx_base_env=1, idx_fidelity=0)
         self.proxy.setup(env)
+        self.proxy.set_fidelity_map([0, 2])
         acq = _FidelityCapturingAcquisition()
         self.proxy.set_acquisition(acq)
         states = _make_mf_states([[0.5, 0.6]], fidelities=[2], idx_base=1, idx_fid=0)

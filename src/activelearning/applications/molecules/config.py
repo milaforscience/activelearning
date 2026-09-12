@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Annotated, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 from activelearning.applications.molecules.constants import SELFIES_VOCAB_SMALL
 
@@ -127,6 +127,34 @@ class SelfiesTrainingConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _resolve_dkl_fidelity_confidences(
+    config: BaseModel,
+    confidences: dict[int, float],
+) -> BaseModel:
+    """Resolve shared DKL fidelity settings from oracle metadata."""
+    is_multi_fidelity = len(confidences) > 1
+    target_fidelity = config.target_fidelity
+
+    if not is_multi_fidelity:
+        target_fidelity = None
+    elif target_fidelity is None:
+        target_fidelity = max(confidences, key=confidences.__getitem__)
+    elif target_fidelity not in confidences:
+        raise ValueError(
+            f"Surrogate target_fidelity {target_fidelity} is not declared by "
+            f"the oracle. Oracle declares: {sorted(confidences)}."
+        )
+
+    data = config.model_dump()
+    data.update(
+        {
+            "is_multi_fidelity": is_multi_fidelity,
+            "target_fidelity": target_fidelity,
+        }
+    )
+    return type(config).model_validate(data)
+
+
 class ExactSelfiesDKLSurrogateConfig(BaseModel):
     """Configuration for :class:`~activelearning.applications.molecules.dkl_surrogate.ExactSelfiesDKLSurrogate`.
 
@@ -139,12 +167,12 @@ class ExactSelfiesDKLSurrogateConfig(BaseModel):
         Encoder architecture.
     training_params : SelfiesTrainingConfig
         Training hyper-parameters for the joint MLM + GP Adam loop.
-    multi_fidelity : bool
+    is_multi_fidelity : bool
         Append the encoded fidelity confidence to feature tensors.
     target_fidelity : int, optional
-        Required when ``multi_fidelity=True``; typically the highest fidelity
-        level. It is mapped to its configured confidence before BoTorch uses it
-        as the target-fidelity value.
+        Target level for multi-fidelity acquisition. The top-level active
+        learning config derives it from oracle confidence metadata when
+        omitted. Standalone multi-fidelity builds must provide it explicitly.
     standardize_outputs : bool
         Normalise GP outputs to mean 0 / variance 1.
     """
@@ -154,15 +182,32 @@ class ExactSelfiesDKLSurrogateConfig(BaseModel):
     training_params: SelfiesTrainingConfig = Field(
         default_factory=SelfiesTrainingConfig
     )
-    multi_fidelity: bool = False
+    is_multi_fidelity: bool = False
     target_fidelity: Optional[int] = None
     standardize_outputs: bool = True
 
-    @model_validator(mode="after")
-    def _check_target_fidelity(self) -> "ExactSelfiesDKLSurrogateConfig":
-        if self.multi_fidelity and self.target_fidelity is None:
-            raise ValueError("target_fidelity is required when multi_fidelity=True")
-        return self
+    def resolve_fidelity_confidences(
+        self,
+        confidences: dict[int, float],
+    ) -> "ExactSelfiesDKLSurrogateConfig":
+        """Resolve DKL fidelity mode and target from oracle confidences.
+
+        Parameters
+        ----------
+        confidences : dict[int, float]
+            Oracle fidelity confidence mapping.
+
+        Returns
+        -------
+        ExactSelfiesDKLSurrogateConfig
+            Revalidated config with resolved fidelity settings.
+
+        Raises
+        ------
+        ValueError
+            If the explicit target fidelity is not declared by the oracle.
+        """
+        return _resolve_dkl_fidelity_confidences(self, confidences)
 
     def build(self) -> object:
         from activelearning.applications.molecules.dkl_surrogate import (
@@ -172,7 +217,7 @@ class ExactSelfiesDKLSurrogateConfig(BaseModel):
         return ExactSelfiesDKLSurrogate(
             encoder=self.encoder.build(),
             training_params=self.training_params,
-            multi_fidelity=self.multi_fidelity,
+            is_multi_fidelity=self.is_multi_fidelity,
             target_fidelity=self.target_fidelity,
             standardize_outputs=self.standardize_outputs,
         )
@@ -191,12 +236,12 @@ class VariationalSelfiesDKLSurrogateConfig(BaseModel):
         Encoder architecture.
     training_params : SelfiesTrainingConfig
         Training hyper-parameters.
-    multi_fidelity : bool
+    is_multi_fidelity : bool
         Append the encoded fidelity confidence to latent feature vectors.
     target_fidelity : int, optional
-        Required when ``multi_fidelity=True``; typically the highest fidelity
-        level. It is mapped to its configured confidence before BoTorch uses it
-        as the target-fidelity value.
+        Target level for multi-fidelity acquisition. The top-level active
+        learning config derives it from oracle confidence metadata when
+        omitted. Standalone multi-fidelity builds must provide it explicitly.
     num_inducing : int
         Number of variational inducing points.
     standardize_outputs : bool
@@ -208,16 +253,33 @@ class VariationalSelfiesDKLSurrogateConfig(BaseModel):
     training_params: SelfiesTrainingConfig = Field(
         default_factory=SelfiesTrainingConfig
     )
-    multi_fidelity: bool = False
+    is_multi_fidelity: bool = False
     target_fidelity: Optional[int] = None
     num_inducing: int = 64
     standardize_outputs: bool = True
 
-    @model_validator(mode="after")
-    def _check_target_fidelity(self) -> "VariationalSelfiesDKLSurrogateConfig":
-        if self.multi_fidelity and self.target_fidelity is None:
-            raise ValueError("target_fidelity is required when multi_fidelity=True")
-        return self
+    def resolve_fidelity_confidences(
+        self,
+        confidences: dict[int, float],
+    ) -> "VariationalSelfiesDKLSurrogateConfig":
+        """Resolve DKL fidelity mode and target from oracle confidences.
+
+        Parameters
+        ----------
+        confidences : dict[int, float]
+            Oracle fidelity confidence mapping.
+
+        Returns
+        -------
+        VariationalSelfiesDKLSurrogateConfig
+            Revalidated config with resolved fidelity settings.
+
+        Raises
+        ------
+        ValueError
+            If the explicit target fidelity is not declared by the oracle.
+        """
+        return _resolve_dkl_fidelity_confidences(self, confidences)
 
     def build(self) -> object:
         from activelearning.applications.molecules.dkl_surrogate import (
@@ -227,7 +289,7 @@ class VariationalSelfiesDKLSurrogateConfig(BaseModel):
         return VariationalSelfiesDKLSurrogate(
             encoder=self.encoder.build(),
             training_params=self.training_params,
-            multi_fidelity=self.multi_fidelity,
+            is_multi_fidelity=self.is_multi_fidelity,
             target_fidelity=self.target_fidelity,
             num_inducing=self.num_inducing,
             standardize_outputs=self.standardize_outputs,
