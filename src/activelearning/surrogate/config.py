@@ -9,6 +9,7 @@ from typing import (
     Annotated,
     Any,
     Callable,
+    ClassVar,
     Literal,
     Protocol,
     Union,
@@ -94,6 +95,7 @@ class BoTorchGPSurrogateConfig(BaseModel):
     """
 
     type: Literal["BoTorchGPSurrogate"] = "BoTorchGPSurrogate"
+    input_representation: ClassVar[str] = "numeric"
     scale_inputs: bool = True
     standardize_outputs: bool = True
     optimize_hyperparameters: bool = True
