@@ -1,0 +1,96 @@
+# GFlowNet-based tutorial: SELFIES molecule search with exact DKL + single-fidelity xTB.
+#
+# Prerequisites:
+#   - The `xtb` binary on PATH for oracle evaluation
+#   - uv sync --package activelearning-molecules
+#
+# Run with:
+#   uv run activelearning-molecules applications/molecules/config/gflownet_exact.yaml
+#
+# This example keeps the setup intentionally small:
+# - GFlowNetSampler trains a generative policy (GFlowNet) to propose SELFIES strings
+#   in proportion to their acquisition scores, rather than drawing from a fixed pool.
+# - ExactDKLSurrogate fits an exact GP with a deep-kernel-learning molecular
+#   transformer encoder to model electron affinity.
+#   - UpperConfidenceBound scores candidate molecules by predicted mean plus uncertainty.
+
+
+# - Only fidelity 1 (the cheapest xTB approximation) is used so the run stays cheap
+#   and the GFlowNet training loop is easy to follow.
+#
+# GFlowNet hyperparameters (environment, policy architecture, training schedule) are
+# configured in the sampler.conf block below. Defaults for any unlisted keys are
+# loaded from config/gflownet/ at runtime by compose_gflownet_conf.
+
+runtime:
+  device: cpu
+  precision: 64
+  seed: 42
+
+dataset:
+  type: ListDataset
+
+surrogate:
+  type: ExactDKLSurrogate
+  encoder:
+    type: SelfiesTransformerEncoder
+    max_mol_tokens: 18
+    embed_dim: 32
+    ff_dim: 64
+    num_heads: 4
+    num_layers: 2
+    latent_dim: 32
+    dropout: 0.0
+  training_params:
+    epochs: 10
+    lr: 1.0e-3
+    mask_ratio: 0.125
+    pretrain_epochs: 0
+  standardize_outputs: true
+
+acquisition:
+  type: UpperConfidenceBound
+  beta: 2.0
+
+sampler:
+  type: GFlowNetSampler
+  n_samples: 16
+  fidelities: [1]
+  conf:
+    env:
+      _target_: gflownet.envs.sequences.selfies.Selfies
+      env_id: selfies
+      id: selfies
+      max_length: 8
+    gflownet:
+      optimizer:
+        lr: 5.0e-4
+        lr_z_mult: 20
+        n_train_steps: 25
+        batch_size:
+          forward: 16
+
+selector:
+  type: TopKAcquisitionSelector
+  num_samples: 25
+
+oracle:
+  type: XTBIPEAOracle
+  task: ea
+  fidelity_costs:
+    1: 1.0
+  gfn_version: 2
+  ff: mmff
+  log_molecule_visualizations: true
+  molecule_visualization_limit: 25
+
+budget:
+  available_budget: 75.0
+  schedule:
+    type: constant
+    value: 25.0
+
+logger:
+  type: AimLogger
+  project_name: activelearning_tutorials
+  run_name: molecules-gflownet-selfies-exact

@@ -13,13 +13,18 @@ graph LR
     O -- append --> D
 ```
 
-Extending the framework — replacing or adding oracles, surrogates, samplers,
-selectors, or acquisitions — is the primary intended use; all other loop
-components operate without modification.
+Extending the framework — replacing or adding datasets, surrogates,
+acquisitions, samplers, selectors, oracles, loggers, and encoders — is the
+primary intended use; all other loop components operate without modification.
+
+Keep reusable, domain-specific components in an application distribution that
+depends on `activelearning`; the dependency direction must not point from core
+back to an application. Concrete implementations may import optional runtime dependencies lazily from
+`build()` so importing an application's composition root remains lightweight.
 
 ## **The common extension recipe**
 
-Every component follows the same four-step pattern:
+Every public polymorphic component follows the same four-step pattern:
 
 **1. Implement** your class by subclassing the relevant abstract base.
 
@@ -36,33 +41,73 @@ class MyOracle(Oracle):
 **2. Add a Pydantic config model** with a `type` literal and a `build()` method.
 
 ```python
-# src/activelearning/oracle/config.py  (additions)
-from activelearning.oracle.my_oracle import MyOracle
+# my_package/config.py
+from typing import Literal
 
-class MyOracleConfig(BaseModel):
+from activelearning.config_registry import BuildableConfig
+from my_package.oracle import MyOracle
+
+class MyOracleConfig(BuildableConfig):
     type: Literal["MyOracle"] = "MyOracle"
     # your parameters here
 
     def build(self) -> Oracle:
         return MyOracle(...)
+
+
+ORACLE_CONFIGS = (MyOracleConfig,)
 ```
 
-**3. Register** that config model in the component's `config.py` by adding it to the `Union` type alias.
+The catalog is the explicit routing list for that category. When the package
+already provides oracles, adding another oracle requires changing only this
+file.
+
+**3. Aggregate each category catalog once** in the distribution:
 
 ```python
-OracleConfig = Annotated[
-    Union[..., MyOracleConfig],
-    Field(discriminator="type"),
-]
+# my_package/config_catalogs.py
+from my_package.config import ORACLE_CONFIGS
+
+CONFIG_CATALOGS = {
+    "oracle": ORACLE_CONFIGS,
+}
 ```
 
-**4. Point your YAML** at the new `type`.
+Core's built-in schemas use the same mapping shape. The module name is the only
+framework convention; no package metadata hook is required.
+
+**4. Compose the application command** with the catalog mapping:
+
+```python
+# my_package/main.py
+from activelearning.main import run
+from my_package.config_catalogs import CONFIG_CATALOGS
+
+run(
+    catalogs={"my-package": CONFIG_CATALOGS},
+    program_name="my-package",
+)
+```
+
+The application command imports its own catalog directly and composes it with
+the core catalogs before parsing the experiment. The experiment YAML only needs
+the component type:
 
 ```yaml
-# config.yaml
 oracle:
   type: MyOracle
 ```
+
+This direct composition is intentional for known application packages. If the
+framework later supports arbitrary third-party extensions that should activate
+merely by being installed, Python package entry points would be the appropriate
+discovery mechanism.
+
+The supported catalog categories are `dataset`, `surrogate`, `acquisition`,
+`sampler`, `selector`, `oracle`, `logger`, and `encoder`. Runtime settings,
+budgets, diagnostics, run writers, budget schedules, and acquisition
+candidate-set specifications remain local typed models because they are not
+cross-distribution component extension points.
 
 ## **Runtime context**
 

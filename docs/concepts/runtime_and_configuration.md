@@ -103,11 +103,38 @@ operational settings:
 
 </div>
 
-Blocks that select an implementation, such as `surrogate`, `sampler`, `logger`,
-and `run_writer`, use a `type` discriminator. Settings blocks such as `runtime`
-and `diagnostics` do not. Each implementation block is validated by its matching
-configuration model, whose `build()` method turns declarative YAML into a
-runtime object.
+Public component blocks (`dataset`, `surrogate`, `acquisition`, `sampler`,
+`selector`, `oracle`, and `logger`) use a `type` discriminator backed by the
+configuration registry. The nested DKL `encoder` uses the same contract.
+Settings blocks such as `runtime`, `budget`, `run_writer`, and `diagnostics`
+remain ordinary typed models. Each implementation block is validated by its
+matching configuration model, whose `build()` method turns declarative YAML
+into a runtime object.
+
+### Installed application packages
+
+Each component category keeps an explicit schema catalog beside its config
+classes. Each distribution aggregates its catalogs in a plain
+`CONFIG_CATALOGS` mapping. A known application distribution composes its
+catalogs with the core catalogs at its command-line entry point.
+
+Python `*Config` classes belong to the distribution that implements their
+component. Experiment YAML is user-owned and may live at any path:
+
+```sh
+pip install activelearning activelearning-molecules
+activelearning-molecules path/to/my/experiment.yaml
+```
+
+```yaml
+sampler:
+  type: S3GFNSampler
+```
+
+The `activelearning-molecules` command imports
+`activelearning_molecules.config_catalogs.CONFIG_CATALOGS` and passes it to the
+core loader. The generic `activelearning` command remains core-only, so
+installing molecular dependencies does not silently change core behavior.
 
 The `logger`, `run_writer`, and `diagnostics` sections configure independent
 monitoring concerns. A logger provides live tracker output and is placed in the
@@ -184,6 +211,8 @@ uv run activelearning config/branin/multi_fidelity.yaml config/aim_logging.yaml
     - `config/aim_logging.yaml` — logger overlay; compose with any base config to add Aim: `uv run activelearning config/branin/multi_fidelity.yaml config/aim_logging.yaml`
 
     For guided walkthroughs, see the [Running Experiments](../tutorials/running_experiments.md) tutorial.
+    For molecular application components and examples, see the
+    [molecular application guide](https://github.com/milaforscience/activelearning/tree/main/applications/molecules).
 
 ## **Recommended Procedure**
 
