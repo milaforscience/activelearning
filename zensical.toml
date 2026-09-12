@@ -42,6 +42,7 @@ nav = [
     ]},
     {"Resources" = [
         {"FAQ" = "resources/faq.md"},
+        {"S3-GFN Performance" = "resources/s3gfn-performance.md"},
         {"References and Citation" = "resources/references.md"},
         {"Contributing" = "contributing.md"},
     ]},
