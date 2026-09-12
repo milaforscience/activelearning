@@ -33,11 +33,16 @@ ScheduleConfig = Annotated[
 class BudgetConfig(BaseModel):
     available_budget: float = Field(ge=0.0)
     schedule: ScheduleConfig
+    max_rounds: int | None = Field(default=None, gt=0)
 
     def build(self) -> Budget:
         if isinstance(self.schedule, ConstantScheduleConfig):
             schedule = constant_schedule(self.schedule.value)
-            return Budget(available_budget=self.available_budget, schedule=schedule)
+            return Budget(
+                available_budget=self.available_budget,
+                schedule=schedule,
+                max_rounds=self.max_rounds,
+            )
         if isinstance(self.schedule, SigmoidIterationScheduleConfig):
             schedule = sigmoid_iteration_schedule(
                 total_budget=self.available_budget,
@@ -45,5 +50,9 @@ class BudgetConfig(BaseModel):
                 midpoint_fraction=self.schedule.midpoint_fraction,
                 steepness=self.schedule.steepness,
             )
-            return Budget(available_budget=self.available_budget, schedule=schedule)
+            return Budget(
+                available_budget=self.available_budget,
+                schedule=schedule,
+                max_rounds=self.max_rounds,
+            )
         raise ValueError(f"Unsupported schedule type '{self.schedule}'.")

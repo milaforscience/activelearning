@@ -52,7 +52,7 @@ The sampler generates a pool of candidate-fidelity pairs $(x, m)$ to consider. S
 The selector scores the candidate pool and picks the subset that fits within the current round budget. It jointly uses the acquisition scores and oracle cost estimates to maximise the value extracted per unit budget.
 
 !!! tip "Round vs. total budget"
-    The **round budget** (`budget.schedule.value`) caps how much can be spent in a single iteration. The **total budget** (`budget.available_budget`) is the global constraint. Both are enforced independently — a round ends when either limit is hit.
+    The **round budget** (`budget.schedule.value`) caps how much can be spent in a single iteration. The **total budget** (`budget.available_budget`) is the global constraint. An optional `budget.max_rounds` caps the number of completed iterations. These limits are enforced independently — a round ends when its budget is hit, and the run ends when any global limit is reached.
 
 ### **6. Oracle query**
 
@@ -67,7 +67,8 @@ New observations are appended to the dataset, making them available to the next 
 The loop exits early if:
 
 - the candidate pool is empty (no proposals survived selection),
-- the total budget is insufficient to afford any remaining batch.
+- the total budget is insufficient to afford any remaining batch,
+- `budget.max_rounds` completed rounds.
 
 ## **Modularity and Extensibility**
 

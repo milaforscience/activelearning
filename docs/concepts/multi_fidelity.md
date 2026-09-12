@@ -61,4 +61,4 @@ For concrete configuration examples, see [Runtime and Configuration](runtime_and
 | Budget role | Constrains query costs                       | Constrains query costs considering allocation across fidelity levels |
 | `Candidate.fidelity` | Integer fidelity id (e.g. `1`)               | Integer fidelity id (e.g. `1`, `2`, or `3`)                         |
 
-For concrete configuration examples, see the [Synthetic Function Examples](../tutorials/synthetic_function_experiment.md) tutorial, which walks through both settings side by side.
+For concrete configuration examples, see the [Running Experiments](../tutorials/running_experiments.md) tutorial, which walks through both settings side by side.
