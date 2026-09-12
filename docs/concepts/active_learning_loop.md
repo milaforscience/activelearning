@@ -58,9 +58,19 @@ The selector scores the candidate pool and picks the subset that fits within the
 
 The selected batch is sent to the oracle, which evaluates the objective at the requested fidelities. The incurred cost is deducted from the budget. If the batch turns out to be unaffordable (e.g. due to rounding), the round is skipped to prevent overspending.
 
-### **7. Dataset update and telemetry**
+### **7. Dataset update and monitoring**
 
-New observations are appended to the dataset, making them available to the next round. If a logger is configured, the loop records per-round metrics including `round`, `num_new_samples`, `round_cost`, `total_cost`, and `budget_remaining`.
+New observations are appended to the dataset, making them available to the next round. If a logger is configured, the loop records per-round metrics under the `active_learning/` namespace, including the round index, proposed and selected sample counts, observation counts, round and cumulative cost, and remaining budget.
+
+Phase durations are recorded under `profiling/`, including surrogate fitting,
+acquisition updates, sampler sampling, selection, oracle work, dataset
+updates, diagnostics, and total round time. The outer loop commits these
+values at the active-learning round. Logger backends receive live metrics and
+figures at that step, while a configured run writer persists the same round
+data for post-hoc analysis. GFlowNet and S3-GFN retain their native inner
+training resolution in implementation-specific diagnostics without advancing
+the active-learning round. See [Monitoring and Diagnostics](monitoring_and_diagnostics.md)
+for the metric and artifact conventions.
 
 ## **Early Termination**
 
