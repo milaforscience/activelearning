@@ -383,6 +383,39 @@ def test_molecule_dkl_variational_multi_fidelity_gflownet_config_parses() -> Non
     assert config.oracle.per_fidelity_num_conformers == {1: 1, 2: 2, 3: 4}
 
 
+def test_molecule_s3gfn_exact_config_parses() -> None:
+    """Ensure the single-fidelity S3-GFN molecule config matches the schema."""
+    config_path = REPOSITORY_ROOT / "config" / "molecules" / "s3gfn_exact.yaml"
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "S3GFNSampler"
+    assert config.sampler.fidelities == [1]
+    assert config.sampler.trust_remote_code is True
+    assert config.sampler.aux_coefficient == 0.001
+    assert config.surrogate.type == "ExactDKLSurrogate"
+    assert config.surrogate.encoder.type == "GPMoLFormerSmilesEncoder"
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.oracle.mol_repr == "smiles"
+
+
+def test_molecule_s3gfn_multi_fidelity_config_parses() -> None:
+    """Ensure the multi-fidelity S3-GFN molecule config matches the schema."""
+    config_path = (
+        REPOSITORY_ROOT / "config" / "molecules" / "s3gfn_exact_multi_fidelity.yaml"
+    )
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "S3GFNSampler"
+    assert config.sampler.fidelities == [1, 2, 3]
+    assert config.surrogate.is_multi_fidelity is True
+    assert config.surrogate.type == "ExactDKLSurrogate"
+    assert config.surrogate.encoder.type == "GPMoLFormerSmilesEncoder"
+    assert config.oracle.fidelity_costs == {1: 1.0, 2: 3.5, 3: 7.0}
+    assert config.oracle.mol_repr == "smiles"
+
+
 def test_molecule_dkl_exact_pool_config_parses() -> None:
     """Ensure the exact single-fidelity pool-based molecule example matches the schema."""
     config_path = REPOSITORY_ROOT / "config" / "molecules" / "exact.yaml"
