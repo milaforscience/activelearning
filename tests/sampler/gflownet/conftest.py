@@ -132,7 +132,7 @@ def _make_minimal_gflownet_conf(
                 "metrics": "all",
             },
             "logger": {
-                "_target_": "gflownet.utils.logger.Logger",
+                "_target_": "activelearning.sampler.gflownet.logger_wrapper.RuntimeGFlowNetLoggerWrapper",
                 "do": {"online": False, "times": False},
                 "project_name": "test_gflownet",
                 "logdir": {
