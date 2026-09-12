@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 from types import SimpleNamespace
 
 import pytest
@@ -20,6 +21,35 @@ class _FakeCausalLM(nn.Module):
 
     def forward(self, input_ids, attention_mask=None):
         logits = self.weight.expand(input_ids.shape[0], input_ids.shape[1], 4)
+        return type("Output", (), {"logits": logits})()
+
+
+class _FakeFeatureMap(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_buffer("weight", torch.eye(2))
+
+    def orthogonal_random_weights(self, device=None) -> None:
+        self.register_buffer(
+            "weight",
+            torch.eye(2, device=device, dtype=torch.float32),
+        )
+
+    def forward(self, query: torch.Tensor) -> torch.Tensor:
+        self.orthogonal_random_weights(query.device)
+        return torch.matmul(query, self.weight)
+
+
+class _FeatureMapCausalLM(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.scale = nn.Parameter(torch.ones(2))
+        self.feature_map = _FakeFeatureMap()
+
+    def forward(self, input_ids, attention_mask=None):
+        del attention_mask
+        hidden_states = input_ids.to(self.scale.dtype).unsqueeze(-1).expand(-1, -1, 2)
+        logits = self.feature_map(hidden_states) * self.scale
         return type("Output", (), {"logits": logits})()
 
 
@@ -65,6 +95,71 @@ class _GenerationTokenizer(FakeTokenizer):
     @staticmethod
     def batch_decode(input_ids, skip_special_tokens=True):
         return ["CC", "CO"]
+
+
+class MolformerSelfAttention(nn.Module):
+    """Small source-inspectable stand-in for the pinned remote attention."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.scale = nn.Parameter(torch.tensor(2.0))
+
+    def forward(self, hidden_states, attention_mask=None, past_key_value=None):
+        del past_key_value
+        if attention_mask is not None:
+            per_query_attn = attention_mask[:, 0, -1]
+            per_query_extended = per_query_attn[:, None, None, :]
+            if not torch.equal(attention_mask, per_query_extended):
+                raise ValueError(model_module._ATTENTION_MASK_ERROR)
+            hidden_states = hidden_states * per_query_attn.unsqueeze(-1)
+        return hidden_states * self.scale
+
+
+class _AdapterPolicy(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.attention = MolformerSelfAttention()
+
+    def forward(self, hidden_states, attention_mask=None, past_key_value=None):
+        extended_mask = (
+            None
+            if attention_mask is None
+            else attention_mask[:, None, None, :].to(hidden_states.dtype)
+        )
+        return self.attention(
+            hidden_states,
+            attention_mask=extended_mask,
+            past_key_value=past_key_value,
+        )
+
+
+_ORIGINAL_ADAPTER_FORWARD_CODE = MolformerSelfAttention.forward.__code__
+_ORIGINAL_ADAPTER_POLICY_FORWARD_CODE = _AdapterPolicy.forward.__code__
+
+
+@pytest.fixture(autouse=True)
+def restore_adapter_test_forward(monkeypatch):
+    """Isolate class-level code replacement between adapter tests."""
+    monkeypatch.setattr(
+        MolformerSelfAttention.forward,
+        "__code__",
+        _ORIGINAL_ADAPTER_FORWARD_CODE,
+    )
+    monkeypatch.delattr(
+        MolformerSelfAttention.forward,
+        "_s3gfn_attention_mask_adapter",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        _AdapterPolicy.forward,
+        "__code__",
+        _ORIGINAL_ADAPTER_POLICY_FORWARD_CODE,
+    )
+    monkeypatch.delattr(
+        _AdapterPolicy.forward,
+        "_s3gfn_attention_mask_validator",
+        raising=False,
+    )
 
 
 @pytest.fixture
@@ -132,6 +227,69 @@ def test_pretrained_loading_passes_deterministic_eval_to_both_models(monkeypatch
     assert all(not parameter.requires_grad for parameter in model.prior.parameters())
 
 
+@pytest.mark.parametrize(
+    "attention_mask",
+    [torch.ones((2, 3)), torch.tensor([[1, 1, 0], [1, 0, 0]])],
+)
+def test_attention_mask_adapter_preserves_outputs_and_gradients(
+    monkeypatch,
+    attention_mask,
+):
+    revision_module = (
+        "transformers_modules.ibm-research.GP-MoLFormer-Uniq."
+        f"{model_module._SUPPORTED_GP_MOLFORMER_REVISION}.modeling_molformer"
+    )
+    monkeypatch.setattr(MolformerSelfAttention.forward, "__module__", revision_module)
+    eager_policy = _AdapterPolicy()
+    adapted_policy = copy.deepcopy(eager_policy)
+    hidden_states = torch.arange(12, dtype=torch.float32).reshape(2, 3, 2)
+
+    eager_input = hidden_states.clone().requires_grad_()
+    eager_output = eager_policy(eager_input, attention_mask=attention_mask)
+    eager_output.sum().backward()
+    adapted_count = model_module._install_gp_molformer_attention_mask_adapter(
+        adapted_policy
+    )
+    adapted_input = hidden_states.clone().requires_grad_()
+    adapted_output = adapted_policy(adapted_input, attention_mask=attention_mask)
+    adapted_output.sum().backward()
+
+    assert adapted_count == 1
+    assert adapted_policy._s3gfn_attention_mask_adapter_count == 1
+    assert adapted_policy.attention._s3gfn_attention_mask_adapter is True
+    assert adapted_policy.attention.forward.__globals__["torch"] is torch
+    torch.testing.assert_close(adapted_output, eager_output)
+    torch.testing.assert_close(adapted_input.grad, eager_input.grad)
+    torch.testing.assert_close(
+        adapted_policy.attention.scale.grad,
+        eager_policy.attention.scale.grad,
+    )
+
+
+def test_attention_mask_adapter_rejects_arbitrary_caller_mask(monkeypatch):
+    revision_module = (
+        "transformers_modules.ibm-research.GP-MoLFormer-Uniq."
+        f"{model_module._SUPPORTED_GP_MOLFORMER_REVISION}.modeling_molformer"
+    )
+    monkeypatch.setattr(MolformerSelfAttention.forward, "__module__", revision_module)
+    policy = _AdapterPolicy()
+    model_module._install_gp_molformer_attention_mask_adapter(policy)
+
+    with pytest.raises(ValueError, match="does not support arbitrary 3D attention"):
+        policy(torch.ones((1, 2, 2)), attention_mask=torch.ones((1, 2, 2)))
+
+
+def test_attention_mask_adapter_rejects_unknown_revision(monkeypatch):
+    monkeypatch.setattr(
+        MolformerSelfAttention.forward,
+        "__module__",
+        "transformers_modules.unknown.modeling_molformer",
+    )
+
+    with pytest.raises(RuntimeError, match="Unsupported GP-MoLFormer revision"):
+        model_module._install_gp_molformer_attention_mask_adapter(_AdapterPolicy())
+
+
 def test_pretrained_loading_requests_deterministic_eval_by_default(monkeypatch):
     """Both models must pin deterministic eval so likelihoods are reproducible.
 
@@ -197,6 +355,297 @@ def test_pretrained_loading_omits_deterministic_eval_when_explicitly_none(monkey
 
     assert model_calls
     assert all("deterministic_eval" not in call for call in model_calls)
+
+
+def test_pretrained_loading_preserves_bfloat16_feature_map_redraw(monkeypatch):
+    """BF16 loading must avoid CPU QR and preserve redraw tensor dtypes."""
+    model_calls: list[dict] = []
+
+    class _AutoModel:
+        @classmethod
+        def from_pretrained(cls, name, **kwargs):
+            model_calls.append({"name": name, **kwargs})
+            return _FeatureMapCausalLM()
+
+    class _AutoTokenizer:
+        @classmethod
+        def from_pretrained(cls, name, **kwargs):
+            del name, kwargs
+            return FakeTokenizer()
+
+    monkeypatch.setattr(
+        model_module,
+        "require_transformers",
+        lambda: (_AutoModel, _AutoTokenizer),
+    )
+
+    model = model_module.S3GFNModel.from_pretrained(
+        policy_model_name_or_path="policy",
+        tokenizer_name_or_path="tokenizer",
+        dtype=torch.bfloat16,
+    )
+    model.policy.train()
+
+    output = model.policy(torch.ones((1, 3), dtype=torch.long))
+
+    assert all("torch_dtype" not in call for call in model_calls)
+    assert output.logits.dtype is torch.bfloat16
+    assert next(model.policy.parameters()).dtype is torch.bfloat16
+    assert next(model.prior.parameters()).dtype is torch.bfloat16
+    assert model.policy.feature_map.weight.dtype is torch.bfloat16
+    assert model.prior.feature_map.weight.dtype is torch.bfloat16
+    assert model.log_z.dtype is torch.float32
+
+
+def test_feature_map_redraw_dtype_adapter_is_idempotent():
+    """Repeated model wrapping must not stack redraw adapters."""
+    feature_map = _FakeFeatureMap()
+    model = nn.Sequential(feature_map)
+
+    model_module._preserve_feature_map_redraw_dtype(model)
+    wrapped_redraw = feature_map.orthogonal_random_weights.__func__
+    model_module._preserve_feature_map_redraw_dtype(model)
+
+    assert feature_map.orthogonal_random_weights.__func__ is wrapped_redraw
+
+    plain_model = _FakeCausalLM()
+    model_module._preserve_feature_map_redraw_dtype(plain_model)
+    assert not hasattr(plain_model, "_s3gfn_dtype_safe_redraw")
+
+
+def test_feature_map_redraw_dtype_adapter_clones_redrawn_weight():
+    """Redrawn weights must not alias storage owned by a compiled graph."""
+
+    class _AliasingFeatureMap(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.register_buffer("weight", torch.eye(2))
+            self.source = torch.ones((2, 2))
+
+        def orthogonal_random_weights(self, device=None) -> None:
+            self.weight = self.source.to(device=device)
+
+    feature_map = _AliasingFeatureMap()
+    model_module._preserve_feature_map_redraw_dtype(feature_map)
+
+    feature_map.orthogonal_random_weights()
+
+    assert feature_map.weight.data_ptr() != feature_map.source.data_ptr()
+    assert torch.equal(feature_map.weight, feature_map.source)
+
+
+def test_feature_map_redraw_dtype_adapter_survives_policy_deepcopy():
+    """A fresh round policy must redraw its own BF16 feature-map weights."""
+    model = _FeatureMapCausalLM().to(dtype=torch.bfloat16)
+    model_module._preserve_feature_map_redraw_dtype(model)
+
+    copied_model = copy.deepcopy(model)
+    copied_model.feature_map.orthogonal_random_weights()
+
+    assert copied_model.feature_map.weight.dtype is torch.bfloat16
+    assert copied_model.feature_map.weight.data_ptr() != (
+        model.feature_map.weight.data_ptr()
+    )
+
+
+def test_compiled_bfloat16_feature_map_redraw_keeps_matching_dtypes():
+    """Compiled BF16 policy forwards must survive training-time redraws."""
+    model = model_module.S3GFNModel(
+        policy=_FeatureMapCausalLM(),
+        prior=_FeatureMapCausalLM(),
+        tokenizer=FakeTokenizer(),
+    ).to(dtype=torch.bfloat16)
+    model.policy.train()
+    model.compile_policy()
+
+    output = model.policy(torch.ones((1, 3), dtype=torch.long))
+
+    assert output.logits.dtype is torch.bfloat16
+    assert model.policy.feature_map.weight.dtype is torch.bfloat16
+
+
+@pytest.mark.parametrize(
+    ("dtype", "expected_options"),
+    [
+        (
+            torch.float32,
+            {"max_autotune": True, "triton.cudagraphs": False},
+        ),
+        (
+            torch.bfloat16,
+            {
+                "max_autotune": True,
+                "triton.cudagraphs": False,
+                "max_autotune_gemm_backends": "ATEN",
+            },
+        ),
+    ],
+)
+def test_max_autotune_compilation_uses_safe_options(
+    monkeypatch,
+    dtype,
+    expected_options,
+):
+    """Max-autotune must avoid unsafe CUDA graphs and BF16 Triton BMM."""
+    compile_arguments = {}
+
+    def fake_compile(forward, **kwargs):
+        compile_arguments.update(kwargs)
+        return forward
+
+    monkeypatch.setattr(torch, "compile", fake_compile)
+    model = model_module.S3GFNModel(
+        policy=_FakeCausalLM(),
+        prior=_FakeCausalLM(),
+        tokenizer=FakeTokenizer(),
+    ).to(dtype=dtype)
+
+    model.compile_policy(mode="max-autotune")
+
+    assert compile_arguments == {"dynamic": True, "options": expected_options}
+
+
+def test_compile_policy_forwards_dynamic_shape_setting(monkeypatch):
+    """The model API must preserve an explicit dynamic-shape experiment."""
+    compile_arguments = {}
+
+    def fake_compile(forward, **kwargs):
+        compile_arguments.update(kwargs)
+        return forward
+
+    monkeypatch.setattr(torch, "compile", fake_compile)
+    model = model_module.S3GFNModel(
+        policy=_FakeCausalLM(),
+        prior=_FakeCausalLM(),
+        tokenizer=FakeTokenizer(),
+    )
+
+    model.compile_policy(dynamic=None)
+
+    assert compile_arguments["dynamic"] is None
+
+
+def test_training_only_compilation_keeps_generation_forward_eager(monkeypatch):
+    """Training-only compilation must leave Hugging Face generation eager."""
+    compiled_forward = object()
+
+    def fake_compile(forward, **kwargs):
+        return compiled_forward
+
+    monkeypatch.setattr(torch, "compile", fake_compile)
+    model = model_module.S3GFNModel(
+        policy=_FakeCausalLM(),
+        prior=_FakeCausalLM(),
+        tokenizer=FakeTokenizer(),
+    )
+    eager_forward = model.policy.forward
+
+    model.compile_policy(training_only=True)
+
+    assert model.policy.forward.__func__ is eager_forward.__func__
+    assert model._compiled_policy_forward is compiled_forward
+
+
+def test_training_only_compilation_covers_terminal_fidelity_likelihoods(
+    monkeypatch,
+    make_model,
+):
+    """Multi-fidelity training must use the compiled policy forward."""
+    calls: list[dict[str, object]] = []
+
+    def fake_compile(forward, **kwargs):
+        del kwargs
+
+        def compiled_forward(*args, **forward_kwargs):
+            calls.append(forward_kwargs)
+            return forward(*args, **forward_kwargs)
+
+        return compiled_forward
+
+    monkeypatch.setattr(torch, "compile", fake_compile)
+    model = make_model()
+    model.compile_policy(training_only=True)
+
+    model.policy_trajectory_log_probabilities(
+        torch.tensor([[1, 2, 0], [1, 3, 2]]),
+        fidelity_indices=torch.tensor([0, 1]),
+    )
+
+    assert len(calls) == 1
+    assert torch.equal(calls[0]["input_ids"], torch.tensor([[1, 2, 0], [1, 3, 2]]))
+    assert torch.equal(
+        calls[0]["attention_mask"],
+        torch.tensor([[1, 1, 0], [1, 1, 1]]),
+    )
+    assert calls[0]["output_hidden_states"] is True
+
+
+def test_training_only_compilation_preserves_fixed_trajectory_values_and_gradients(
+    monkeypatch,
+    make_model,
+) -> None:
+    """Compiled dispatch must preserve trajectory values and policy gradients."""
+    eager_model = make_model(language_model=_CausalPrefixLanguageModel)
+    compiled_model = make_model(language_model=_CausalPrefixLanguageModel)
+    compiled_model.load_state_dict(eager_model.state_dict())
+    monkeypatch.setattr(torch, "compile", lambda forward, **kwargs: forward)
+    compiled_model.compile_policy(training_only=True)
+    input_ids = torch.tensor([[1, 3, 2, 0], [1, 1, 3, 2]])
+    fidelity_indices = torch.tensor([0, 1])
+
+    eager_values = eager_model.policy_trajectory_log_probabilities(
+        input_ids,
+        fidelity_indices=fidelity_indices,
+    )
+    compiled_values = compiled_model.policy_trajectory_log_probabilities(
+        input_ids,
+        fidelity_indices=fidelity_indices,
+    )
+    eager_values.sum().backward()
+    compiled_values.sum().backward()
+
+    assert torch.allclose(compiled_values, eager_values)
+    eager_gradients = {
+        name: parameter.grad
+        for name, parameter in eager_model.named_parameters()
+        if parameter.grad is not None
+    }
+    compiled_gradients = {
+        name: parameter.grad
+        for name, parameter in compiled_model.named_parameters()
+        if parameter.grad is not None
+    }
+    assert eager_gradients.keys() == compiled_gradients.keys()
+    for name, eager_gradient in eager_gradients.items():
+        assert torch.allclose(compiled_gradients[name], eager_gradient)
+
+
+def test_compiled_prior_scorer_preserves_values_detachment_and_ownership(
+    monkeypatch,
+    make_model,
+) -> None:
+    """Compiled prior scoring must stay frozen and preserve state ownership."""
+    eager_model = make_model(language_model=_CausalPrefixLanguageModel)
+    compiled_model = make_model(language_model=_CausalPrefixLanguageModel)
+    compiled_model.load_state_dict(eager_model.state_dict())
+    original_state_keys = tuple(compiled_model.state_dict())
+    monkeypatch.setattr(torch, "compile", lambda callable_, **kwargs: callable_)
+    compiled_model.compile_prior_scorer()
+    input_ids = torch.tensor([[1, 3, 2, 0], [1, 1, 3, 2]])
+
+    eager_values = eager_model.prior_sequence_log_probabilities(input_ids)
+    compiled_values = compiled_model.prior_sequence_log_probabilities(input_ids)
+
+    assert torch.allclose(compiled_values, eager_values)
+    assert compiled_values.requires_grad is False
+    assert all(
+        parameter.grad is None for parameter in compiled_model.prior.parameters()
+    )
+    assert all(
+        parameter.requires_grad is False
+        for parameter in compiled_model.prior.parameters()
+    )
+    assert tuple(compiled_model.state_dict()) == original_state_keys
 
 
 def test_model_rejects_shared_pad_and_eos_ids() -> None:

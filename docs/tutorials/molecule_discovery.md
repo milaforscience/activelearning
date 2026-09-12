@@ -38,7 +38,7 @@ The repository includes several example molecule configs arranged as an incremen
 | `config/molecules/s3gfn_exact.yaml` | S3-GFN | Exact GP-MoLFormer SMILES DKL | UCB | fixed fidelity `1` | Canonical SMILES single-fidelity run |
 | `config/molecules/s3gfn_exact_multi_fidelity.yaml` | S3-GFN | Exact GP-MoLFormer SMILES DKL | MF-MES | learned fidelity `1 / 2 / 3` | Canonical SMILES multi-fidelity run |
 | `config/molecules/s3gfn_minimol_exact.yaml` | S3-GFN | Exact MiniMol SMILES DKL | UCB | fixed fidelity `1` | Canonical SMILES run with frozen graph fingerprints |
-| `config/molecules/s3gfn_minimol_variational_multi_fidelity.yaml` | S3-GFN | Variational MiniMol SMILES DKL | MF-MES | learned fidelity `1 / 2 / 3` | Canonical SMILES multi-fidelity run with a sparse GP head |
+| `config/molecules/s3gfn_minimol_variational_multi_fidelity.yaml` | S3-GFN | Variational MiniMol SMILES DKL | MF-MES | learned fidelity `1 / 2 / 3` | GPU-optimized multi-fidelity run with a sparse GP head |
 
 !!! note "Small defaults for fast checks"
     These examples are tuned to be runnable tutorial setups, not fully optimized molecule-discovery runs. The short command overrides below keep the active-learning budget small enough for a quick functional check, and the provided GFlowNet examples also use relatively short training schedules in the exact-surrogate stages so you can verify the full loop quickly. For better learning, increase both the oracle budget so the surrogate sees more observations and the GFlowNet optimization steps so the policy can better approximate reward-proportional sampling.
@@ -67,6 +67,27 @@ losses, log-Z, raw reward statistics, generation validity and duplicate rates,
 fidelity proportions, and training or generation durations. The corresponding
 trajectory figures are `sampler/s3gfn/training_losses`,
 `sampler/s3gfn/log_z`, and `sampler/s3gfn/reward/trajectory`.
+
+S3-GFN uses the validated GPU configuration by default: BF16, compilation for
+training and final generation, the attention-mask adapter, the compiled frozen
+prior scorer, and equal training, replay, and final-generation batch sizes of
+64. `generation_batch_size: null` inherits `batch_size`, so the normal config
+does not need to repeat that value.
+
+To opt out of compilation and use the eager FP32 path, add one line under the
+sampler:
+
+```yaml
+sampler:
+  performance_mode: eager
+```
+
+Advanced users can still set `compile_strategy`, `torch_compile_mode`,
+`torch_compile_dynamic`, `attention_mask_adapter`, `compile_prior_scorer`, and
+`model_dtype` individually. Explicit low-level values take precedence over the
+selected preset. Keep `batch_size` and `replay_batch_size` aligned unless the
+workload has been measured on the target GPU; leave `generation_batch_size`
+omitted to retain the validated inheritance behavior.
 
 ### **Choosing an encoder for DKL**
 
