@@ -17,7 +17,14 @@ from typing import (
     runtime_checkable,
 )
 
-from pydantic import BaseModel, Field, ImportString, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    ImportString,
+    PrivateAttr,
+    field_validator,
+    model_validator,
+)
 from gpytorch.module import Module
 
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
@@ -26,6 +33,7 @@ from activelearning.surrogate.dkl.config import (
     VariationalDKLSurrogateConfig,
 )
 from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
+from activelearning.surrogate.encoder_config import FixedEncoderConfig
 from activelearning.surrogate.surrogate import Surrogate
 
 
@@ -253,12 +261,75 @@ class BoTorchGPSurrogateConfig(BaseModel):
         )
 
 
+class VariationalGPTrainingConfig(BaseModel):
+    """Adam training settings for a fixed-feature variational GP."""
+
+    epochs: int = Field(default=50, ge=1)
+    lr: float = Field(default=1e-3, gt=0.0)
+
+
+class VariationalGPSurrogateConfig(BaseModel):
+    """Configuration for a sparse variational GP on fixed features."""
+
+    type: Literal["VariationalGPSurrogate"] = "VariationalGPSurrogate"
+    encoder: FixedEncoderConfig
+    training_params: VariationalGPTrainingConfig = Field(
+        default_factory=VariationalGPTrainingConfig
+    )
+    target_fidelity: int | None = None
+    num_inducing: int = Field(default=64, ge=1)
+    standardize_outputs: bool = True
+    _is_multi_fidelity: bool = PrivateAttr(default=False)
+
+    @property
+    def is_multi_fidelity(self) -> bool:
+        """Return the fidelity mode derived from the configured oracle."""
+        return self._is_multi_fidelity
+
+    def resolve_fidelity_confidences(
+        self,
+        confidences: dict[int, float],
+    ) -> "VariationalGPSurrogateConfig":
+        """Resolve multi-fidelity mode and the target fidelity."""
+        is_multi_fidelity = len(confidences) > 1
+        target_fidelity = self.target_fidelity
+        if not is_multi_fidelity:
+            target_fidelity = None
+        elif target_fidelity is None:
+            target_fidelity = max(confidences, key=confidences.__getitem__)
+        elif target_fidelity not in confidences:
+            raise ValueError(
+                f"Surrogate target_fidelity {target_fidelity} is not declared by "
+                f"the oracle. Oracle declares: {sorted(confidences)}."
+            )
+
+        data = self.model_dump()
+        data["target_fidelity"] = target_fidelity
+        resolved = type(self).model_validate(data)
+        resolved._is_multi_fidelity = is_multi_fidelity
+        return resolved
+
+    def build(self) -> Surrogate:
+        """Build the fixed-feature variational GP surrogate."""
+        from activelearning.surrogate.variational_gp import VariationalGPSurrogate
+
+        return VariationalGPSurrogate(
+            encoder=self.encoder.build(),
+            training_params=self.training_params,
+            is_multi_fidelity=self.is_multi_fidelity,
+            target_fidelity=self.target_fidelity,
+            num_inducing=self.num_inducing,
+            standardize_outputs=self.standardize_outputs,
+        )
+
+
 SurrogateConfig = Annotated[
     Union[
         DummyMeanSurrogateConfig,
         BoTorchGPSurrogateConfig,
         ExactDKLSurrogateConfig,
         VariationalDKLSurrogateConfig,
+        VariationalGPSurrogateConfig,
     ],
     Field(discriminator="type"),
 ]
