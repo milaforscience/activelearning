@@ -13,6 +13,10 @@ from gpytorch.module import Module
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
 from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
 from activelearning.surrogate.surrogate import Surrogate
+from activelearning.applications.molecules.config import (
+    ExactSelfiesDKLSurrogateConfig,
+    VariationalSelfiesDKLSurrogateConfig,
+)
 
 
 class DummyMeanSurrogateConfig(BaseModel):
@@ -98,6 +102,11 @@ class BoTorchGPSurrogateConfig(BaseModel):
 
 
 SurrogateConfig = Annotated[
-    Union[DummyMeanSurrogateConfig, BoTorchGPSurrogateConfig],
+    Union[
+        DummyMeanSurrogateConfig,
+        BoTorchGPSurrogateConfig,
+        ExactSelfiesDKLSurrogateConfig,
+        VariationalSelfiesDKLSurrogateConfig,
+    ],
     Field(discriminator="type"),
 ]

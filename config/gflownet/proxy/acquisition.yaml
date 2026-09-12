@@ -4,3 +4,8 @@ reward_function: power
 reward_min: 1e-8
 reward_function_kwargs:
   beta: 1.0
+
+# MF-GFN paper reward scale: acquisition * reward_rho**round / reward_beta.
+# Defaults preserve raw acquisition rewards.
+reward_beta: 1.0
+reward_rho: 1.0

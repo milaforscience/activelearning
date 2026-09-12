@@ -5,10 +5,12 @@ configuration. New samplers should define their corresponding pydantic model her
 be added to ``SamplerConfig``.
 """
 
+from pathlib import Path
 from typing import Annotated, Any, Literal, Union
 from pydantic import BaseModel, Field
 from activelearning.sampler.hypercube_sampler import HypercubeSampler
 from activelearning.sampler.sampler import Sampler
+from activelearning.sampler.pool_file_sampler import PoolFileSampler
 from activelearning.sampler.gflownet.config_utils import compose_gflownet_conf
 from activelearning.sampler.gflownet.grid_sampler import GFlowNetGridSampler
 from activelearning.sampler.gflownet.gflownet_sampler import GFlowNetSampler
@@ -29,6 +31,33 @@ class HypercubeSamplerConfig(BaseModel):
             num_samples=self.num_samples,
             fidelities=self.fidelities,
             point_strategy=self.point_strategy,
+        )
+
+
+class PoolFileSamplerConfig(BaseModel):
+    """Configuration for :class:`~activelearning.sampler.pool_file_sampler.PoolFileSampler`.
+
+    Parameters
+    ----------
+    candidate_pool_file : Path
+        Path to a text file with one candidate entry per line.
+    num_samples : int
+        Maximum number of candidates to return per call.
+    fidelities : list[int] or dict[int, float] or None
+        Fidelity assignment strategy.  ``list[int]`` → uniform random;
+        ``dict[int, float]`` → cost-inverse weighted; ``None`` → no fidelity.
+    """
+
+    type: Literal["PoolFileSampler"] = "PoolFileSampler"
+    candidate_pool_file: Path
+    num_samples: int = Field(gt=0)
+    fidelities: dict[int, float] | list[int] | None = None
+
+    def build(self, runtime=None) -> Sampler:
+        return PoolFileSampler(
+            candidate_pool_file=self.candidate_pool_file,
+            num_samples=self.num_samples,
+            fidelities=self.fidelities,
         )
 
 
@@ -110,6 +139,11 @@ class GFlowNetGridSamplerConfig(GFlowNetSamplerConfig):
 
 
 SamplerConfig = Annotated[
-    Union[HypercubeSamplerConfig, GFlowNetSamplerConfig, GFlowNetGridSamplerConfig],
+    Union[
+        HypercubeSamplerConfig,
+        PoolFileSamplerConfig,
+        GFlowNetSamplerConfig,
+        GFlowNetGridSamplerConfig,
+    ],
     Field(discriminator="type"),
 ]
