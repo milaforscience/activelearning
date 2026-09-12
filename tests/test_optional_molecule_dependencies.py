@@ -62,7 +62,10 @@ def test_core_config_import_and_branin_parse_work_without_molecule_extras() -> N
         from activelearning.utils.config_loader import load_and_parse
 
         config = load_and_parse(
-            Path("config/branin/single_fidelity.yaml"),
+            [
+                Path("config/branin_benchmark/base.yaml"),
+                Path("config/branin_benchmark/mf_gfn.yaml"),
+            ],
             ActiveLearningConfig,
         )
         assert config.oracle.type == "BraninOracle"

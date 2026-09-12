@@ -1,7 +1,7 @@
-# Tutorial experiment: 2D Augmented Branin benchmark with three fidelity levels
+# Tutorial experiment: Branin 2D benchmark with three fidelity levels.
 #
 # Run with:
-#   uv run activelearning config/branin_multi_fidelity.yaml
+#   uv run activelearning config/branin/multi_fidelity.yaml
 
 runtime:
   device: cpu
@@ -42,13 +42,12 @@ oracle:
     1: 0.01
     2: 0.1
     3: 1.0
-  log_landscape: true
 
 budget:
-  available_budget: 300.0
+  available_budget: 100.0
   schedule:
     type: constant
-    value: 30.0
+    value: 10.0
 
 logger:
   type: ConsoleLogger

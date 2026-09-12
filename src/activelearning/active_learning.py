@@ -123,7 +123,9 @@ def active_learning(
         initial_budget=initial_budget,
     )
 
-    while budget.available_budget > 0:
+    while budget.available_budget > 0 and (
+        budget.max_rounds is None or num_rounds < budget.max_rounds
+    ):
         # Call once per round so all consumers share the same consistent epoch view.
         # Implementations must guarantee the returned iterable supports multiple
         # iterations with the same sequence (see Dataset.get_observations_iterable).

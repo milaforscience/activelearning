@@ -8,6 +8,7 @@ These tests verify that:
   overrides when both are passed as positional arguments.
 """
 
+import hashlib
 import sys
 import textwrap
 from pathlib import Path
@@ -332,3 +333,76 @@ def test_cli_unknown_flags_emit_warning_and_do_not_crash(
     ):
         with pytest.warns(UserWarning, match="Unrecognised arguments ignored"):
             main()
+
+
+def test_cli_passes_compact_provenance_to_run_writer(
+    base_config,
+    acquisition_config,
+) -> None:
+    """The CLI should pass reproducibility metadata into the built run writer."""
+    from activelearning.main import main
+
+    data_file = base_config.parent / "initial.csv"
+    data_file.write_text("x1,x2,y\n0.0,0.0,1.0\n", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    def _capture_run_writer(*args, **kwargs):
+        captured["run_writer"] = kwargs["run_writer"]
+        return kwargs.get("dataset") or args[0], 0.0, 0
+
+    with patch.object(
+        sys,
+        "argv",
+        [
+            "activelearning",
+            str(base_config),
+            str(acquisition_config),
+            f"dataset.initial_data.path={data_file}",
+            "dataset.initial_data.x_columns=[x1,x2]",
+            "dataset.initial_data.y_column=y",
+            "run_writer.type=JSONLinesRunWriter",
+            f"run_writer.output_dir={base_config.parent / 'runs'}",
+        ],
+    ):
+        with patch("activelearning.main._git_commit_sha", return_value="deadbeef"):
+            with patch(
+                "activelearning.active_learning.active_learning",
+                side_effect=_capture_run_writer,
+            ):
+                main()
+
+    run_writer = captured["run_writer"]
+    run_metadata = run_writer.metadata
+    assert run_writer is not None
+    assert isinstance(run_metadata, dict)
+    assert run_metadata["provenance"]["git_commit_sha"] == "deadbeef"
+    assert run_metadata["cli"]["config_files"] == [
+        str(base_config),
+        str(acquisition_config),
+    ]
+    assert run_metadata["cli"]["config_overrides"] == [
+        f"dataset.initial_data.path={data_file}",
+        "dataset.initial_data.x_columns=[x1,x2]",
+        "dataset.initial_data.y_column=y",
+        "run_writer.type=JSONLinesRunWriter",
+        f"run_writer.output_dir={base_config.parent / 'runs'}",
+    ]
+    assert run_metadata["config"]["dataset"]["initial_data"]["path"] == str(data_file)
+    assert run_metadata["config"]["dataset"]["initial_data"]["x_columns"] == [
+        "x1",
+        "x2",
+    ]
+    input_files = {
+        item["path"]: item["md5"] for item in run_metadata["provenance"]["input_files"]
+    }
+    assert (
+        input_files[str(base_config)]
+        == hashlib.md5(base_config.read_bytes()).hexdigest()
+    )
+    assert (
+        input_files[str(acquisition_config)]
+        == hashlib.md5(acquisition_config.read_bytes()).hexdigest()
+    )
+    assert (
+        input_files[str(data_file)] == hashlib.md5(data_file.read_bytes()).hexdigest()
+    )
