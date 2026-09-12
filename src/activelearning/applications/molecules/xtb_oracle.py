@@ -571,6 +571,10 @@ class XTBIPEAOracle(MultiFidelityOracle):
         """
         if task not in {"ea", "ip"}:
             raise ValueError(f"task must be 'ea' or 'ip', got {task!r}")
+        if mol_repr not in {"selfies", "smiles"}:
+            raise ValueError(
+                f"mol_repr must be 'selfies' or 'smiles', got {mol_repr!r}"
+            )
         if not fidelity_costs:
             raise ValueError("fidelity_costs must define at least one fidelity.")
         invalid_fidelities = sorted(set(fidelity_costs) - {1, 2, 3})
