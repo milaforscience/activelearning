@@ -1,0 +1,56 @@
+runtime:
+  device: cpu
+  precision: 64
+  seed: 42
+
+budget:
+  available_budget: 100.0
+  max_rounds: 300
+  schedule:
+    type: constant
+    value: 1.0
+
+logger:
+  type: ConsoleLogger
+  project_name: censored_branin_benchmark
+  run_name: ${reproduce_paper.task}-${reproduce_paper.method}-seed${runtime.seed}
+
+run_writer:
+  type: JSONLinesRunWriter
+  output_dir: outputs/censored_branin_benchmark/experiment_1_benchmark/${reproduce_paper.method}/seed_${runtime.seed}
+
+reproduce_paper:
+  task_group: synthetic
+  task: branin
+  task_label: Branin
+  top_k: 50
+  negate_score: true
+  initial_data:
+    multi: scripts/configs/censored_branin_experiments/data/initial_multi_fidelity.csv
+    single: scripts/configs/censored_branin_experiments/data/initial_single_fidelity.csv
+    mid: scripts/configs/censored_branin_experiments/data/initial_mid_fidelity.csv
+    low: scripts/configs/censored_branin_experiments/data/initial_low_fidelity.csv
+  thresholds:
+    1: -134.39
+    2: -35.19
+    3: 0.0
+  oracle_costs:
+    1: 0.01
+    2: 0.1
+    3: 1.0
+  fidelity_confidences:
+    1: 0.1
+    2: 0.5
+    3: 1.0
+  domain_bounds:
+    - [-5.0, 10.0]
+    - [0.0, 15.0]
+  candidate_sample_count: 10
+  gflownet:
+    n_dim: 2
+    grid_length: 100
+    optimizer_batch_size: 16
+    random_action_prob: 0.0
+    reward_beta: 1.0
+    reward_rho: 1.0
+    fidelity_action: first

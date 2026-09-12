@@ -96,7 +96,7 @@ multi_fidelity_env_wrapper.MultiFidelityGFlowNetEnvWrapperBase`),
 
     - a 2-D tensor ``[N, D]``
     - a list of 1-D tensors (stacked internally)
-    - a list of plain sequences or strings (e.g. SELFIES)
+    - a list of plain sequences or strings
     - a list of dicts (Mapping)
     - a single sequence or Mapping (treated as one candidate)
 

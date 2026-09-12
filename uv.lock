@@ -29,6 +29,12 @@ required-markers = [
     "platform_machine == 'x86_64' and sys_platform == 'linux'",
 ]
 
+[manifest]
+members = [
+    "activelearning",
+    "activelearning-molecules",
+]
+
 [[package]]
 name = "activelearning"
 version = "0.1.0"
@@ -54,18 +60,8 @@ aim = [
 comet = [
     { name = "comet-ml" },
 ]
-molecules = [
+transformers = [
     { name = "huggingface-hub" },
-    { name = "minimol" },
-    { name = "rdkit" },
-    { name = "selfies" },
-    { name = "setuptools" },
-    { name = "torch-cluster", version = "1.6.3", source = { registry = "https://data.pyg.org/whl/torch-2.5.0+cpu.html" }, marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "torch-cluster", version = "1.6.3+pt25cpu", source = { registry = "https://data.pyg.org/whl/torch-2.5.0+cpu.html" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-    { name = "torch-scatter", version = "2.1.2", source = { registry = "https://data.pyg.org/whl/torch-2.5.0+cpu.html" }, marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "torch-scatter", version = "2.1.2+pt25cpu", source = { registry = "https://data.pyg.org/whl/torch-2.5.0+cpu.html" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
-    { name = "torch-sparse", version = "0.6.18", source = { registry = "https://data.pyg.org/whl/torch-2.5.0+cpu.html" }, marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
-    { name = "torch-sparse", version = "0.6.18+pt25cpu", source = { registry = "https://data.pyg.org/whl/torch-2.5.0+cpu.html" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "transformers" },
 ]
 wandb = [
@@ -90,28 +86,18 @@ requires-dist = [
     { name = "botorch", specifier = ">=0.16.1" },
     { name = "comet-ml", marker = "extra == 'comet'" },
     { name = "gflownet", git = "https://github.com/alexhernandezgarcia/gflownet.git?rev=main" },
-    { name = "huggingface-hub", marker = "extra == 'molecules'", specifier = ">=0.34.3" },
+    { name = "huggingface-hub", marker = "extra == 'transformers'", specifier = ">=0.34.3" },
     { name = "hydra-core", specifier = ">=1.3.2" },
     { name = "matplotlib", specifier = ">=3.10.8" },
-    { name = "minimol", marker = "extra == 'molecules'", specifier = "==1.3.5" },
     { name = "numpy", specifier = ">=1.26.0,<3.0.0" },
     { name = "omegaconf", specifier = ">=2.3.0" },
     { name = "pydantic", specifier = ">=2.12.5" },
     { name = "pydantic-settings", specifier = ">=2.13.1" },
-    { name = "rdkit", marker = "extra == 'molecules'", specifier = ">=2026.3.1" },
-    { name = "selfies", marker = "extra == 'molecules'", specifier = ">=2.2.0" },
-    { name = "setuptools", marker = "extra == 'molecules'", specifier = "<81" },
     { name = "torch", specifier = ">=2.5.1" },
-    { name = "torch-cluster", marker = "platform_machine == 'arm64' and sys_platform == 'darwin' and extra == 'molecules'", specifier = "==1.6.3" },
-    { name = "torch-cluster", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'molecules'", specifier = "==1.6.3+pt25cpu" },
-    { name = "torch-scatter", marker = "platform_machine == 'arm64' and sys_platform == 'darwin' and extra == 'molecules'", specifier = "==2.1.2" },
-    { name = "torch-scatter", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'molecules'", specifier = "==2.1.2+pt25cpu" },
-    { name = "torch-sparse", marker = "platform_machine == 'arm64' and sys_platform == 'darwin' and extra == 'molecules'", specifier = "==0.6.18" },
-    { name = "torch-sparse", marker = "platform_machine == 'x86_64' and sys_platform == 'linux' and extra == 'molecules'", specifier = "==0.6.18+pt25cpu" },
-    { name = "transformers", marker = "extra == 'molecules'", specifier = "==4.35.2" },
+    { name = "transformers", marker = "extra == 'transformers'", specifier = "==4.35.2" },
     { name = "wandb", marker = "extra == 'wandb'" },
 ]
-provides-extras = ["wandb", "comet", "aim", "molecules"]
+provides-extras = ["wandb", "comet", "aim", "transformers"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -121,6 +107,43 @@ dev = [
     { name = "sphinx-autoapi", specifier = ">=3.8.0" },
     { name = "sphinx-rtd-theme", specifier = ">=3.1.0" },
     { name = "zensical", specifier = ">=0.0.32" },
+]
+
+[[package]]
+name = "activelearning-molecules"
+version = "0.1.0"
+source = { editable = "applications/molecules" }
+dependencies = [
+    { name = "activelearning" },
+    { name = "huggingface-hub" },
+    { name = "minimol" },
+    { name = "rdkit" },
+    { name = "selfies" },
+    { name = "setuptools" },
+    { name = "torch-cluster", version = "1.6.3", source = { registry = "https://data.pyg.org/whl/torch-2.5.0+cpu.html" }, marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "torch-cluster", version = "1.6.3+pt25cpu", source = { registry = "https://data.pyg.org/whl/torch-2.5.0+cpu.html" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "torch-scatter", version = "2.1.2", source = { registry = "https://data.pyg.org/whl/torch-2.5.0+cpu.html" }, marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "torch-scatter", version = "2.1.2+pt25cpu", source = { registry = "https://data.pyg.org/whl/torch-2.5.0+cpu.html" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "torch-sparse", version = "0.6.18", source = { registry = "https://data.pyg.org/whl/torch-2.5.0+cpu.html" }, marker = "platform_machine == 'arm64' and sys_platform == 'darwin'" },
+    { name = "torch-sparse", version = "0.6.18+pt25cpu", source = { registry = "https://data.pyg.org/whl/torch-2.5.0+cpu.html" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "transformers" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "activelearning", editable = "." },
+    { name = "huggingface-hub", specifier = ">=0.34.3" },
+    { name = "minimol", specifier = "==1.3.5" },
+    { name = "rdkit", specifier = ">=2026.3.1" },
+    { name = "selfies", specifier = ">=2.2.0" },
+    { name = "setuptools", specifier = "<81" },
+    { name = "torch-cluster", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'", specifier = "==1.6.3" },
+    { name = "torch-cluster", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = "==1.6.3+pt25cpu" },
+    { name = "torch-scatter", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'", specifier = "==2.1.2" },
+    { name = "torch-scatter", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = "==2.1.2+pt25cpu" },
+    { name = "torch-sparse", marker = "platform_machine == 'arm64' and sys_platform == 'darwin'", specifier = "==0.6.18" },
+    { name = "torch-sparse", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = "==0.6.18+pt25cpu" },
+    { name = "transformers", specifier = "==4.35.2" },
 ]
 
 [[package]]

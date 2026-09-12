@@ -13,18 +13,7 @@ further reference.
 
 from pydantic import BaseModel, Field, model_validator
 
-from activelearning.acquisition.config import (
-    AcquisitionConfig,
-    ExpectedImprovementConfig,
-    LogExpectedImprovementConfig,
-    LogProbabilityOfImprovementConfig,
-    PosteriorMeanConfig,
-    ProbabilityOfImprovementConfig,
-    QMultiFidelityKnowledgeGradientConfig,
-    QMultiFidelityLowerBoundMaxValueEntropyConfig,
-    QMultiFidelityMaxValueEntropyConfig,
-    UpperConfidenceBoundConfig,
-)
+from activelearning.acquisition.config import AcquisitionConfig
 from activelearning.budget.config import BudgetConfig
 from activelearning.dataset.config import DatasetConfig
 from activelearning.logger.config import LoggerConfig
@@ -37,22 +26,8 @@ from activelearning.sampler.config import (
 )
 from activelearning.selector.config import SelectorConfig
 from activelearning.surrogate.config import (
-    DummyMeanSurrogateConfig,
     FidelityAwareSurrogateConfig,
     SurrogateConfig,
-)
-
-
-_BOTORCH_ACQUISITION_CONFIG_TYPES = (
-    UpperConfidenceBoundConfig,
-    ExpectedImprovementConfig,
-    LogExpectedImprovementConfig,
-    ProbabilityOfImprovementConfig,
-    LogProbabilityOfImprovementConfig,
-    PosteriorMeanConfig,
-    QMultiFidelityMaxValueEntropyConfig,
-    QMultiFidelityLowerBoundMaxValueEntropyConfig,
-    QMultiFidelityKnowledgeGradientConfig,
 )
 
 
@@ -98,15 +73,17 @@ class ActiveLearningConfig(BaseModel):
     diagnostics: DiagnosticsConfig = Field(default_factory=DiagnosticsConfig)
 
     @model_validator(mode="after")
-    def _resolve_fidelities(self) -> "ActiveLearningConfig":
+    def _resolve_fidelities(
+        self,
+    ) -> "ActiveLearningConfig":
         """Resolve fidelity metadata across the configured components.
 
         The oracle defines the authoritative fidelity levels and their
         confidences. Missing sampler levels are filled from that set, explicit
         sampler levels are validated against it, and fidelity-aware surrogate
-        configs resolve their settings from the resulting metadata. Known
-        incompatible sampler, surrogate, acquisition, and oracle combinations
-        are rejected after that resolution.
+        configs resolve their settings from the resulting metadata. Declared
+        representation and BoTorch compatibility are checked after that
+        resolution.
 
         Returns
         -------
@@ -117,9 +94,9 @@ class ActiveLearningConfig(BaseModel):
         Raises
         ------
         ValueError
-            If the oracle declares no fidelity levels, or if the sampler
-            or surrogate references a fidelity not declared by the oracle, or
-            if built-in component contracts are incompatible.
+            If the oracle declares no fidelity levels, if the sampler or surrogate
+            references a fidelity not declared by the oracle, or if declared
+            component contracts are incompatible.
         """
         fidelity_confidences = _extract_oracle_fidelity_confidences(self.oracle)
         if not fidelity_confidences:
@@ -368,60 +345,61 @@ def _resolve_surrogate_config_fidelities(
     return surrogate
 
 
-def _extract_molecule_representation(oracle: BaseModel) -> str | None:
-    """Return one molecular representation shared by an oracle configuration.
-
-    Direct molecular oracles expose ``mol_repr``. Composite oracles are
-    considered molecular only when every sub-oracle exposes the same
-    representation. Returning ``None`` means that the oracle is not known to
-    accept one consistent molecular string representation.
-
-    Parameters
-    ----------
-    oracle : BaseModel
-        Parsed oracle configuration.
-
-    Returns
-    -------
-    str or None
-        The shared molecular representation, or ``None`` when it cannot be
-        established from the configuration.
-    """
-    representation = getattr(oracle, "mol_repr", None)
-    if representation is not None:
-        return str(representation)
-
-    sub_oracles = getattr(oracle, "sub_oracles", None)
-    if sub_oracles is None:
-        return None
-
-    representations = [
-        _extract_molecule_representation(sub_oracle) for sub_oracle in sub_oracles
-    ]
-    if not representations or any(item is None for item in representations):
-        return None
-    if len(set(representations)) != 1:
-        return None
-    return representations[0]
-
-
-def _encoder_molecule_representation(component: object) -> str | None:
-    """Return the representation declared by an encoder config.
-
-    Parameters
-    ----------
-    component : object
-        Parsed encoder configuration.
-
-    Returns
-    -------
-    str or None
-        Declared representation, or ``None`` when no representation is known.
-    """
-    if not isinstance(component, BaseModel):
-        return None
-    representation = getattr(component, "input_representation", None)
+def _declared_representation(config: object, attribute: str) -> str | None:
+    """Return a component representation declaration when one is available."""
+    representation = getattr(config, attribute, None)
     return representation if isinstance(representation, str) else None
+
+
+def _validate_representation_pair(
+    *,
+    producer: BaseModel,
+    producer_attribute: str,
+    consumer: BaseModel,
+    consumer_attribute: str,
+) -> None:
+    """Reject a producer/consumer pair with incompatible declarations."""
+    produced = _declared_representation(producer, producer_attribute)
+    expected = _declared_representation(consumer, consumer_attribute)
+    if produced is not None and expected is not None and produced != expected:
+        raise ValueError(
+            f"{type(producer).__name__} produces representation {produced!r}, "
+            f"but {type(consumer).__name__} expects {expected!r}."
+        )
+
+
+def _validate_shared_input_representation(
+    *,
+    first: BaseModel,
+    second: BaseModel,
+) -> None:
+    """Reject components that require different candidate representations."""
+    first_expected = _declared_representation(first, "input_representation")
+    second_expected = _declared_representation(second, "input_representation")
+    if (
+        first_expected is not None
+        and second_expected is not None
+        and first_expected != second_expected
+    ):
+        raise ValueError(
+            f"{type(first).__name__} expects representation {first_expected!r}, "
+            f"but {type(second).__name__} expects {second_expected!r}."
+        )
+
+
+def _validate_botorch_compatibility(
+    *,
+    acquisition: BaseModel,
+    surrogate: BaseModel,
+) -> None:
+    """Reject BoTorch acquisitions paired with an incompatible surrogate."""
+    requires_botorch = getattr(acquisition, "requires_botorch_surrogate", False)
+    is_botorch_compatible = getattr(surrogate, "is_botorch_compatible", False)
+    if requires_botorch and not is_botorch_compatible:
+        raise ValueError(
+            f"{type(acquisition).__name__} requires a BoTorch-compatible "
+            f"surrogate, but {type(surrogate).__name__} is not compatible."
+        )
 
 
 def _validate_component_compatibility(
@@ -433,9 +411,9 @@ def _validate_component_compatibility(
 ) -> None:
     """Reject parsed component combinations with incompatible contracts.
 
-    This validator handles only incompatibilities that are knowable from the
-    built-in configuration types. Candidate contents in pool files and opaque
-    custom GFlowNet environments remain runtime concerns.
+    The component schemas declare representation and BoTorch compatibility.
+    Candidate contents in pool files and opaque custom GFlowNet environments
+    remain runtime concerns.
 
     Parameters
     ----------
@@ -451,78 +429,56 @@ def _validate_component_compatibility(
     Raises
     ------
     ValueError
-        If a known sampler, surrogate, acquisition, or oracle contract is
+        If a declared sampler, surrogate, acquisition, or oracle contract is
         incompatible with another configured component.
     """
-    encoder_component = getattr(surrogate, "encoder", None)
-    encoder_representation = _encoder_molecule_representation(encoder_component)
-    oracle_representation = _extract_molecule_representation(oracle)
-
-    sampler_representation = getattr(sampler, "output_representation", None)
-    surrogate_representation = getattr(surrogate, "input_representation", None)
-
-    if sampler_representation == "smiles":
-        if encoder_representation == "selfies":
-            raise ValueError(
-                "S3GFNSampler generates canonical SMILES, but the configured "
-                "SelfiesTransformerEncoder expects SELFIES strings. Use "
-                "a SMILES encoder with S3-GFN or choose a "
-                "SELFIES-producing sampler."
-            )
-        if oracle_representation != "smiles":
-            configured = (
-                repr(oracle_representation)
-                if oracle_representation is not None
-                else "no consistent molecular representation"
-            )
-            raise ValueError(
-                "S3GFNSampler generates canonical SMILES and requires a "
-                "molecular oracle with mol_repr='smiles'; got "
-                f"{configured}."
-            )
-
-    if sampler_representation == "numeric":
-        if encoder_representation is not None:
-            raise ValueError(
-                f"{type(sampler).__name__} generates numeric candidates, but "
-                f"{type(encoder_component).__name__} expects "
-                f"{encoder_representation.upper()} strings."
-            )
-        if oracle_representation is not None:
-            raise ValueError(
-                f"{type(sampler).__name__} generates numeric candidates, but "
-                f"{type(oracle).__name__} expects molecular strings with "
-                f"mol_repr={oracle_representation!r}."
-            )
-
-    if encoder_representation is not None:
-        if oracle_representation is None:
-            raise ValueError(
-                f"{type(encoder_component).__name__} expects "
-                f"{encoder_representation.upper()} strings, but the configured "
-                f"{type(oracle).__name__} does not expose one consistent "
-                "molecular representation."
-            )
-        if oracle_representation != encoder_representation:
-            raise ValueError(
-                f"{type(encoder_component).__name__} expects "
-                f"{encoder_representation.upper()} strings, but the oracle is "
-                f"configured with mol_repr={oracle_representation!r}."
-            )
-
-    if surrogate_representation == "numeric" and (
-        sampler_representation == "smiles" or oracle_representation is not None
-    ):
+    encoder = getattr(surrogate, "encoder", None)
+    sampler_representation = _declared_representation(
+        sampler,
+        "output_representation",
+    )
+    oracle_representation = _declared_representation(
+        oracle,
+        "input_representation",
+    )
+    if sampler_representation is not None and oracle_representation is None:
         raise ValueError(
-            "BoTorchGPSurrogateConfig expects numeric tensor inputs, but the "
-            "configured components use molecular strings. Use a molecular DKL "
-            "surrogate with an appropriate encoder."
+            f"{type(sampler).__name__} produces representation "
+            f"{sampler_representation!r}, but {type(oracle).__name__} does not "
+            "declare its input_representation."
         )
 
-    if isinstance(acquisition, _BOTORCH_ACQUISITION_CONFIG_TYPES) and isinstance(
-        surrogate, DummyMeanSurrogateConfig
-    ):
-        raise ValueError(
-            f"{type(acquisition).__name__} requires a BoTorch-compatible "
-            "surrogate, but DummyMeanSurrogateConfig is not one."
+    if isinstance(encoder, BaseModel):
+        _validate_representation_pair(
+            producer=sampler,
+            producer_attribute="output_representation",
+            consumer=encoder,
+            consumer_attribute="input_representation",
         )
+
+    _validate_representation_pair(
+        producer=sampler,
+        producer_attribute="output_representation",
+        consumer=oracle,
+        consumer_attribute="input_representation",
+    )
+
+    if isinstance(encoder, BaseModel):
+        _validate_representation_pair(
+            producer=encoder,
+            producer_attribute="input_representation",
+            consumer=oracle,
+            consumer_attribute="input_representation",
+        )
+
+    _validate_representation_pair(
+        producer=sampler,
+        producer_attribute="output_representation",
+        consumer=surrogate,
+        consumer_attribute="input_representation",
+    )
+    _validate_shared_input_representation(first=surrogate, second=oracle)
+    _validate_botorch_compatibility(
+        acquisition=acquisition,
+        surrogate=surrogate,
+    )

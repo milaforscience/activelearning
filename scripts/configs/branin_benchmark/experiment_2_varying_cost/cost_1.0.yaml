@@ -1,0 +1,8 @@
+oracle:
+  fidelity_costs:
+    1: 1.0
+    2: 1.0
+
+experiment:
+  name: varying_cost
+  method: mf_gfn_cost_1.0

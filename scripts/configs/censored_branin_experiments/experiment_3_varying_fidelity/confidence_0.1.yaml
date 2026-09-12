@@ -1,0 +1,8 @@
+oracle:
+  fidelity_confidences:
+    1: 0.1
+    2: 1.0
+
+experiment:
+  name: varying_fidelity
+  method: mf_gfn_conf_0.1

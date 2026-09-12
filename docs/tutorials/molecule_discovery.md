@@ -20,7 +20,7 @@ Molecular string (SELFIES or canonical SMILES)
   -> query xTB for IP/EA at the requested fidelity
 ```
 
-The important distinction from Branin or Hartmann is that the input space is no longer a fixed-dimensional vector space. Each molecule is a discrete structured object represented by a molecular string. The representation-independent DKL surrogate operates on learned latent vectors from either the [`TransformerSequenceEncoder`](../reference/activelearning/surrogate/sequence/transformer_encoder/#activelearning.surrogate.sequence.transformer_encoder.TransformerSequenceEncoder), a frozen Hugging Face encoder such as GP-MoLFormer, or the [`MiniMolSmilesEncoder`](../reference/activelearning/applications/molecules/minimol_encoder/#activelearning.applications.molecules.minimol_encoder.MiniMolSmilesEncoder). The oracle evaluates molecular properties using xTB, which can be computationally expensive, hence the need for careful active learning and multi-fidelity strategies.
+The important distinction from Branin or Hartmann is that the input space is no longer a fixed-dimensional vector space. Each molecule is a discrete structured object represented by a molecular string. The representation-independent DKL surrogate operates on learned latent vectors from either the [`TransformerSequenceEncoder`](../reference/activelearning/surrogate/sequence/transformer_encoder/#activelearning.surrogate.sequence.transformer_encoder.TransformerSequenceEncoder), a frozen Hugging Face encoder such as GP-MoLFormer, or the molecular package's `MiniMolSmilesEncoder`. The oracle evaluates molecular properties using xTB, which can be computationally expensive, hence the need for careful active learning and multi-fidelity strategies.
 
 The repository includes several example molecule configs arranged as an incremental progression. They combine three kinds of building blocks:
 
@@ -30,15 +30,16 @@ The repository includes several example molecule configs arranged as an incremen
 
 | Config | Sampler | Surrogate | Acquisition | Fidelity setting | Purpose |
 |--------|---------|-----------|-------------|------------------|---------|
-| `config/molecules/exact.yaml` | Pool file | Exact SELFIES DKL | UCB | pool fidelity `1` only | Stage 1: smallest pool-based baseline |
-| `config/molecules/exact_multi_fidelity.yaml` | Pool file | Exact SELFIES DKL | MF-MES + `CostAwareSelector` | pool fidelities `1 / 2 / 3` | Stage 2: same pool setup with multi-fidelity scoring |
-| `config/molecules/gflownet_exact.yaml` | SELFIES GFlowNet | Exact SELFIES DKL | UCB | fixed fidelity `1` | Stage 3: swap the pool sampler for a GFlowNet |
-| `config/molecules/gflownet_exact_multi_fidelity.yaml` | SELFIES GFlowNet | Exact SELFIES DKL | MF-MES with cost utility | learned fidelity `1 / 2 / 3` | Stage 4: let the GFlowNet learn molecule-fidelity pairs |
-| `config/molecules/gflownet_variational_multi_fidelity.yaml` | SELFIES GFlowNet | Variational SELFIES DKL | MF-MES with cost utility | learned fidelity `1 / 2 / 3` | Stage 5: keep the MF GFlowNet and swap in the scalable variational surrogate |
-| `config/molecules/s3gfn_exact.yaml` | S3-GFN | Exact GP-MoLFormer SMILES DKL | UCB | fixed fidelity `1` | Canonical SMILES single-fidelity run |
-| `config/molecules/s3gfn_exact_multi_fidelity.yaml` | S3-GFN | Exact GP-MoLFormer SMILES DKL | MF-MES | learned fidelity `1 / 2 / 3` | Canonical SMILES multi-fidelity run |
-| `config/molecules/s3gfn_minimol_exact.yaml` | S3-GFN | Exact MiniMol SMILES DKL | UCB | fixed fidelity `1` | Canonical SMILES run with frozen graph fingerprints |
-| `config/molecules/s3gfn_minimol_variational_multi_fidelity.yaml` | S3-GFN | Variational MiniMol SMILES DKL | MF-MES | learned fidelity `1 / 2 / 3` | GPU-optimized multi-fidelity run with a sparse GP head |
+| `applications/molecules/config/exact.yaml` | Pool file | Exact SELFIES DKL | UCB | pool fidelity `1` only | Stage 1: smallest pool-based baseline |
+| `applications/molecules/config/exact_multi_fidelity.yaml` | Pool file | Exact SELFIES DKL | MF-MES + `CostAwareSelector` | pool fidelities `1 / 2 / 3` | Stage 2: same pool setup with multi-fidelity scoring |
+| `applications/molecules/config/gflownet_exact.yaml` | SELFIES GFlowNet | Exact SELFIES DKL | UCB | fixed fidelity `1` | Stage 3: swap the pool sampler for a GFlowNet |
+| `applications/molecules/config/gflownet_exact_multi_fidelity.yaml` | SELFIES GFlowNet | Exact SELFIES DKL | MF-MES with cost utility | learned fidelity `1 / 2 / 3` | Stage 4: let the GFlowNet learn molecule-fidelity pairs |
+| `applications/molecules/config/gflownet_variational_multi_fidelity.yaml` | SELFIES GFlowNet | Variational SELFIES DKL | MF-MES with cost utility | learned fidelity `1 / 2 / 3` | Stage 5: keep the MF GFlowNet and swap in the scalable variational surrogate |
+| `applications/molecules/config/s3gfn_exact.yaml` | S3-GFN | Exact GP-MoLFormer SMILES DKL | UCB | fixed fidelity `1` | Canonical SMILES single-fidelity run |
+| `applications/molecules/config/s3gfn_exact_multi_fidelity.yaml` | S3-GFN | Exact GP-MoLFormer SMILES DKL | MF-MES | learned fidelity `1 / 2 / 3` | Canonical SMILES multi-fidelity run |
+| `applications/molecules/config/s3gfn_minimol_exact.yaml` | S3-GFN | Exact MiniMol SMILES DKL | UCB | fixed fidelity `1` | Canonical SMILES run with frozen graph fingerprints |
+| `applications/molecules/config/s3gfn_minimol_variational_multi_fidelity.yaml` | S3-GFN | Variational MiniMol SMILES DKL | MF-MES | learned fidelity `1 / 2 / 3` | GPU-optimized multi-fidelity run with a sparse GP head |
+| `applications/molecules/config/s3gfn_minimol_fixed_variational_multi_fidelity.yaml` | S3-GFN | Fixed MiniMol features + variational GP | MF-MES | learned fidelity `1 / 2 / 3` | Sparse GP without a trainable feature projection |
 
 !!! note "Small defaults for fast checks"
     These examples are tuned to be runnable tutorial setups, not fully optimized molecule-discovery runs. The short command overrides below keep the active-learning budget small enough for a quick functional check, and the provided GFlowNet examples also use relatively short training schedules in the exact-surrogate stages so you can verify the full loop quickly. For better learning, increase both the oracle budget so the surrogate sees more observations and the GFlowNet optimization steps so the policy can better approximate reward-proportional sampling.
@@ -51,12 +52,12 @@ components: S3-GFN uses its GP-MoLFormer policy to generate candidates, while
 the DKL surrogate uses its configured encoder to represent them.
 
 ```sh
-uv run activelearning config/molecules/s3gfn_exact.yaml
-uv run activelearning config/molecules/s3gfn_exact_multi_fidelity.yaml
+uv run activelearning-molecules applications/molecules/config/s3gfn_exact.yaml
+uv run activelearning-molecules applications/molecules/config/s3gfn_exact_multi_fidelity.yaml
 ```
 
-Both configurations require the molecules extra and an `xtb` executable on
-`PATH`. The sampler and surrogate deliberately repeat the Hugging Face model
+Both configurations require the `activelearning-molecules` distribution and an
+`xtb` executable on `PATH`. The sampler and surrogate deliberately repeat the Hugging Face model
 identifiers: S3-GFN fine-tunes its policy, while the surrogate keeps a frozen
 feature prior. They therefore load separate model instances and require
 additional memory.
@@ -115,8 +116,8 @@ configured `latent_dim`. The exact and variational examples use the same
 encoder with different GP heads:
 
 ```sh
-uv run activelearning config/molecules/s3gfn_minimol_exact.yaml
-uv run activelearning config/molecules/s3gfn_minimol_variational_multi_fidelity.yaml
+uv run activelearning-molecules applications/molecules/config/s3gfn_minimol_exact.yaml
+uv run activelearning-molecules applications/molecules/config/s3gfn_minimol_variational_multi_fidelity.yaml
 ```
 
 The second configuration is multi-fidelity: S3-GFN chooses among fidelity
@@ -137,7 +138,7 @@ a `state_dict` key, and must use the same MiniMol architecture.
 
 ## **What are SELFIES?**
 
-[SELFIES](https://arxiv.org/abs/1905.13741) (**Self-Referencing Embedded Strings**) are a string representation for molecules. Like SMILES, they encode molecular graphs as text. Unlike SMILES, SELFIES provide a hard validity guarantee: *every* sequence of tokens that is valid under the SELFIES grammar decodes to a chemically valid molecular graph. This makes SELFIES particularly useful for generative active learning: the GFlowNet can learn over a constrained token language without constantly producing chemically invalid candidates. The oracle still needs to reject molecules that fail downstream geometry construction or xTB evaluation (see [Handling failures](#handling-failures)), but SELFIES removes the most common source of invalidity at the representation level.
+[SELFIES](https://arxiv.org/abs/1905.13741) (**Self-Referencing Embedded Strings**) are a string representation for molecules. Like SMILES, they encode molecular graphs as text. Unlike SMILES, SELFIES provide a hard validity guarantee: *every* sequence of tokens that is valid under the SELFIES grammar decodes to a chemically valid molecular graph. This makes SELFIES particularly useful for generative active learning: the GFlowNet can learn over a constrained token language without constantly producing chemically invalid candidates. The oracle still needs to reject molecules that fail downstream geometry construction or xTB evaluation (see the failure-handling note in [Run the pool-based DKL examples](#2-run-the-pool-based-dkl-examples)), but SELFIES removes the most common source of invalidity at the representation level.
 
 In this framework:
 
@@ -151,7 +152,7 @@ In this framework:
 
 [xTB](https://xtb-docs.readthedocs.io/) is a semi-empirical quantum chemistry program. In these examples the oracle uses the [GFN2-xTB](https://pubs.acs.org/doi/10.1021/acs.jctc.8b01176) method. It is much cheaper than high-level quantum chemistry, but still expensive enough that the active-learning loop should spend queries carefully.
 
-The built-in [`XTBIPEAOracle`](../reference/activelearning/applications/molecules/xtb_oracle/#activelearning.applications.molecules.xtb_oracle.XTBIPEAOracle) computes one of two objectives:
+The built-in `XTBIPEAOracle` from `activelearning_molecules.oracles.xtb` computes one of two objectives:
 
 | Task | Meaning | Intuition |
 |------|---------|-----------|
@@ -167,7 +168,7 @@ The three xTB fidelities trade cost for accuracy. Each higher fidelity runs more
 | `3` | Optimise both the neutral and the charged (ionic) geometries with xTB, then compute the *adiabatic* IP/EA as the energy difference between the two relaxed states. Most accurate, but requires two xTB geometry optimisations instead of one. | `7.0` |
 
 !!! warning "External dependency"
-    The Python `molecules` extra installs SELFIES and RDKit, but the `xtb` executable must be installed separately and available on your `PATH`. Check this before running a molecule experiment:
+    The `activelearning-molecules` distribution installs SELFIES and RDKit, but the `xtb` executable must be installed separately and available on your `PATH`. Check this before running a molecule experiment:
 
     ```sh
     xtb --version
@@ -178,13 +179,13 @@ The three xTB fidelities trade cost for accuracy. Each higher fidelity runs more
 Install the optional molecule dependencies. If you also want the molecule grids in Aim, install the Aim extra at the same time:
 
 ```sh
-uv sync --extra molecules --extra aim
+uv sync --all-packages --extra aim
 ```
 
 The pool-based configs read one SELFIES string per line from:
 
 ```text
-config/data/molecules.txt
+applications/molecules/config/data/molecules.txt
 ```
 
 You can replace that file with your own pool later. For now, keep the provided pool so the config paths work unchanged.
@@ -194,7 +195,7 @@ You can replace that file with your own pool later. For now, keep the provided p
 Start with the single-fidelity exact-DKL pool config and reduce it to a short run that still queries several molecules:
 
 ```sh
-uv run activelearning config/molecules/exact.yaml \
+uv run activelearning-molecules applications/molecules/config/exact.yaml \
   budget.available_budget=5.0 \
   budget.schedule.value=5.0 \
   selector.num_samples=5 \
@@ -222,13 +223,13 @@ The exact numbers depend on which candidate was selected and whether xTB succeed
 Once you've confirmed the first round completes successfully, run the full single-fidelity exact-DKL config:
 
 ```sh
-uv run activelearning config/molecules/exact.yaml
+uv run activelearning-molecules applications/molecules/config/exact.yaml
 ```
 
 Then move to the multi-fidelity pool version, which keeps the exact SELFIES DKL surrogate but exposes the full xTB fidelity ladder and uses MF-MES with cost-aware selection:
 
 ```sh
-uv run activelearning config/molecules/exact_multi_fidelity.yaml
+uv run activelearning-molecules applications/molecules/config/exact_multi_fidelity.yaml
 ```
 
 This second stage is the first place where the active-learning loop has to decide how much accuracy is worth paying for. The acquisition function scores candidates with respect to the target high-fidelity objective, while the [`CostAwareSelector`](../reference/activelearning/selector/cost_aware_selector/#activelearning.selector.cost_aware_selector.CostAwareSelector) divides each score by its query cost so that cheap fidelities are favoured when they carry similar information. In this pool-based setup, the cost penalty is handled entirely by the selector — the acquisition itself has no cost model.
@@ -250,7 +251,7 @@ oracle:
 The console logger only acknowledges the figure. To inspect a more informative grid, compose the run with the Aim overlay and keep the short budget large enough to query several molecules:
 
 ```sh
-uv run activelearning config/molecules/exact.yaml config/aim_logging.yaml \
+uv run activelearning-molecules applications/molecules/config/exact.yaml config/aim_logging.yaml \
   budget.available_budget=5.0 \
   budget.schedule.value=5.0 \
   selector.num_samples=5 \
@@ -273,7 +274,7 @@ The example below was generated from a short fidelity-1 EA run over the bundled 
     To optimise ionisation potential instead of electron affinity, override the task:
 
     ```sh
-    uv run activelearning config/molecules/exact.yaml \
+    uv run activelearning-molecules applications/molecules/config/exact.yaml \
       oracle.task=ip \
       logger.run_name=molecules-dkl-exact-ip
     ```
@@ -300,7 +301,7 @@ Here, the GFlowNet constructs a molecule token by token in the SELFIES environme
 Run a short exact-DKL GFlowNet check:
 
 ```sh
-uv run activelearning config/molecules/gflownet_exact.yaml \
+uv run activelearning-molecules applications/molecules/config/gflownet_exact.yaml \
   sampler.n_samples=8 \
   selector.num_samples=1 \
   sampler.conf.gflownet.optimizer.n_train_steps=10 \
@@ -311,7 +312,7 @@ uv run activelearning config/molecules/gflownet_exact.yaml \
 For the full small tutorial run, drop the overrides:
 
 ```sh
-uv run activelearning config/molecules/gflownet_exact.yaml
+uv run activelearning-molecules applications/molecules/config/gflownet_exact.yaml
 ```
 
 !!! note "Why keep the single-fidelity GFlowNet config?"
@@ -340,13 +341,13 @@ In this setup, the GFlowNet is not limited to a fixed oracle level. It learns a 
 There are two multi-fidelity GFlowNet configs. The first uses an exact GP surrogate, which is simpler and faster for smaller datasets. It searches over SELFIES strings up to length 16, generates 64 candidates per GFlowNet round with 100 training steps, selects 8 per round, and has a total budget of 168 (worst-case cost: 8 candidates × fidelity-3 cost of 7.0):
 
 ```sh
-uv run activelearning config/molecules/gflownet_exact_multi_fidelity.yaml
+uv run activelearning-molecules applications/molecules/config/gflownet_exact_multi_fidelity.yaml
 ```
 
 For a shorter sanity check, reduce the GFlowNet training steps and selected batch size:
 
 ```sh
-uv run activelearning config/molecules/gflownet_exact_multi_fidelity.yaml \
+uv run activelearning-molecules applications/molecules/config/gflownet_exact_multi_fidelity.yaml \
   sampler.conf.gflownet.optimizer.n_train_steps=25 \
   selector.num_samples=4 \
   budget.available_budget=28.0 \
@@ -356,7 +357,7 @@ uv run activelearning config/molecules/gflownet_exact_multi_fidelity.yaml \
 The second config keeps the same multi-fidelity GFlowNet structure but replaces the exact GP with a variational surrogate. It is a substantially larger run: the molecular search space expands to length 64 (`max_length: 64`), the GFlowNet generates 640 candidates per round with 5000 training steps, selects 128 per round, and the total budget is 1260. The variational surrogate introduces an additional `num_inducing` knob controlling the number of inducing points for the sparse GP approximation. Because the reward landscape over a length-64 SELFIES space is much broader, the config also explicitly tunes reward-shaping parameters (`reward_beta`, `reward_rho`, `reward_min`) and uses a larger policy network:
 
 ```sh
-uv run activelearning config/molecules/gflownet_variational_multi_fidelity.yaml
+uv run activelearning-molecules applications/molecules/config/gflownet_variational_multi_fidelity.yaml
 ```
 
 Start with the exact config to confirm the full MF-GFN loop works, then graduate to the variational config for a more thorough search.
@@ -407,7 +408,7 @@ requirements of the DKL API.
 You now have the same active-learning loop running on structured molecular strings. Natural follow-ups are:
 
 - swap `oracle.task` between `ea` and `ip` and compare the selected molecules in Aim,
-- replace `config/data/molecules.txt` with a domain-specific SELFIES pool,
+- replace `applications/molecules/config/data/molecules.txt` with a domain-specific SELFIES pool,
 - increase GFlowNet training steps once the short run works,
 - compare the staged examples under the same total budget,
 - or adapt the xTB oracle for a different computational chemistry target using the [Oracle extension guide](../extension-guide/oracle.md).

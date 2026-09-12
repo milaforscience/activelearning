@@ -1,0 +1,34 @@
+dataset:
+  type: ListDataset
+  initial_data:
+    path: ${reproduce_paper.initial_data.single}
+    x_columns: [x1, x2]
+    y_column: y
+    fidelity_column: fidelity
+    metadata_columns: remaining
+
+acquisition:
+  type: QLowerBoundMaxValueEntropy
+  candidate_set_spec:
+    type: TrainDataCandidateSetSpec
+
+sampler:
+  type: HypercubeGridSampler
+  bounds: ${reproduce_paper.domain_bounds}
+  points_per_dimension: [100, 100]
+  fidelities: [3]
+  num_samples: ${reproduce_paper.candidate_sample_count}
+  use_acquisition_scores: true
+
+oracle:
+  type: CensoredSyntheticOracle
+  function: branin
+  threshold: 0.0
+  fidelity_costs:
+    3: 1.0
+  fidelity_confidences:
+    3: 1.0
+
+reproduce_paper:
+  method: sf_high_fid
+  method_label: SF-GFN-HIGH

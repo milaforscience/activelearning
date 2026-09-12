@@ -1,0 +1,12 @@
+sampler:
+  type: HypercubeSampler
+  num_samples: ${reproduce_paper.candidate_sample_count}
+  bounds: ${reproduce_paper.domain_bounds}
+  point_strategy: uniform
+  fidelity_policy:
+    type: uniform
+    values: [1, 2, 3]
+
+reproduce_paper:
+  method: random
+  method_label: Random
