@@ -41,8 +41,23 @@ This decomposition guarantees experimental isolation: researchers can independen
 | **Selector** | Budget-aware filter  | Subsets proposed queries to satisfy per-iteration budget constraints. |
 | **Oracle** | Black-box evaluator  | Evaluates the objective $f(x)$ at fidelity $m$, realizing cost $c(x, m)$. |
 | **Budget** | Constraint scheduler | Enforces strict per-iteration and total computational cost limits. |
-| **Logger** | Experiment telemetry | Persists runtime metrics, model artifacts, and configurations. |
-| **Runtime Context** | Infrastructure state | Synchronizes device (`cuda`/`cpu`) and tensor dtypes across modules. |
+
+## **Monitoring Outputs**
+
+Operational monitoring is separate from the methodological components above.
+Core round metrics and profiling are always produced for completed rounds;
+diagnostics add optional model and component analysis.
+
+| Part | Role |
+| --- | --- |
+| **Logger** | Submits live metrics and figures to a console or experiment tracker. |
+| **RunWriter** | Persists structured run records and local figure artifacts. |
+| **DiagnosticsConfig** | Controls optional diagnostic enrichment for either configured sink. |
+| **Runtime Context** | Shares device, dtype, seed, and the optional live logger with components. |
+
+The logger and run writer are independent: use either for its specific output
+need, or configure both. See [Monitoring and Diagnostics](monitoring_and_diagnostics.md)
+for their lifecycle and configuration behavior.
 
 ## **Unified Single- and Multi-Fidelity Execution**
 
@@ -67,5 +82,6 @@ For a more detailed discussion of how this framework relates to prior work, see 
 
 1. [Active Learning Loop](active_learning_loop.md)
 2. [Multi-Fidelity Setting](multi_fidelity.md)
-3. [Runtime and Configuration](runtime_and_configuration.md)
-4. [Related Work and Positioning](related-work.md)
+3. [Monitoring and Diagnostics](monitoring_and_diagnostics.md)
+4. [Runtime and Configuration](runtime_and_configuration.md)
+5. [Related Work and Positioning](related-work.md)

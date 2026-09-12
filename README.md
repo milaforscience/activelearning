@@ -78,7 +78,7 @@ uv run activelearning config/branin/multi_fidelity.yaml
 | **Surrogate** | BoTorch GP (`SingleTaskMultiFidelityGP`) |
 | **Acquisition** | qMFLBMES (lower-bound multi-fidelity max-value entropy search) |
 | **Sampler** | Latin Hypercube Sampling over the 2D design space |
-| **Selector** | Cost-aware greedy (bang-per-buck within round budget) |
+| **Selector** | Cost-aware greedy (highest utility per unit cost within the round budget) |
 | **Budget** | 100.0 total, 10.0 allocated per round (constant schedule) |
 
 ### Config Structure
@@ -95,7 +95,9 @@ Every experiment is defined by a single YAML file with these top-level sections:
 | `selector` | Candidate selector (e.g. `CostAwareSelector`) |
 | `oracle` | True objective / query function (e.g. `BraninOracle`) |
 | `budget` | Total budget and per-round schedule |
-| `logger` | *(Optional)* Experiment tracker (see [Loggers](#loggers) below) |
+| `logger` | *(Optional)* Live telemetry backend |
+| `run_writer` | *(Optional)* Durable structured run-output sink |
+| `diagnostics` | *(Optional)* Diagnostic metric and figure controls |
 
 ### Overriding Config Values
 
@@ -107,7 +109,21 @@ uv run activelearning config/branin/multi_fidelity.yaml \
   acquisition.num_mv_samples=20
 ```
 
-### Loggers
+### Monitoring and outputs
+
+Each completed round produces core metrics and timing information. Diagnostics
+can add optional model and component analysis. Configure one or both independent
+outputs:
+
+- `logger` submits live metrics and figures to the console, Aim, Weights &
+  Biases, or Comet.
+- `run_writer` persists reproducible JSON, JSONL, CSV, and local figure
+  artifacts.
+- `diagnostics` controls optional diagnostic enrichment for configured sinks;
+  it does not disable core metrics or profiling.
+
+See [Monitoring and Diagnostics](docs/concepts/monitoring_and_diagnostics.md)
+for the lifecycle and configuration behavior.
 
 Set `logger.type` to choose a logging backend:
 
@@ -133,6 +149,18 @@ uv run activelearning config/branin/multi_fidelity.yaml \
   logger.type=WandbLogger \
   logger.project_name=my_project
 ```
+
+Example — persist completed-round records locally:
+
+```yaml
+run_writer:
+  type: JSONLinesRunWriter
+  output_dir: outputs/example_run
+```
+
+The output directory contains `run_manifest.json`, `round_history.jsonl`,
+`experiment_log.csv`, `run_summary.json`, and any diagnostic figures below
+`artifacts/`.
 
 ## Development & Tooling Notes
 

@@ -1,4 +1,5 @@
 from unittest.mock import Mock
+import math
 
 import pytest
 
@@ -218,6 +219,7 @@ def test_zero_budget(selector, candidates, mock_acquisition, uniform_cost_fn):
     )
 
     assert len(selected) == 0
+    assert selector.drain_selection_scores() is None
 
 
 def test_exact_budget_fit(selector):
@@ -282,3 +284,46 @@ def test_greedy_not_optimal(selector):
     # Greedy will select candidate 1 first (better ratio), then can't fit candidate 0
     assert len(selected) == 1
     assert selected[0].x == 1
+
+
+def test_cost_aware_selector_records_utility_ratio_snapshot(selector):
+    """The snapshot should contain raw values, ratios, and greedy indices."""
+    candidates = [Candidate(x=index) for index in range(3)]
+    acquisition = Mock()
+    acquisition.score.return_value = [10.0, 20.0, 30.0]
+
+    selected = selector(
+        candidates,
+        acquisition=acquisition,
+        cost_fn=lambda values: [5.0, 2.0, 1.0],
+        round_budget=100.0,
+    )
+    snapshot = selector.drain_selection_scores()
+
+    assert [candidate.x for candidate in selected] == [2, 1, 0]
+    assert snapshot is not None
+    assert snapshot.acquisition_scores == (10.0, 20.0, 30.0)
+    assert snapshot.ranking_scores == (2.0, 10.0, 30.0)
+    assert snapshot.selected_indices == (2, 1, 0)
+    acquisition.score.assert_called_once_with(candidates)
+    assert selector.drain_selection_scores() is None
+
+
+def test_cost_aware_selector_snapshot_keeps_zero_cost_ratio_infinite(selector):
+    """Zero-cost candidates remain rankable through an infinite ratio."""
+    candidates = [Candidate(x=index) for index in range(3)]
+    acquisition = Mock()
+    acquisition.score.return_value = [10.0, 20.0, 30.0]
+
+    selector(
+        candidates,
+        acquisition=acquisition,
+        cost_fn=lambda values: [0.0, 2.0, 1.0],
+        round_budget=3.0,
+    )
+    snapshot = selector.drain_selection_scores()
+
+    assert snapshot is not None
+    assert math.isinf(snapshot.ranking_scores[0])
+    assert snapshot.ranking_scores[1:] == (10.0, 30.0)
+    assert snapshot.selected_indices == (0, 2, 1)

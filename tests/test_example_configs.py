@@ -7,7 +7,7 @@ from omegaconf import OmegaConf
 from pydantic import ValidationError
 
 from activelearning.config import ActiveLearningConfig
-from activelearning.run_writer import JSONLinesRunWriter
+from activelearning.monitoring.run_writer import JSONLinesRunWriter
 from activelearning.utils.config_loader import load_and_parse, load_config, parse_config
 
 
@@ -104,6 +104,9 @@ def test_branin_benchmark_configs_parse(
     assert config.surrogate.is_multi_fidelity is surrogate_is_multi_fidelity
     assert config.budget.available_budget == 100.0
     assert config.budget.max_rounds == 300
+    assert config.diagnostics.enabled is True
+    assert config.diagnostics.figure_interval == 1
+    assert config.diagnostics.max_points == 1000
     assert config.run_writer is not None
     assert config.run_writer.output_dir == Path(
         f"outputs/branin_benchmark/{overlay_name}/seed_42"

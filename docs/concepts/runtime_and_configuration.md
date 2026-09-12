@@ -71,9 +71,19 @@ logger:
   type: ConsoleLogger
   project_name: activelearning_tutorials
   run_name: branin-multi-fidelity
+
+run_writer:
+  type: JSONLinesRunWriter
+  output_dir: outputs/branin-multi-fidelity
+
+diagnostics:
+  enabled: true
+  figure_interval: 1
+  max_points: 1000
 ```
 
-The top-level sections correspond to the loop's conceptual components:
+The top-level sections describe both the active-learning method and its
+operational settings:
 
 <div class="schema-table" markdown>
 
@@ -87,11 +97,27 @@ The top-level sections correspond to the loop's conceptual components:
 | `selector` | Budget-aware filter | Subsets proposed queries to satisfy per-iteration budget constraints. |
 | `oracle` | Black-box evaluator | Evaluates the objective $f(x)$ at fidelity $m$, realizing cost $c(x, m)$. |
 | `budget` | Constraint scheduler | Enforces strict per-iteration and total computational cost limits. |
-| `logger` | Experiment telemetry | Persists runtime metrics, model artifacts, and configurations. |
+| `logger` | Live telemetry sink | Submits metrics and figures to a console or tracker. |
+| `run_writer` | Durable output sink | Persists structured records and local figure artifacts. |
+| `diagnostics` | Optional enrichment controls | Adds diagnostic metrics and figures for configured sinks. |
 
 </div>
 
-Every non-null component block uses a `type` discriminator. The matching config model lives in `src/activelearning/<component>/config.py`; its `build()` method is the boundary between declarative YAML and runtime objects.
+Blocks that select an implementation, such as `surrogate`, `sampler`, `logger`,
+and `run_writer`, use a `type` discriminator. Settings blocks such as `runtime`
+and `diagnostics` do not. Each implementation block is validated by its matching
+configuration model, whose `build()` method turns declarative YAML into a
+runtime object.
+
+The `logger`, `run_writer`, and `diagnostics` sections configure independent
+monitoring concerns. A logger provides live tracker output and is placed in the
+shared runtime context so runtime-aware components can emit telemetry. A run
+writer persists complete loop-owned records and local artifacts, so components
+cannot write partial rounds. Diagnostics add optional enrichment to either
+configured sink; disabling them does not disable core metrics or profiling. See
+[Monitoring and Diagnostics](monitoring_and_diagnostics.md) for metric names
+and artifact paths. In Python, `ActiveLearningConfig.diagnostics` is passed to
+the `active_learning` entry point as `diagnostics_config`.
 
 ## **Runtime Context**
 

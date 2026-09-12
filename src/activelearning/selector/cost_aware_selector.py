@@ -49,13 +49,14 @@ class CostAwareSelector(Selector):
         Returns
         -------
         result : list[Candidate]
-            List of selected candidates within budget constraint.
+            Selected candidates in descending utility-per-cost order.
 
         Raises
         ------
         ValueError
             If acquisition, cost_fn, or round_budget not provided.
         """
+        self._clear_selection_scores()
         if acquisition is None:
             raise ValueError("Acquisition function is required for CostAwareSelector.")
         if cost_fn is None:
@@ -67,12 +68,16 @@ class CostAwareSelector(Selector):
             return []
 
         # Get acquisition values and costs for all candidates
-        acq_values = acquisition.score(candidates)
-        costs = cost_fn(candidates)
+        acquisition_scores = list(acquisition.score(candidates))
+        costs = list(cost_fn(candidates))
+        if len(acquisition_scores) != len(candidates):
+            raise ValueError("Acquisition scores must match the candidate pool.")
+        if len(costs) != len(candidates):
+            raise ValueError("Candidate costs must match the candidate pool.")
 
         # Reject negative costs and calculate bang-for-buck ratios
-        ratios = []
-        for idx, (acq_value, cost) in enumerate(zip(acq_values, costs)):
+        ranking_scores = []
+        for acq_value, cost in zip(acquisition_scores, costs):
             if cost < 0:
                 raise ValueError("Cost function returned a negative cost.")
             if cost == 0:
@@ -80,21 +85,33 @@ class CostAwareSelector(Selector):
                 ratio = float("inf")
             else:
                 ratio = acq_value / cost
-            ratios.append((ratio, idx))
+            ranking_scores.append(ratio)
 
         # Sort by ratio descending (highest bang-for-buck first)
-        ratios.sort(key=lambda x: x[0], reverse=True)
+        ranked_indices = sorted(
+            range(len(candidates)),
+            key=lambda index: ranking_scores[index],
+            reverse=True,
+        )
 
         # Greedily select candidates until budget exhausted
         selected = []
+        selected_indices = []
         budget_used = 0.0
 
-        for _, idx in ratios:
+        for idx in ranked_indices:
             candidate_cost = costs[idx]
             if budget_used + candidate_cost <= round_budget + _BUDGET_ATOL:
                 selected.append(candidates[idx])
+                selected_indices.append(idx)
                 budget_used += candidate_cost
                 if budget_used >= round_budget:
                     break
 
+        if selected_indices:
+            self._record_selection_scores(
+                acquisition_scores,
+                ranking_scores,
+                selected_indices,
+            )
         return selected

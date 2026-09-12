@@ -20,7 +20,7 @@ uv run activelearning config/branin/single_fidelity.yaml \
 You should see output like this in your terminal:
 
 ```text
-[Step 1] round=1 | num_new_samples=3 | round_cost=3.0000 | total_cost=3.0000 | budget_remaining=0.0000
+[Step 1] active_learning/round=1 | active_learning/samples/proposed=10000 | active_learning/samples/selected=3 | active_learning/observations/new=3 | active_learning/cost/round=3.0000 | active_learning/cost/cumulative=3.0000 | active_learning/budget/remaining=0.0000 | profiling/...
 Done. Rounds: 1 | Total cost: 3.0000
 ```
 
@@ -31,11 +31,17 @@ The key output fields are:
 
 | Field | Meaning |
 | --- | --- |
-| `round` | Active learning round index |
-| `num_new_samples` | Candidates queried in that round |
-| `round_cost` | Budget consumed in that round |
-| `total_cost` | Cumulative budget consumed across all rounds so far |
-| `budget_remaining` | Total budget still available |
+| `active_learning/round` | Active learning round index |
+| `active_learning/samples/proposed` | Candidates proposed by the sampler |
+| `active_learning/samples/selected` | Candidates queried in that round |
+| `active_learning/observations/new` | Finite observations added in that round |
+| `active_learning/cost/round` | Budget consumed in that round |
+| `active_learning/cost/cumulative` | Cumulative budget consumed across all rounds so far |
+| `active_learning/budget/remaining` | Total budget still available |
+| `profiling/<phase>` | Always-collected operational duration in seconds for one active-learning phase |
+
+For live telemetry, durable run records, and optional diagnostic controls, see
+[Monitoring and Diagnostics](../concepts/monitoring_and_diagnostics.md).
 
 ## **Scale up**
 
