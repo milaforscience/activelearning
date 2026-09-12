@@ -1,0 +1,32 @@
+dataset:
+  type: ListDataset
+  initial_data:
+    path: ${reproduce_paper.initial_data.mid}
+    x_columns: [x1, x2]
+    y_column: y
+    fidelity_column: fidelity
+    metadata_columns: remaining
+
+acquisition:
+  type: QLowerBoundMaxValueEntropy
+  candidate_set_spec:
+    type: TrainDataCandidateSetSpec
+
+sampler:
+  type: HypercubeGridSampler
+  bounds: ${reproduce_paper.domain_bounds}
+  points_per_dimension: [100, 100]
+  fidelities: [2]
+  num_samples: ${reproduce_paper.candidate_sample_count}
+  use_acquisition_scores: true
+
+oracle:
+  type: BraninOracle
+  fidelity_costs:
+    2: 0.1
+  fidelity_confidences:
+    2: 0.5
+
+reproduce_paper:
+  method: sf_mid_fid
+  method_label: SF-GFN-MID

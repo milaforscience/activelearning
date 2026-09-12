@@ -1,0 +1,13 @@
+oracle:
+  fidelity_confidences:
+    1: 0.1
+    2: 1.0
+
+surrogate:
+  gp_fidelity_confidences:
+    1: 0.75
+    2: 1.0
+
+experiment:
+  name: varying_gp_fidelity
+  method: mf_gfn_landscape_0.1_gp_0.75

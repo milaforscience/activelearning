@@ -17,6 +17,6 @@ def validate_log_key(key: str) -> None:
     ):
         raise ValueError(
             "Monitoring keys must use a component-qualified namespace such as "
-            "'sampler/s3gfn/train/loss'; got "
+            "'sampler/component/metric'; got "
             f"{key!r}."
         )

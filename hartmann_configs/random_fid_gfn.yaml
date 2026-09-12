@@ -1,0 +1,114 @@
+runtime:
+  device: cuda
+  precision: 64
+  seed: 42
+
+dataset:
+  type: ListDataset
+  initial_data:
+    path: ${reproduce_paper.initial_data.multi}
+    x_columns: [x1, x2, x3, x4, x5, x6]
+    y_column: y
+    fidelity_column: fidelity
+    metadata_columns: remaining
+
+surrogate:
+  type: BoTorchGPSurrogate
+
+acquisition:
+  type: QMultiFidelityLowerBoundMaxValueEntropy
+  candidate_set_spec:
+    type: TrainDataCandidateSetSpec
+  cost_aware_utility:
+    type: FidelityCostUtility
+    fidelity_costs: ${reproduce_paper.oracle_costs}
+
+sampler:
+  type: GFlowNetGridSampler
+  n_samples: ${reproduce_paper.candidate_sample_count}
+  reward_fidelity: 3
+  output_bounds: ${reproduce_paper.domain_bounds}
+  log_dir: ${run_writer.output_dir}/gflownet_logs
+  fidelity_policy:
+    type: uniform
+    values: [1, 2, 3]
+  conf:
+    env:
+      n_dim: ${reproduce_paper.gflownet.n_dim}
+      length: ${reproduce_paper.gflownet.grid_length}
+    policy:
+      forward:
+        n_hid: 2048
+        n_layers: 2
+    gflownet:
+      random_action_prob: ${reproduce_paper.gflownet.random_action_prob}
+      optimizer:
+        lr: 0.0005
+        lr_z_mult: 20.0
+        z_dim: 64
+        n_train_steps: 10000
+        batch_size:
+          forward: ${reproduce_paper.gflownet.optimizer_batch_size}
+    proxy:
+      reward_beta: ${reproduce_paper.gflownet.reward_beta}
+      reward_rho: ${reproduce_paper.gflownet.reward_rho}
+
+selector:
+  type: TopKAcquisitionSelector
+  num_samples: 10
+
+oracle:
+  type: Hartmann6DOracle
+  fidelity_costs: ${reproduce_paper.oracle_costs}
+  fidelity_confidences: ${reproduce_paper.fidelity_confidences}
+
+budget:
+  available_budget: 100.0
+  schedule:
+    type: constant
+    value: 10.0
+
+logger:
+  type: ConsoleLogger
+  project_name: activelearning_paper_reproduction
+  run_name: ${reproduce_paper.task}-${reproduce_paper.method}-seed${runtime.seed}
+
+run_writer:
+  type: JSONLinesRunWriter
+  output_dir: outputs/reproduce_paper/${reproduce_paper.task}/${reproduce_paper.method}/seed_${runtime.seed}
+
+reproduce_paper:
+  task_group: synthetic
+  task: hartmann
+  task_label: Hartmann 6D
+  method: random_fid_gfn
+  method_label: Random fid. GFN
+  top_k: 10
+  negate_score: false
+  initial_data:
+    multi: scripts/configs/reproduce_paper/data/hartmann/initial_multi_fidelity.csv
+    single: scripts/configs/reproduce_paper/data/hartmann/initial_single_fidelity.csv
+  oracle_costs:
+    1: 0.125
+    2: 0.25
+    3: 1.0
+  fidelity_confidences:
+    1: 0.5
+    2: 0.75
+    3: 1.0
+  domain_bounds:
+    - [0.0, 1.0]
+    - [0.0, 1.0]
+    - [0.0, 1.0]
+    - [0.0, 1.0]
+    - [0.0, 1.0]
+    - [0.0, 1.0]
+  candidate_sample_count: 50
+  gflownet:
+    n_dim: 6
+    grid_length: 10
+    optimizer_batch_size: 32
+    random_action_prob: 0.001
+    reward_beta: 0.01
+    reward_rho: 1.0
+    fidelity_action: any

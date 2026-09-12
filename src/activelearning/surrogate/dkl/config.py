@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal, Optional
+from typing import Any, ClassVar, Literal, Optional
 
 from pydantic import BaseModel, Field, PrivateAttr
 
+from activelearning.config_registry import BuildableConfig
 from activelearning.surrogate.encoder_config import EncoderConfig
 from activelearning.surrogate.surrogate import Surrogate
 
@@ -32,9 +33,10 @@ class DKLTrainingConfig(BaseModel):
     pretrain_epochs: int = 0
 
 
-class DKLSurrogateConfigBase(BaseModel):
+class DKLSurrogateConfigBase(BuildableConfig):
     """Shared configuration fields for exact and variational DKL models."""
 
+    is_botorch_compatible: ClassVar[bool] = True
     encoder: EncoderConfig
     training_params: DKLTrainingConfig = Field(default_factory=DKLTrainingConfig)
     target_fidelity: Optional[int] = None
@@ -81,9 +83,7 @@ class DKLSurrogateConfigBase(BaseModel):
                 f"the oracle. Oracle declares: {sorted(confidences)}."
             )
 
-        data = self.model_dump()
-        data["target_fidelity"] = target_fidelity
-        resolved = type(self).model_validate(data)
+        resolved = self.model_copy(update={"target_fidelity": target_fidelity})
         resolved._is_multi_fidelity = is_multi_fidelity
         return resolved
 

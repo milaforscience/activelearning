@@ -1,0 +1,6 @@
+sampler:
+  num_samples: 150
+
+experiment:
+  name: num_samples
+  method: mf_gfn_n150

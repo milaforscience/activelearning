@@ -1,4 +1,4 @@
-"""Entry point for the active learning loop.
+"""Command-line entry point for the active learning loop.
 
 Usage
 -----
@@ -22,12 +22,14 @@ Examples
     uv run activelearning config/base.yaml config/mf.yaml sampler.num_samples=500
 """
 
+from __future__ import annotations
+
 import argparse
 import hashlib
 import json
 import shlex
 import subprocess
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -37,14 +39,17 @@ from activelearning.logger.config import bootstrap_logger_backend_imports
 from activelearning.utils.config_loader import load_config
 
 if TYPE_CHECKING:
+    from activelearning.config_registry import ConfigCatalogs
     from activelearning.config import ActiveLearningConfig
 
 
 def _parse_args(
     argv: Sequence[str] | None = None,
+    *,
+    program_name: str = "activelearning",
 ) -> tuple[argparse.Namespace, list[str]]:
     parser = argparse.ArgumentParser(
-        prog="activelearning",
+        prog=program_name,
         description=(
             "Run the active learning loop from one or more YAML config files. "
             "Arguments containing '=' are treated as OmegaConf dotlist overrides; "
@@ -65,9 +70,12 @@ def _parse_args(
 
 def process_arguments(
     argv: Sequence[str] | None = None,
+    *,
+    catalogs: Mapping[str, ConfigCatalogs] | None = None,
+    program_name: str = "activelearning",
 ) -> tuple[DictConfig, "ActiveLearningConfig", list[Path], list[str]]:
     """Parse CLI arguments, load configs, and validate the merged config."""
-    args, unknown = _parse_args(argv)
+    args, unknown = _parse_args(argv, program_name=program_name)
 
     configs = [arg for arg in args.args if "=" not in arg]
     overrides = [arg for arg in args.args if "=" in arg]
@@ -98,13 +106,22 @@ def process_arguments(
     from activelearning.config import ActiveLearningConfig
     from activelearning.utils.config_loader import parse_config
 
-    cfg = parse_config(raw_cfg, ActiveLearningConfig)
+    cfg = parse_config(raw_cfg, ActiveLearningConfig, catalogs=catalogs)
     return raw_cfg, cfg, config_paths, overrides
 
 
-def main(argv: Sequence[str] | None = None) -> None:
+def run(
+    argv: Sequence[str] | None = None,
+    *,
+    catalogs: Mapping[str, ConfigCatalogs] | None = None,
+    program_name: str = "activelearning",
+) -> None:
     """Load config, build components, run the active learning loop."""
-    raw_cfg, cfg, config_paths, overrides = process_arguments(argv)
+    raw_cfg, cfg, config_paths, overrides = process_arguments(
+        argv,
+        catalogs=catalogs,
+        program_name=program_name,
+    )
 
     from activelearning.active_learning import active_learning
     from activelearning.runtime import bind_runtime_context
@@ -124,6 +141,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 config_paths=config_paths,
                 overrides=overrides,
                 raw_cfg=raw_cfg,
+                program_name=program_name,
             )
         )
         if cfg.run_writer is not None
@@ -156,18 +174,24 @@ def main(argv: Sequence[str] | None = None) -> None:
     print(f"Done. Rounds: {num_rounds} | Total cost: {total_cost:.4f}")
 
 
+def main(argv: Sequence[str] | None = None) -> None:
+    """Run a core-only active-learning experiment."""
+    run(argv)
+
+
 def _build_run_metadata(
     *,
     config_paths: Sequence[Path],
     overrides: Sequence[str],
     raw_cfg: Any,
+    program_name: str,
 ) -> dict[str, Any]:
     """Build compact reproducibility metadata from the CLI inputs."""
     resolved_config = OmegaConf.to_container(raw_cfg, resolve=True)
     return {
         "config": resolved_config,
         "cli": {
-            "command": _format_activelearning_command(config_paths, overrides),
+            "command": _format_command(program_name, config_paths, overrides),
             "config_files": [_display_path(path) for path in config_paths],
             "config_overrides": list(overrides),
         },
@@ -179,13 +203,14 @@ def _build_run_metadata(
     }
 
 
-def _format_activelearning_command(
+def _format_command(
+    program_name: str,
     config_paths: Sequence[Path],
     overrides: Sequence[str],
 ) -> str:
     """Return a shell-friendly reproduction command for the current run."""
     args = [_display_path(path) for path in config_paths] + list(overrides)
-    return "activelearning " + " ".join(shlex.quote(arg) for arg in args)
+    return f"{program_name} " + " ".join(shlex.quote(arg) for arg in args)
 
 
 def _git_commit_sha() -> str | None:

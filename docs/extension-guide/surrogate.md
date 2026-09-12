@@ -37,20 +37,18 @@ Review the built-in surrogates as concrete examples before writing your own:
 
 Source: `src/activelearning/surrogate/`.
 
-## **Config model and explicit union**
+## **Config model and registration**
 
-Add a Pydantic config model in `src/activelearning/surrogate/config.py` and
-add it to the explicit `SurrogateConfig` discriminated union. The union is the
-single visible catalog of built-in surrogate configurations, which gives
-Pydantic, generated schemas, and static type checkers the complete set of
-supported discriminators.
+Add a `BuildableConfig` model and list it in the surrogate catalog in the same
+file. External packages do not edit core's `SurrogateConfig`.
 
 ```python
-from typing import Annotated, ClassVar, Literal, Union
+from typing import ClassVar, Literal
 
-from pydantic import BaseModel, Field
+from activelearning.config_registry import BuildableConfig
 
-class MySurrogateConfig(BaseModel):
+
+class MySurrogateConfig(BuildableConfig):
     type: Literal["MySurrogate"] = "MySurrogate"
     input_representation: ClassVar[str | None] = "numeric"
     # your parameters here
@@ -58,21 +56,24 @@ class MySurrogateConfig(BaseModel):
     def build(self) -> Surrogate:
         return MySurrogate(...)
 
+    is_botorch_compatible: ClassVar[bool] = False
 
-SurrogateConfig = Annotated[
-    Union[
-        # Keep the existing built-in config classes here as well.
-        DummyMeanSurrogateConfig,
-        BoTorchGPSurrogateConfig,
-        ExactDKLSurrogateConfig,
-        VariationalDKLSurrogateConfig,
-        MySurrogateConfig,
-    ],
-    Field(discriminator="type"),
-]
+
+SURROGATE_CONFIGS = (MySurrogateConfig,)
 ```
 
-Then in your YAML:
+Add `SURROGATE_CONFIGS` to the package's `CONFIG_CATALOGS` mapping in
+`my_package/config_catalogs.py` as shown in the
+[extension overview](overview.md#the-common-extension-recipe).
+
+Then compose the application command with this mapping:
+
+```python
+from activelearning.main import run
+from my_package.config_catalogs import CONFIG_CATALOGS
+
+run(catalogs={"my-package": CONFIG_CATALOGS}, program_name="my-package")
+```
 
 ```yaml
 surrogate:
@@ -127,10 +128,10 @@ caching.
 
 ### **Add configuration in the surrogate layer**
 
-Concrete encoder configs live in
-`activelearning.surrogate.encoder_config` alongside the core surrogate
-interfaces. Add each config to the `EncoderConfig` discriminated union with a
-unique `type` discriminator and a `build()` method.
+Concrete encoder configs belong to the distribution that owns the encoder.
+Core provides the representation-independent `EncoderConfig` contract and
+registry; an application package adds its concrete encoders to its
+`CONFIG_CATALOGS` mapping.
 
 Hugging Face models can subclass
 [`HuggingFaceEncoderConfig`](../reference/activelearning/surrogate/sequence/config/#activelearning.surrogate.sequence.config.HuggingFaceEncoderConfig),
@@ -151,13 +152,11 @@ class MySequenceEncoderConfig(HuggingFaceEncoderConfig):
         return MySequenceEncoder
 ```
 
-Any other model type uses a plain `BaseModel` config that builds its tokenizer
-and encoder inside `build()`. Keep implementation imports inside `build()` or
-`_encoder_class()` so importing `activelearning.surrogate` does not import
-`activelearning.applications` or optional dependencies. This follows the
-existing `oracle/config.py` and `sampler/config.py` convention: core-layer
-configs own the runtime contract while application implementations are loaded
-lazily.
+Any other model type uses a `BuildableConfig` config that builds its tokenizer
+and encoder inside `build()`. Keep implementation imports inside `build()` or `_encoder_class()` so
+importing `activelearning.surrogate` does not import an application package or
+optional dependencies. Add the schema to the encoder tuple beside these
+config classes, then add that tuple to the package's `CONFIG_CATALOGS` mapping.
 
 Add an `input_representation` `ClassVar` such as `"smiles"` if the run needs
 representation checks. It is metadata for the composition layer rather than
@@ -245,9 +244,11 @@ inside `fit()` or `predict()` after the runtime context has been bound.
 that may be a one-pass generator. Convert to a list immediately if you need
 random access or multiple passes.
 
-**Surrogate compatibility** — BoTorch acquisitions require a
-[`BoTorchGPSurrogate`](../reference/activelearning/surrogate/botorch_surrogate/#activelearning.surrogate.botorch_surrogate.BoTorchGPSurrogate), not a generic [`Surrogate`](../reference/activelearning/surrogate/surrogate/#activelearning.surrogate.surrogate.Surrogate). Custom surrogates that wrap
-non-BoTorch models should pair with acquisitions that only use `predict()`.
+**Surrogate compatibility** — BoTorch acquisition configs declare
+`requires_botorch_surrogate = True`. A custom surrogate that provides the
+required BoTorch interfaces can opt in with `is_botorch_compatible = True`
+without inheriting a specific built-in config class. Other surrogates should
+pair with acquisitions that only use the generic `predict()` contract.
 
 ## **Related pages**
 
