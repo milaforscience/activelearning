@@ -133,9 +133,9 @@ class GFlowNetGridSampler(GFlowNetSampler):
     # Agent construction
     # ------------------------------------------------------------------
 
-    def _build_agent(self, acquisition):
+    def _build_agent(self, acquisition, cost_fn=None):
         """Build agent, applying per-dimension coordinate bounds to the env if set."""
-        agent = super()._build_agent(acquisition)
+        agent = super()._build_agent(acquisition, cost_fn=cost_fn)
         # For multi-fidelity, bounds are applied inside _build_multi_fidelity_env.
         if self.domain_bounds is not None and self.fidelities is None:
             _apply_per_dimension_bounds(agent.env, self.domain_bounds)

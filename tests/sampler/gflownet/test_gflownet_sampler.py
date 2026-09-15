@@ -206,6 +206,24 @@ class TestGFlowNetSamplerFidelityActionWrapperSelection:
         with pytest.raises(ValueError, match="fidelity_action"):
             sampler._build_agent(acquisition=Mock())
 
+    def test_round_index_is_passed_to_proxy(self, gflownet_conf_2d):
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=2, conf=conf)
+        sampler._round_index = 3
+
+        mock_agent = Mock()
+        mock_agent.proxy = Mock()
+        mock_agent.env = Mock()
+        mock_agent.logger = Mock()
+
+        with patch(
+            "activelearning.sampler.gflownet.gflownet_sampler.gflownet_from_config",
+            return_value=mock_agent,
+        ):
+            sampler._build_agent(acquisition=Mock())
+
+        mock_agent.proxy.set_round_index.assert_called_once_with(3)
+
 
 # ---------------------------------------------------------------------------
 # Helper methods
@@ -275,6 +293,13 @@ class TestGFlowNetSamplerSmokeTest:
         assert len(candidates) == 4
         assert all(isinstance(c, Candidate) for c in candidates)
         assert all(len(c.x) == 2 for c in candidates)
+
+    def test_sample_with_single_fidelity_stamps_fidelity(self, gflownet_conf_2d):
+        """fidelities=[1] routes through the MF wrapper and stamps fidelity 1 on every candidate."""
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=3, conf=conf, fidelities=[1])
+        candidates = sampler.sample(acquisition=_ConstantAcquisition())
+        assert all(candidate.fidelity == 1 for candidate in candidates)
 
 
 # ---------------------------------------------------------------------------

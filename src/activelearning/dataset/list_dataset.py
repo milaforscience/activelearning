@@ -1,8 +1,11 @@
 import heapq
+import logging
 from typing import Sequence
 
 from activelearning.dataset.dataset import Dataset
-from activelearning.utils.types import Observation
+from activelearning.utils.types import Observation, has_finite_target
+
+logger = logging.getLogger(__name__)
 
 
 class ListDataset(Dataset):
@@ -14,7 +17,7 @@ class ListDataset(Dataset):
         self._latest_end_idx = 0
 
     def add_observations(self, observations: Sequence[Observation]) -> None:
-        """Add new observations to the dataset by appending to the list of records.
+        """Add new observations to the dataset by appending all provided records.
 
         Parameters
         ----------
@@ -73,7 +76,8 @@ class ListDataset(Dataset):
         """
         if not self._records:
             return []
-        # Use generator to avoid creating an intermediate list
-        valid_obs = (o for o in self._records if o.y is not None)
+        # Use generator to avoid creating an intermediate list; has_finite_target
+        # rejects None and non-finite numeric values in one uniform check.
+        valid_obs = (o for o in self._records if has_finite_target(o))
         # heapq.nlargest is O(n log k) and doesn't sort the entire dataset
         return heapq.nlargest(k, valid_obs, key=lambda r: r.y)

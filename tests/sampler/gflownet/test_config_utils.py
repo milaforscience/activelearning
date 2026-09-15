@@ -135,6 +135,8 @@ def test_compose_gflownet_conf_proxy_target():
     assert (
         conf.proxy._target_ == "activelearning.sampler.gflownet.proxy.AcquisitionProxy"
     )
+    assert conf.proxy.reward_scale_beta == 1.0
+    assert conf.proxy.reward_scale_rho == 1.0
 
 
 def test_compose_gflownet_conf_loss_target():
@@ -279,7 +281,6 @@ def test_pydantic_gflownet_grid_sampler_config_builds_with_compose(tmp_path):
 
     cfg = GFlowNetGridSamplerConfig(
         n_samples=5,
-        n_fidelities=1,
         log_dir=str(tmp_path),
         conf={
             "env": {
