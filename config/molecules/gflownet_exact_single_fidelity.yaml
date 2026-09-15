@@ -5,7 +5,7 @@
 #   - uv sync --extra molecules
 #
 # Run with:
-#   uv run activelearning config/molecules/gflownet_exact.yaml
+#   uv run activelearning config/molecules/gflownet_exact_single_fidelity.yaml
 #
 # This example keeps the setup intentionally small:
 # - GFlowNetSampler trains a generative policy (GFlowNet) to propose SELFIES strings

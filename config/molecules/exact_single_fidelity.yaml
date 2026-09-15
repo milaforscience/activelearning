@@ -11,7 +11,7 @@
 # and the overall setup easy to follow.
 #
 # Run with:
-#   uv run activelearning config/molecules/exact.yaml
+#   uv run activelearning config/molecules/exact_single_fidelity.yaml
 
 runtime:
   device: cpu

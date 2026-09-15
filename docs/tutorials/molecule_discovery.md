@@ -31,9 +31,9 @@ The repository includes five example molecule configs arranged as an incremental
 
 | Config | Sampler | Surrogate | Acquisition | Fidelity setting | Purpose |
 |--------|---------|-----------|-------------|------------------|---------|
-| `config/molecules/exact.yaml` | Pool file | Exact SELFIES DKL | UCB | pool fidelity `1` only | Stage 1: smallest pool-based baseline |
+| `config/molecules/exact_single_fidelity.yaml` | Pool file | Exact SELFIES DKL | UCB | pool fidelity `1` only | Stage 1: smallest pool-based baseline |
 | `config/molecules/exact_multi_fidelity.yaml` | Pool file | Exact SELFIES DKL | MF-MES + `CostAwareSelector` | pool fidelities `1 / 2 / 3` | Stage 2: same pool setup with multi-fidelity scoring |
-| `config/molecules/gflownet_exact.yaml` | SELFIES GFlowNet | Exact SELFIES DKL | UCB | fixed fidelity `1` | Stage 3: swap the pool sampler for a GFlowNet |
+| `config/molecules/gflownet_exact_single_fidelity.yaml` | SELFIES GFlowNet | Exact SELFIES DKL | UCB | fixed fidelity `1` | Stage 3: swap the pool sampler for a GFlowNet |
 | `config/molecules/gflownet_exact_multi_fidelity.yaml` | SELFIES GFlowNet | Exact SELFIES DKL | MF-MES with cost utility | learned fidelity `1 / 2 / 3` | Stage 4: let the GFlowNet learn molecule-fidelity pairs |
 | `config/molecules/gflownet_variational_multi_fidelity.yaml` | SELFIES GFlowNet | Variational SELFIES DKL | MF-MES with cost utility | learned fidelity `1 / 2 / 3` | Stage 5: keep the MF GFlowNet and swap in the scalable variational surrogate |
 
@@ -42,7 +42,7 @@ The repository includes five example molecule configs arranged as an incremental
 
 ## **What are SELFIES?**
 
-[SELFIES](https://arxiv.org/abs/1905.13741) (**Self-Referencing Embedded Strings**) are a string representation for molecules. Like SMILES, they encode molecular graphs as text. Unlike SMILES, SELFIES provide a hard validity guarantee: *every* sequence of tokens that is valid under the SELFIES grammar decodes to a chemically valid molecular graph. This makes SELFIES particularly useful for generative active learning: the GFlowNet can learn over a constrained token language without constantly producing chemically invalid candidates. The oracle still needs to reject molecules that fail downstream geometry construction or xTB evaluation (see [Handling failures](#handling-failures)), but SELFIES removes the most common source of invalidity at the representation level.
+[SELFIES](https://arxiv.org/abs/1905.13741) (**Self-Referencing Embedded Strings**) are a string representation for molecules. Like SMILES, they encode molecular graphs as text. Unlike SMILES, SELFIES provide a hard validity guarantee: *every* sequence of tokens that is valid under the SELFIES grammar decodes to a chemically valid molecular graph. This makes SELFIES particularly useful for generative active learning: the GFlowNet can learn over a constrained token language without constantly producing chemically invalid candidates. The oracle still needs to reject molecules that fail downstream geometry construction or xTB evaluation (see the **Handling failures** note below), but SELFIES removes the most common source of invalidity at the representation level.
 
 In this framework:
 
@@ -99,7 +99,7 @@ You can replace that file with your own pool later. For now, keep the provided p
 Start with the single-fidelity exact-DKL pool config and reduce it to a short run that still queries several molecules:
 
 ```sh
-uv run activelearning config/molecules/exact.yaml \
+uv run activelearning config/molecules/exact_single_fidelity.yaml \
   budget.available_budget=5.0 \
   budget.schedule.value=5.0 \
   selector.num_samples=5 \
@@ -114,7 +114,7 @@ You should see the same round-level fields as in the synthetic tutorials, plus a
 Done. Rounds: 1 | Total cost: 5.0000
 ```
 
-The exact numbers depend on which candidate was selected and whether xTB succeeds for that molecule. Invalid molecules or failed xTB calculations are recorded as `NaN` and filtered before surrogate fitting.
+The exact numbers depend on which candidate was selected and whether xTB succeeds for that molecule. Invalid molecules or failed xTB calculations are recorded as `NaN` and filtered before surrogate fitting; see the **Handling failures** note below for details.
 
 !!! note "Handling failures"
     Even though SELFIES guarantees that every token sequence decodes to a *syntactically* valid molecular graph, two downstream failure modes remain:
@@ -127,7 +127,7 @@ The exact numbers depend on which candidate was selected and whether xTB succeed
 Once you've confirmed the first round completes successfully, run the full single-fidelity exact-DKL config:
 
 ```sh
-uv run activelearning config/molecules/exact.yaml
+uv run activelearning config/molecules/exact_single_fidelity.yaml
 ```
 
 Then move to the multi-fidelity pool version, which keeps the exact SELFIES DKL surrogate but exposes the full xTB fidelity ladder and uses MF-MES with cost-aware selection:
@@ -155,7 +155,7 @@ oracle:
 The console logger only acknowledges the figure. To inspect a more informative grid, compose the run with the Aim overlay and keep the short budget large enough to query several molecules:
 
 ```sh
-uv run activelearning config/molecules/exact.yaml config/aim_logging.yaml \
+uv run activelearning config/molecules/exact_single_fidelity.yaml config/aim_logging.yaml \
   budget.available_budget=5.0 \
   budget.schedule.value=5.0 \
   selector.num_samples=5 \
@@ -178,7 +178,7 @@ The example below was generated from a short fidelity-1 EA run over the bundled 
     To optimise ionisation potential instead of electron affinity, override the task:
 
     ```sh
-    uv run activelearning config/molecules/exact.yaml \
+    uv run activelearning config/molecules/exact_single_fidelity.yaml \
       oracle.task=ip \
       logger.run_name=molecules-dkl-exact-ip
     ```
@@ -205,7 +205,7 @@ Here, the GFlowNet constructs a molecule token by token in the SELFIES environme
 Run a short exact-DKL GFlowNet check:
 
 ```sh
-uv run activelearning config/molecules/gflownet_exact.yaml \
+uv run activelearning config/molecules/gflownet_exact_single_fidelity.yaml \
   sampler.n_samples=8 \
   selector.num_samples=1 \
   sampler.conf.gflownet.optimizer.n_train_steps=10 \
@@ -216,7 +216,7 @@ uv run activelearning config/molecules/gflownet_exact.yaml \
 For the full small tutorial run, drop the overrides:
 
 ```sh
-uv run activelearning config/molecules/gflownet_exact.yaml
+uv run activelearning config/molecules/gflownet_exact_single_fidelity.yaml
 ```
 
 !!! note "Why keep the single-fidelity GFlowNet config?"
