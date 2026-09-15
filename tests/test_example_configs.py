@@ -73,9 +73,11 @@ def test_aim_logging_overlay_parses_when_merged_with_base_config() -> None:
     assert config.logger.type == "MultiLogger"
 
 
-def test_molecule_dkl_exact_gflownet_config_parses() -> None:
+def test_molecule_dkl_exact_single_fidelity_gflownet_config_parses() -> None:
     """Ensure the SELFIES GFlowNet molecule tutorial config matches the schema."""
-    config_path = REPOSITORY_ROOT / "config" / "molecules" / "gflownet_exact.yaml"
+    config_path = (
+        REPOSITORY_ROOT / "config" / "molecules" / "gflownet_exact_single_fidelity.yaml"
+    )
 
     config = load_and_parse(config_path, ActiveLearningConfig)
 
@@ -123,9 +125,11 @@ def test_molecule_dkl_variational_multi_fidelity_gflownet_config_parses() -> Non
     assert config.oracle.per_fidelity_num_conformers == {1: 1, 2: 2, 3: 4}
 
 
-def test_molecule_dkl_exact_pool_config_parses() -> None:
+def test_molecule_dkl_exact_single_fidelity_pool_config_parses() -> None:
     """Ensure the exact single-fidelity pool-based molecule example matches the schema."""
-    config_path = REPOSITORY_ROOT / "config" / "molecules" / "exact.yaml"
+    config_path = (
+        REPOSITORY_ROOT / "config" / "molecules" / "exact_single_fidelity.yaml"
+    )
 
     config = load_and_parse(config_path, ActiveLearningConfig)
 
