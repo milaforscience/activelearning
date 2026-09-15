@@ -258,7 +258,7 @@ uv run activelearning config/molecules/gflownet_exact_multi_fidelity.yaml \
   budget.schedule.value=28.0
 ```
 
-The second config keeps the same multi-fidelity GFlowNet structure but replaces the exact GP with a variational surrogate. It is a substantially larger run: the molecular search space expands to length 64 (`max_length: 64`), the GFlowNet generates 640 candidates per round with 5000 training steps, selects 128 per round, and the total budget is 1260. The variational surrogate introduces an additional `num_inducing` knob controlling the number of inducing points for the sparse GP approximation. Because the reward landscape over a length-64 SELFIES space is much broader, the config also explicitly tunes reward-shaping parameters (`reward_beta`, `reward_rho`, `reward_min`) and uses a larger policy network:
+The second config keeps the same multi-fidelity GFlowNet structure but replaces the exact GP with a variational surrogate. It is a substantially larger run: the molecular search space expands to length 64 (`max_length: 64`), the GFlowNet generates 640 candidates per round with 5000 training steps, selects 128 per round, and the total budget is 1260. The variational surrogate introduces an additional `num_inducing` knob controlling the number of inducing points for the sparse GP approximation. Because the reward landscape over a length-64 SELFIES space is much broader, the config also explicitly tunes reward-shaping parameters (`reward_scale_beta`, `reward_scale_rho`, `reward_min`) and uses a larger policy network:
 
 ```sh
 uv run activelearning config/molecules/gflownet_variational_multi_fidelity.yaml

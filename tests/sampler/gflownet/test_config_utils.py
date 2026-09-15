@@ -135,6 +135,8 @@ def test_compose_gflownet_conf_proxy_target():
     assert (
         conf.proxy._target_ == "activelearning.sampler.gflownet.proxy.AcquisitionProxy"
     )
+    assert conf.proxy.reward_scale_beta == 1.0
+    assert conf.proxy.reward_scale_rho == 1.0
 
 
 def test_compose_gflownet_conf_loss_target():
