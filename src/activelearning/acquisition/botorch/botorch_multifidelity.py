@@ -6,6 +6,7 @@ Each class subclasses :class:`QBatchBoTorchAcquisition` and implements
 and target-fidelity projection from the base class into the BoTorch object.
 """
 
+import warnings
 from typing import Any, Callable, ClassVar, Iterable, Optional
 
 import torch
@@ -112,6 +113,14 @@ class _QMultiFidelityEntropyBase(QBatchBoTorchAcquisition):
             self._candidate_set_spec.update(obs_list)
             super().update(surrogate, obs_list)
         else:
+            if type(self._candidate_set_spec).update is not CandidateSetSpec.update:
+                warnings.warn(
+                    f"{type(self).__name__}.update() called without observations. "
+                    "The candidate set will be built from previously cached data, "
+                    "which may not reflect the current state of the experiment.",
+                    UserWarning,
+                    stacklevel=2,
+                )
             super().update(surrogate, observations)
 
     def _build_botorch_acquisition(self) -> Any:
