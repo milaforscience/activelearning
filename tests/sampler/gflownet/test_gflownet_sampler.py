@@ -223,7 +223,7 @@ class TestGFlowNetSamplerFidelityActionWrapperSelection:
         mock_agent = Mock()
         mock_agent.proxy = Mock()
         mock_agent.env = Mock()
-        mock_agent.logger = Mock()
+        mock_agent.logger = Mock(spec=RuntimeGFlowNetLoggerWrapper)
 
         with patch(
             "activelearning.sampler.gflownet.gflownet_sampler.gflownet_from_config",
