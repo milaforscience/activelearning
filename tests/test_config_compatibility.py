@@ -85,7 +85,7 @@ def test_selfies_encoder_rejects_smiles_oracle() -> None:
         match=r"SelfiesTransformerEncoderConfig expects SELFIES.*mol_repr='smiles'",
     ):
         _parse_mutated_config(
-            "config/molecules/exact.yaml",
+            "config/molecules/exact_single_fidelity.yaml",
             lambda config: setattr(config.oracle, "mol_repr", "smiles"),
         )
 
@@ -97,7 +97,7 @@ def test_smiles_encoder_rejects_selfies_oracle() -> None:
         match=r"GPMoLFormerSmilesEncoderConfig expects SMILES.*mol_repr='selfies'",
     ):
         _parse_mutated_config(
-            "config/molecules/exact.yaml",
+            "config/molecules/exact_single_fidelity.yaml",
             lambda config: _set_dkl_encoder(
                 config,
                 "ExactDKLSurrogate",
@@ -128,7 +128,7 @@ def test_dkl_encoder_rejects_non_molecular_oracle() -> None:
         match="SelfiesTransformerEncoderConfig expects SELFIES.*BraninOracleConfig",
     ):
         _parse_mutated_config(
-            "config/molecules/exact.yaml",
+            "config/molecules/exact_single_fidelity.yaml",
             lambda config: setattr(
                 config,
                 "oracle",
@@ -149,7 +149,7 @@ def test_numeric_sampler_rejects_molecular_dkl_encoder() -> None:
         match="HypercubeSamplerConfig generates numeric candidates.*SELFIES",
     ):
         _parse_mutated_config(
-            "config/molecules/exact.yaml",
+            "config/molecules/exact_single_fidelity.yaml",
             lambda config: setattr(
                 config,
                 "sampler",
@@ -172,7 +172,7 @@ def test_numeric_sampler_rejects_molecular_oracle() -> None:
         match="HypercubeSamplerConfig generates numeric candidates.*XTBIPEA",
     ):
         _parse_mutated_config(
-            "config/molecules/exact.yaml",
+            "config/molecules/exact_single_fidelity.yaml",
             lambda config: (
                 setattr(
                     config,
@@ -207,7 +207,7 @@ def test_botorch_acquisition_rejects_dummy_surrogate() -> None:
         match="UpperConfidenceBoundConfig requires a BoTorch-compatible surrogate",
     ):
         _parse_mutated_config(
-            "config/molecules/exact.yaml",
+            "config/molecules/exact_single_fidelity.yaml",
             lambda config: setattr(
                 config,
                 "surrogate",
