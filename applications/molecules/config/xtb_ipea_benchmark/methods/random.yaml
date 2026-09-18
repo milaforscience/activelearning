@@ -1,0 +1,7 @@
+sampler:
+  type: RandomMoleculeSampler
+  n_samples: 640
+  min_length: 1
+  max_length: 64
+  max_generation_attempts: 6400
+  seed: 42

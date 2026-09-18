@@ -1,0 +1,9 @@
+surrogate:
+  encoder:
+    type: GPMoLFormerSmilesFixedEncoder
+    model_name_or_path: ibm-research/GP-MoLFormer-Uniq
+    tokenizer_name_or_path: ibm-research/MoLFormer-XL-both-10pct
+    trust_remote_code: true
+    pooling: last
+    max_mol_tokens: 140
+    cache_size: 4096

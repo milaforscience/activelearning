@@ -1,0 +1,38 @@
+surrogate:
+  target_fidelity: 3
+
+dataset:
+  initial_data:
+    path: applications/molecules/config/xtb_ipea_benchmark/data/ea_mf.csv
+    x_columns: smiles
+    y_column: y
+    fidelity_column: fidelity
+    metadata_columns: remaining
+  negate_initial_targets: false
+
+acquisition:
+  type: QMultiFidelityLowerBoundMaxValueEntropy
+  candidate_set_spec:
+    type: TrainDataCandidateSetSpec
+  num_fantasies: 16
+  num_mv_samples: 10
+  num_y_samples: 128
+  maximize: true
+
+oracle:
+  type: XTBIPEAOracle
+  task: ea
+  fidelity_costs:
+    1: 1.0
+    2: 3.5
+    3: 7.0
+  per_fidelity_num_conformers:
+    1: 1
+    2: 2
+    3: 4
+  gfn_version: 2
+  ff: mmff
+  correction_factor: 4.8455
+  mol_repr: smiles
+  log_molecule_visualizations: true
+  molecule_visualization_limit: 25

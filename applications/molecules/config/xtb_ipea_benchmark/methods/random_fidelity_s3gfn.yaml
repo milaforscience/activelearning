@@ -1,0 +1,16 @@
+sampler:
+  type: S3GFNSampler
+  n_samples: 640
+  fidelity_policy: uniform
+  reward_fidelity: 3
+  performance_mode: optimized
+  n_train_steps: 5000
+  batch_size: 128
+  replay_batch_size: 128
+  learning_rate: 5.0e-4
+  log_z_learning_rate: 1.0e-2
+  beta: 50.0
+  aux_coefficient: 1.0e-4
+  buffer_size: 6400
+  max_length: 140
+  max_generation_attempts: 6400

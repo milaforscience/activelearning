@@ -1,0 +1,39 @@
+runtime:
+  device: cuda
+  precision: 32
+  seed: 42
+
+dataset:
+  type: ListDataset
+
+surrogate:
+  type: VariationalGPSurrogate
+  training_params:
+    epochs: 512
+    lr: 1.0e-3
+  num_inducing: 64
+  standardize_outputs: true
+
+selector:
+  type: TopKAcquisitionSelector
+  num_samples: 128
+
+budget:
+  available_budget: 1260.0
+  schedule:
+    type: constant
+    value: 896.0
+
+logger:
+  type: ConsoleLogger
+  project_name: xtb_ipea_benchmark
+  run_name: molecule-benchmark-seed${runtime.seed}
+
+run_writer:
+  type: JSONLinesRunWriter
+  output_dir: outputs/xtb_ipea_benchmark/default/seed_${runtime.seed}
+
+diagnostics:
+  enabled: true
+  figure_interval: 1
+  max_points: 1000
