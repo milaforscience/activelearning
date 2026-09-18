@@ -62,6 +62,7 @@ class GFlowNetSampler(Sampler):
         self._n_fidelities = len(self.fidelities)
         self.fidelity_action = fidelity_action
         self._round_index = 0
+        self._round_logger_wrapper: RuntimeGFlowNetLoggerWrapper | None = None
         if self._n_fidelities == 1 and fidelity_action != "any":
             logger.warning(
                 "fidelity_action=%r has no effect in single-fidelity mode "
@@ -108,7 +109,9 @@ class GFlowNetSampler(Sampler):
         only describes the base environment — the multi-fidelity wrapper is not
         representable in a single Hydra config and must be built
         programmatically (see :meth:`_build_multi_fidelity_env`). The
-        acquisition function and runtime logger are injected after construction.
+        acquisition function is injected after construction. The configured
+        runtime logger is created by ``gflownet_from_config`` and retained for
+        round-scoped draining.
 
         Parameters
         ----------
@@ -121,9 +124,10 @@ class GFlowNetSampler(Sampler):
         Returns
         -------
         agent : GFlowNetAgent
-            A fully configured agent with the proxy and logger injected,
+            A fully configured agent with the proxy configured,
             ready to be trained via ``agent.train()``.
         """
+        self._close_pending_logger()
         device = self._device_str()
         fp = self._float_precision()
         conf = OmegaConf.merge(self.conf, {"device": device, "float_precision": fp})
@@ -140,14 +144,33 @@ class GFlowNetSampler(Sampler):
         agent.proxy.set_fidelity_map(self.fidelities)
         agent.proxy.set_round_index(self._round_index)
 
-        if self.logger is not None:
-            agent.logger = RuntimeGFlowNetLoggerWrapper(
-                runtime_logger=self.logger,
-                config=conf,
-                logger_conf=conf.logger,
+        if not isinstance(agent.logger, RuntimeGFlowNetLoggerWrapper):
+            raise TypeError(
+                "GFlowNet configuration must construct a RuntimeGFlowNetLoggerWrapper."
             )
+        self._round_logger_wrapper = agent.logger
+        if getattr(agent, "evaluator", None) is not None:
+            set_agent = getattr(agent.evaluator, "set_agent", None)
+            if callable(set_agent):
+                set_agent(agent)
+            else:
+                agent.evaluator.logger = self._round_logger_wrapper
 
         return agent
+
+    def _close_pending_logger(self) -> None:
+        """Discard and close diagnostics from an interrupted prior build."""
+        wrapper = self._round_logger_wrapper
+        self._round_logger_wrapper = None
+        if wrapper is None:
+            return
+        try:
+            wrapper.drain_round_diagnostics(
+                include_figures=False,
+                max_points=1,
+            )
+        finally:
+            wrapper.end()
 
     def _build_multi_fidelity_env(
         self, conf: DictConfig, device: str, fp: int
@@ -258,10 +281,31 @@ class GFlowNetSampler(Sampler):
             raise ValueError("GFlowNetSampler requires an acquisition function.")
 
         agent = self._build_agent(acquisition, cost_fn=cost_fn)
-        agent.train()
+        try:
+            agent.train()
+            batch, _ = agent.sample_batch(n_forward=self.n_samples, train=False)
+            states_term = batch.get_terminating_states()
+            self._round_index += 1
+            return self._states_to_candidates(states_term, agent.env)
+        except Exception:
+            self._close_pending_logger()
+            raise
 
-        batch, _ = agent.sample_batch(n_forward=self.n_samples, train=False)
-        states_term = batch.get_terminating_states()
-        self._round_index += 1
-
-        return self._states_to_candidates(states_term, agent.env)
+    def drain_round_diagnostics(
+        self,
+        *,
+        include_figures: bool,
+        max_points: int,
+    ) -> tuple[dict[str, int | float], dict[str, Any]]:
+        """Return and clear diagnostics collected by the current GFlowNet logger."""
+        wrapper = self._round_logger_wrapper
+        self._round_logger_wrapper = None
+        if wrapper is None:
+            return {}, {}
+        try:
+            return wrapper.drain_round_diagnostics(
+                include_figures=include_figures,
+                max_points=max_points,
+            )
+        finally:
+            wrapper.end()
