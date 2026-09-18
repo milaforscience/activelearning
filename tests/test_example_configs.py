@@ -61,7 +61,9 @@ def test_multi_fidelity_config_rejects_fidelity_agnostic_surrogate() -> None:
 
 def test_single_fidelity_dkl_config_clears_target_level() -> None:
     """A target level is irrelevant and unsafe when DKL fidelity input is disabled."""
-    config_path = REPOSITORY_ROOT / "config" / "molecules" / "exact.yaml"
+    config_path = (
+        REPOSITORY_ROOT / "config" / "molecules" / "exact_single_fidelity.yaml"
+    )
     raw_config = load_config(config_path)
     raw_config.surrogate.target_fidelity = 99
 
