@@ -7,7 +7,7 @@ from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
     MultiFidelityGFlowNetEnvWrapperBase,
 )
 from activelearning.sampler.gflownet.utils import proxy_states_to_candidates
-from activelearning.utils.types import Candidate
+from activelearning.utils.types import Candidate, DEFAULT_FIDELITY
 
 
 # ---------------------------------------------------------------------------
@@ -135,9 +135,9 @@ class TestProxyStatesToCandidatesSingleFidelity:
         assert result[0].x == {"bits": [1, 0]}
         assert result[1].x == {"bits": [0, 1]}
 
-    def test_no_fidelity_set(self):
+    def test_no_fidelity_set_uses_default_level(self):
         result = proxy_states_to_candidates(torch.tensor([[1.0, 2.0]]), _plain_env())
-        assert result[0].fidelity is None
+        assert result[0].fidelity == DEFAULT_FIDELITY
 
     def test_returns_candidate_objects(self):
         result = proxy_states_to_candidates(torch.tensor([[0.0, 1.0]]), _plain_env())
@@ -161,7 +161,7 @@ class TestProxyStatesToCandidatesMultiFidelity:
         # Raw fidelities from real Choice env are 1-based (1..N).
         proxy = _make_mf_proxy([[0.1, 0.2], [0.3, 0.4]], fidelity_indices=[1, 2])
         env = _StubMFEnv(proxy_return=proxy, idx_base_env=0, idx_fidelity=1)
-        result = proxy_states_to_candidates(proxy, env)
+        result = proxy_states_to_candidates(proxy, env, fidelity_map=[1, 2])
         assert len(result) == 2
         assert result[0].x == pytest.approx((0.1, 0.2), abs=1e-6)
         assert result[0].fidelity == 1
@@ -174,7 +174,7 @@ class TestProxyStatesToCandidatesMultiFidelity:
             [[0.5, 0.6]], fidelity_indices=[2], idx_base=1, idx_fid=0
         )
         env = _StubMFEnv(proxy_return=proxy, idx_base_env=1, idx_fidelity=0)
-        result = proxy_states_to_candidates(proxy, env)
+        result = proxy_states_to_candidates(proxy, env, fidelity_map=[1, 2])
         assert result[0].x == pytest.approx((0.5, 0.6), abs=1e-6)
         assert result[0].fidelity == 2
 
@@ -182,13 +182,13 @@ class TestProxyStatesToCandidatesMultiFidelity:
         """fid_raw may be a plain Python sequence, not a tensor."""
         proxy = [{0: torch.tensor([0.1, 0.2]), 1: [3]}]
         env = _StubMFEnv(proxy_return=proxy, idx_base_env=0, idx_fidelity=1)
-        result = proxy_states_to_candidates(proxy, env)
+        result = proxy_states_to_candidates(proxy, env, fidelity_map=[1, 2, 3])
         assert result[0].fidelity == 3
 
     def test_preserves_string_proxy_value_for_base_env(self):
         proxy = [{0: "[C][=O][N]", 1: torch.tensor([2], dtype=torch.float32)}]
         env = _StubMFEnv(proxy_return=proxy, idx_base_env=0, idx_fidelity=1)
-        result = proxy_states_to_candidates(proxy, env)
+        result = proxy_states_to_candidates(proxy, env, fidelity_map=[1, 2])
         assert result[0].x == "[C][=O][N]"
         assert isinstance(result[0].x, str)
         assert result[0].fidelity == 2
@@ -255,16 +255,8 @@ class TestProxyStatesToCandidatesMultiFidelity:
         assert result[1].fidelity == 42
         assert result[2].fidelity == 100
 
-    def test_fidelity_map_none_returns_raw_index(self):
-        """When fidelity_map=None, the raw 1-based index is returned unchanged."""
-        proxy = _make_mf_proxy([[0.1, 0.2], [0.3, 0.4]], fidelity_indices=[1, 2])
-        env = _StubMFEnv(proxy_return=proxy, idx_base_env=0, idx_fidelity=1)
-        result = proxy_states_to_candidates(proxy, env, fidelity_map=None)
-        assert result[0].fidelity == 1
-        assert result[1].fidelity == 2
-
-    def test_fidelity_map_ignored_for_single_fidelity(self):
-        """fidelity_map has no effect on single-fidelity envs (fidelity stays None)."""
+    def test_single_fidelity_uses_first_map_value(self):
+        """A single-fidelity environment uses the map's sole level."""
         coords = torch.tensor([[0.1, 0.2]])
         result = proxy_states_to_candidates(coords, _plain_env(), fidelity_map=[99])
-        assert result[0].fidelity is None
+        assert result[0].fidelity == 99

@@ -3,6 +3,9 @@ from typing import Any, Iterable, Optional
 
 import torch
 
+#: Default fidelity level when none is specified, including single-fidelity runs.
+DEFAULT_FIDELITY: int = 0
+
 
 @dataclass(frozen=True)
 class Candidate:
@@ -10,14 +13,17 @@ class Candidate:
 
     Uses maximum type flexibility to support various data representations.
 
+    Single-fidelity experiments use a single fidelity level (typically the
+    oracle's only declared level).
+
     Attributes
     ----------
     x : Any
         Input feature or identifier. Commonly: primitives (int, float, str),
         arrays (numpy.ndarray), tensors (torch.Tensor), or structured data (dict, tuple).
-    fidelity : Optional[int]
-        Optional fidelity level for multi-fidelity optimization.
-        Higher fidelity typically means more accurate but more expensive.
+    fidelity : int
+        Fidelity level at which this candidate is to be evaluated.
+        Defaults to :data:`DEFAULT_FIDELITY`.
     metadata : Optional[dict[str, Any]]
         Domain-specific auxiliary data carried alongside the candidate.
         Not consumed by the core AL loop but available to user components
@@ -26,13 +32,13 @@ class Candidate:
     """
 
     x: Any
-    fidelity: Optional[int] = None
+    fidelity: int = DEFAULT_FIDELITY
     metadata: Optional[dict[str, Any]] = None
 
 
 @dataclass(frozen=True)
 class Observation:
-    """Represents an observed (x, y) pair, optionally at a fidelity.
+    """Represents an observed (x, y) pair at a fidelity level.
 
     Uses maximum type flexibility to support various data representations.
 
@@ -43,8 +49,9 @@ class Observation:
     y : Any
         Observed output or label. Commonly: scalar (float), vector (list, array),
         or categorical label (str, int).
-    fidelity : Optional[int]
-        Optional fidelity level at which the observation was made.
+    fidelity : int
+        Fidelity level at which the observation was made.
+        Defaults to :data:`DEFAULT_FIDELITY`.
     metadata : Optional[dict[str, Any]]
         Domain-specific auxiliary data carried alongside the observation.
         See :class:`Candidate` for usage details.
@@ -52,7 +59,7 @@ class Observation:
 
     x: Any
     y: Any
-    fidelity: Optional[int] = None
+    fidelity: int = DEFAULT_FIDELITY
     metadata: Optional[dict[str, Any]] = None
 
 
@@ -127,6 +134,11 @@ def label_candidates(
     result : list[Observation]
         List of Observation objects, where each observation combines the
         candidate's x and fidelity with its label as y.
+
+    Raises
+    ------
+    ValueError
+        If ``candidates`` and ``labels`` have different lengths.
     """
     candidates_list = candidates if isinstance(candidates, list) else list(candidates)
     labels_list = labels if isinstance(labels, list) else list(labels)
@@ -184,8 +196,10 @@ def observations_to_tensors(
         Observations to convert.
     fidelity_confidences : dict[int, float], optional
         Mapping from integer fidelity IDs to continuous confidence values.
-        If None, observations must not include fidelity values. If a mapping is
-        provided, every non-None fidelity must be present in it.
+        When provided (multi-fidelity mode), each observation's fidelity is
+        looked up in this mapping and the resulting confidence is appended to
+        the ``fidelities`` return list.  When ``None`` (single-fidelity mode),
+        fidelity values are ignored and an empty list is returned.
 
     Returns
     -------
@@ -194,34 +208,22 @@ def observations_to_tensors(
     y : torch.Tensor
         Output labels tensor. Shape is determined by the input data.
     fidelities : list[float]
-        Mapped fidelity confidence values; empty if single-fidelity.
+        Mapped fidelity confidence values; empty in single-fidelity mode.
 
     Raises
     ------
-    ValueError
-        If fidelity values are present in observations but ``fidelity_confidences``
-        is ``None``.
     KeyError
         If a fidelity ID in observations is missing from ``fidelity_confidences``.
     """
     xs: list = []
     ys: list = []
     fidelities: list[float] = []
-    any_fidelity = False
 
     for obs in observations:
         xs.append(obs.x)
         ys.append(obs.y)
-        if obs.fidelity is not None:
-            any_fidelity = True
-            if fidelity_confidences is not None:
-                fidelities.append(fidelity_confidences[obs.fidelity])
-
-    if fidelity_confidences is None and any_fidelity:
-        raise ValueError(
-            "Observations include fidelity values, but no fidelity_confidences "
-            "mapping was provided."
-        )
+        if fidelity_confidences is not None:
+            fidelities.append(fidelity_confidences[obs.fidelity])
 
     X = _to_tensor(xs, torch.float64)
     y = _to_tensor(ys, torch.float64)
@@ -244,40 +246,30 @@ def candidates_to_tensor(
         Candidates to convert.
     fidelity_confidences : dict[int, float], optional
         Mapping from integer fidelity IDs to continuous confidence values.
-        If None, candidates must not include fidelity values. If a mapping is
-        provided, every non-None fidelity must be present in it.
+        When provided (multi-fidelity mode), each candidate's fidelity is
+        looked up in this mapping and the resulting confidence is appended to
+        the ``fidelities`` return list.  When ``None`` (single-fidelity mode),
+        fidelity values are ignored and an empty list is returned.
 
     Returns
     -------
     X : torch.Tensor
         Input features tensor. Shape is determined by the input data.
     fidelities : list[float]
-        Mapped fidelity confidence values; empty if single-fidelity.
+        Mapped fidelity confidence values; empty in single-fidelity mode.
 
     Raises
     ------
-    ValueError
-        If fidelity values are present in candidates but ``fidelity_confidences``
-        is ``None``.
     KeyError
         If a fidelity ID in candidates is missing from ``fidelity_confidences``.
     """
     xs: list = []
     fidelities: list[float] = []
-    any_fidelity = False
 
     for cand in candidates:
         xs.append(cand.x)
-        if cand.fidelity is not None:
-            any_fidelity = True
-            if fidelity_confidences is not None:
-                fidelities.append(fidelity_confidences[cand.fidelity])
-
-    if fidelity_confidences is None and any_fidelity:
-        raise ValueError(
-            "Candidates include fidelity values, but no fidelity_confidences "
-            "mapping was provided."
-        )
+        if fidelity_confidences is not None:
+            fidelities.append(fidelity_confidences[cand.fidelity])
 
     X = _to_tensor(xs, torch.float64)
     return X, fidelities

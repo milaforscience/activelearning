@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Collection
-from typing import Optional, Sequence, overload
+from typing import Sequence
 
 from activelearning.utils.types import Candidate, Observation
 from activelearning.runtime import ALRuntimeMixin
@@ -14,58 +14,30 @@ class Oracle(ABC, ALRuntimeMixin):
     fidelity levels and route candidates internally.
     """
 
-    @overload
     @staticmethod
     def _validate_candidate_fidelity(
         candidate: Candidate,
         supported_fidelities: Collection[int],
-    ) -> int: ...
-
-    @overload
-    @staticmethod
-    def _validate_candidate_fidelity(
-        candidate: Candidate,
-        supported_fidelities: None = ...,
-    ) -> None: ...
-
-    @staticmethod
-    def _validate_candidate_fidelity(
-        candidate: Candidate,
-        supported_fidelities: Optional[Collection[int]] = None,
-    ) -> Optional[int]:
+    ) -> int:
         """Validate a candidate's fidelity against a set of supported levels.
 
         Parameters
         ----------
         candidate : Candidate
             The candidate whose fidelity to validate.
-        supported_fidelities : Collection[int] or None
-            The set of supported fidelity levels. Pass ``None`` for
-            single-fidelity oracles, in which case ``candidate.fidelity``
-            must also be ``None``.
+        supported_fidelities : Collection[int]
+            The set of supported fidelity levels.
 
         Returns
         -------
-        fidelity : int or None
-            The validated fidelity level, or ``None`` for single-fidelity
-            candidates.
+        fidelity : int
+            The validated fidelity level.
 
         Raises
         ------
         ValueError
-            If the candidate's fidelity is incompatible with
-            ``supported_fidelities``.
+            If the candidate's fidelity is not in ``supported_fidelities``.
         """
-        if supported_fidelities is None:
-            if candidate.fidelity is not None:
-                raise ValueError(
-                    "Candidate fidelity must be None for a single-fidelity oracle."
-                )
-            return None
-        if candidate.fidelity is None:
-            raise ValueError(
-                "Candidate fidelity must not be None for a multi-fidelity oracle."
-            )
         if candidate.fidelity not in supported_fidelities:
             raise ValueError(
                 f"Unsupported fidelity {candidate.fidelity}. "
