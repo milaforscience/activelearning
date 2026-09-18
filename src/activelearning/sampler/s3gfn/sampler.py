@@ -735,7 +735,7 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
         positive_replay = positive_buffer.sample(
             count=min(self.replay_batch_size, len(positive_buffer)),
             device=self.device,
-            dtype=self.effective_model_dtype,
+            dtype=torch.float32,
             reward_prioritized=True,
             replace=True,
         )
@@ -747,7 +747,7 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             negative_replay = negative_buffer.sample(
                 count=self.replay_batch_size,
                 device=self.device,
-                dtype=self.effective_model_dtype,
+                dtype=torch.float32,
             )
         loss = model.replay_loss(
             positive_input_ids=positive_replay.input_ids,
@@ -794,7 +794,7 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
                 input_ids=empty_ids,
                 reward_scores=torch.empty(
                     0,
-                    dtype=self.effective_model_dtype,
+                    dtype=torch.float32,
                     device=empty_ids.device,
                 ),
                 synthesizable=(),

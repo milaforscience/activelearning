@@ -56,10 +56,18 @@ class _GradientTrainingModel:
         )
 
 
-def test_sampler_uses_explicit_model_dtype_for_rewards(
+def test_sampler_keeps_reward_precision_separate_from_model_dtype(
     make_sampler,
     fake_model,
 ):
+    class _SmallRewardAcquisition:
+        supports_singleton_scoring = True
+
+        @staticmethod
+        def score(candidates, cost_weighting=None):
+            assert cost_weighting is None
+            return [0.001] * len(candidates)
+
     sampler = make_sampler(model_dtype="bfloat16")
 
     prepared = sampler._prepare_batch(
@@ -68,11 +76,12 @@ def test_sampler_uses_explicit_model_dtype_for_rewards(
         fidelity_indices=torch.tensor([0]),
         synthesizability=FakeSynthesizability(),
         molecule_chem=FakeChem,
-        acquisition=FakeAcquisition(),
+        acquisition=_SmallRewardAcquisition(),
         cost_fn=None,
     )
 
-    assert prepared.reward_scores.dtype is torch.bfloat16
+    assert prepared.reward_scores.dtype is torch.float32
+    assert prepared.reward_scores.tolist() == pytest.approx([0.001])
 
 
 def test_training_uses_batch_size_for_generation(make_sampler):
@@ -105,7 +114,7 @@ def test_training_uses_batch_size_for_generation(make_sampler):
         lr=0.1,
     )
 
-    sampler._train_step(
+    result = sampler._train_step(
         model=model,
         synthesizability=FakeSynthesizability(),
         positive_buffer=sampler_module.ReplayBuffer(pad_token_id=0, capacity=4),
@@ -117,6 +126,53 @@ def test_training_uses_batch_size_for_generation(make_sampler):
     )
 
     assert model.generate_calls == [3]
+    assert result[0] == 3
+
+
+def test_training_counts_requested_rows_when_generation_filters_rows(make_sampler):
+    class _FilteredTrainingModel(_GradientTrainingModel):
+        def generate(self, count, max_length, temperature):
+            del max_length, temperature
+            assert count == 3
+            return SimpleNamespace(
+                smiles=("CC",),
+                input_ids=torch.ones((1, 3), dtype=torch.long),
+                fidelity_indices=torch.tensor([0], dtype=torch.long),
+            )
+
+    model = _FilteredTrainingModel()
+    sampler = make_sampler(
+        n_samples=1,
+        batch_size=3,
+        replay_batch_size=4,
+        num_warmup_steps=0,
+        learning_rate=0.1,
+        log_z_learning_rate=0.1,
+        model_dtype="float32",
+    )
+    positive_buffer = sampler_module.ReplayBuffer(pad_token_id=0, capacity=4)
+    optimizer = torch.optim.SGD(
+        [
+            *model.policy.parameters(),
+            *model.fidelity_head.parameters(),
+            model.log_z,
+        ],
+        lr=0.1,
+    )
+
+    result = sampler._train_step(
+        model=model,
+        synthesizability=FakeSynthesizability(),
+        positive_buffer=positive_buffer,
+        negative_buffer=None,
+        molecule_chem=FakeChem,
+        acquisition=FakeAcquisition(),
+        cost_fn=None,
+        optimizer=optimizer,
+    )
+
+    assert result[0] == 3
+    assert sampler.round_metrics.generated_counts == [3]
 
 
 def test_replay_uses_replay_batch_size(make_sampler):
@@ -156,7 +212,9 @@ def test_replay_uses_replay_batch_size(make_sampler):
     )
 
     assert positive_buffer.calls[0]["count"] == 3
+    assert positive_buffer.calls[0]["dtype"] is torch.float32
     assert negative_buffer.calls[0]["count"] == 3
+    assert negative_buffer.calls[0]["dtype"] is torch.float32
 
 
 def test_final_generation_uses_independent_batch_size_and_strict_cap(
@@ -220,6 +278,7 @@ def test_final_generation_stops_at_strict_attempt_cap(make_sampler):
         sampler._generate_final_candidates(model=model, molecule_chem=FakeChem)
 
     assert model.calls == [3]
+    assert sampler.round_metrics.generation_invalid == 3
 
 
 def test_sampler_returns_canonical_smiles_with_conditionally_sampled_fidelities(
@@ -430,51 +489,6 @@ def test_canonicalization_rejects_disconnected_molecules():
         )
         is None
     )
-
-
-def test_training_counts_requested_rows_when_generation_filters_rows(make_sampler):
-    class _FilteredTrainingModel(_GradientTrainingModel):
-        def generate(self, count, max_length, temperature):
-            del max_length, temperature
-            assert count == 3
-            return SimpleNamespace(
-                smiles=("CC",),
-                input_ids=torch.ones((1, 3), dtype=torch.long),
-                fidelity_indices=torch.tensor([0], dtype=torch.long),
-            )
-
-    model = _FilteredTrainingModel()
-    sampler = make_sampler(
-        n_samples=1,
-        batch_size=3,
-        replay_batch_size=4,
-        num_warmup_steps=0,
-        learning_rate=0.1,
-        log_z_learning_rate=0.1,
-    )
-    positive_buffer = sampler_module.ReplayBuffer(pad_token_id=0, capacity=4)
-    optimizer = torch.optim.SGD(
-        [
-            *model.policy.parameters(),
-            *model.fidelity_head.parameters(),
-            model.log_z,
-        ],
-        lr=0.1,
-    )
-
-    result = sampler._train_step(
-        model=model,
-        synthesizability=FakeSynthesizability(),
-        positive_buffer=positive_buffer,
-        negative_buffer=None,
-        molecule_chem=FakeChem,
-        acquisition=FakeAcquisition(),
-        cost_fn=None,
-        optimizer=optimizer,
-    )
-
-    assert result[0] == 3
-    assert sampler.round_metrics.generated_counts == [3]
 
 
 def test_final_generation_counts_unterminated_rows_as_invalid(make_sampler):
