@@ -130,10 +130,10 @@ def relative_trajectory_balance_loss(
     the log ratio ``log((Z * P_policy(tau)) / (R(x) * P_prior(tau)))``.
 
     This function represents the positive reward as ``R(x) = exp(beta * r(x))``
-    and receives ``r(x)`` through the ``reward_scores`` argument.  Consequently,
-    ``beta * reward_scores`` is ``log R(x)``.  The argument is therefore a
-    scaled reward score, not ``R(x)`` itself, and must not be passed through
-    ``log`` again.  This convention also allows reward scores to be negative.
+    and receives ``r(x)`` through the ``reward_scores`` argument. Consequently,
+    ``beta * reward_scores`` is ``log R(x)``. The argument is therefore an
+    acquisition score, not ``R(x)`` itself, and must not be passed through
+    ``log`` again. This convention also allows reward scores to be negative.
 
     Parameters
     ----------
@@ -142,7 +142,7 @@ def relative_trajectory_balance_loss(
     prior_log_probabilities : Tensor
         Frozen prior sequence log probabilities.
     reward_scores : Tensor
-        Finite scaled reward scores ``r(x)`` aligned with the trajectories.
+        Finite acquisition reward scores ``r(x)`` aligned with the trajectories.
         They define the positive reward through ``R(x) = exp(beta * r(x))``.
     log_z : Tensor
         Trainable scalar log normalizer.

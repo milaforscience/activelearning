@@ -58,14 +58,12 @@ class _PreparedMoleculeBatch:
     input_ids : Tensor
         Padded token ids for ``smiles`` on the model device.
     reward_scores : Tensor
-        Scaled reward scores associated with ``smiles``. The tensor uses the
+        Acquisition reward scores associated with ``smiles``. The tensor uses the
         sampler's bound runtime floating-point dtype.
     fidelity_indices : Tensor or None
         Optional terminal fidelity-action indices aligned with ``smiles``.
     synthesizable : tuple[bool, ...]
         Synthetic accessibility score (SA-score) threshold results aligned with ``smiles``.
-    raw_reward_scores : tuple[float, ...]
-        Acquisition scores before per-batch RTB normalization.
     """
 
     smiles: tuple[str, ...]
@@ -73,7 +71,6 @@ class _PreparedMoleculeBatch:
     reward_scores: Tensor
     synthesizable: tuple[bool, ...]
     fidelity_indices: Tensor | None = None
-    raw_reward_scores: tuple[float, ...] = ()
 
 
 class S3GFNSampler(S3GFNLoggingMixin, Sampler):
@@ -85,8 +82,7 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
 
     Each :meth:`sample` call creates a fresh trainable policy from the
     pretrained GP-MoLFormer checkpoint. The policy is optimized with RTB using
-    acquisition-derived reward scores normalized per generated batch to
-    ``[0, 1]``. A reward-prioritized replay buffer keeps
+    acquisition-derived reward scores. A reward-prioritized replay buffer keeps
     synthesizable, chemically diverse trajectories, while an optional FIFO
     buffer supplies negative trajectories to the auxiliary contrastive loss.
 
@@ -534,17 +530,17 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
                 optimizer=optimizer,
             )
         self.round_metrics.record_training_step(
-            generated_count=len(generated.smiles),
+            generated_count=self.batch_size,
             valid_count=len(prepared.smiles),
             synthesizable_count=sum(prepared.synthesizable),
             online_loss=online_loss,
             replay_loss=replay_loss,
             auxiliary_loss=auxiliary_loss,
             log_z=float(model.log_z.detach().item()),
-            raw_reward_scores=prepared.raw_reward_scores,
+            raw_reward_scores=prepared.reward_scores.detach().cpu().tolist(),
         )
         return (
-            len(generated.smiles),
+            self.batch_size,
             len(prepared.smiles),
             sum(prepared.synthesizable),
             online_loss,
@@ -715,7 +711,6 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             )
         ]
         raw_scores = _score_candidates(acquisition, candidates, cost_fn=cost_fn)
-        scores = _normalize_reward_scores(raw_scores)
 
         input_ids = model.encode_smiles(canonical_smiles)
         labels = synthesizability.classify_batch(canonical_smiles)
@@ -723,15 +718,13 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             smiles=tuple(canonical_smiles),
             input_ids=input_ids,
             reward_scores=torch.tensor(
-                scores,
-                # Reward scores are normalized floating-point data, so use
-                # the bound runtime dtype while tokenized inputs remain integer.
+                raw_scores,
+                # Keep acquisition scores in the runtime floating-point dtype.
                 dtype=self.dtype,
                 device=input_ids.device,
             ),
             synthesizable=tuple(labels),
             fidelity_indices=canonical_fidelity_indices,
-            raw_reward_scores=tuple(raw_scores),
         )
 
     def _canonicalize_batch(
@@ -838,6 +831,7 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
                 seen_smiles=seen_smiles,
                 molecule_chem=molecule_chem,
             )
+            invalid_count += max(0, batch_attempts - len(generated.smiles))
             self.round_metrics.record_generation_batch(
                 attempts=batch_attempts,
                 invalid_count=invalid_count,
@@ -1031,19 +1025,7 @@ def _score_candidates(
     )
     if len(scores) != len(candidates):
         raise ValueError("Acquisition returned a score count that does not align.")
-    normalized_scores = [float(score) for score in scores]
-    if not all(math.isfinite(score) for score in normalized_scores):
+    score_values = [float(score) for score in scores]
+    if not all(math.isfinite(score) for score in score_values):
         raise ValueError("Acquisition returned a non-finite score.")
-    return normalized_scores
-
-
-def _normalize_reward_scores(scores: Sequence[float]) -> list[float]:
-    """Scale one acquisition batch to the stable RTB range ``[0, 1]``."""
-    if not scores:
-        return []
-    minimum = min(scores)
-    maximum = max(scores)
-    if maximum == minimum:
-        return [0.0] * len(scores)
-    scale = maximum - minimum
-    return [(score - minimum) / scale for score in scores]
+    return score_values

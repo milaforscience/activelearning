@@ -64,7 +64,20 @@ class _HiddenLanguageModel(nn.Module):
 class _GenerationTokenizer(FakeTokenizer):
     @staticmethod
     def batch_decode(input_ids, skip_special_tokens=True):
-        return ["CC", "CO"]
+        del skip_special_tokens
+        return ["CC", "CO"][: input_ids.shape[0]]
+
+
+class _MixedGenerationModel(_HiddenLanguageModel):
+    def generate(self, **kwargs):
+        del kwargs
+        return torch.tensor([[1, 2, 0], [1, 3, 4]])
+
+
+class _UnterminatedGenerationModel(_HiddenLanguageModel):
+    def generate(self, **kwargs):
+        del kwargs
+        return torch.tensor([[1, 3, 0], [1, 4, 0]])
 
 
 @pytest.fixture
@@ -314,6 +327,36 @@ def test_generate_returns_terminal_fidelity_actions(make_model) -> None:
     assert torch.all(
         (generated.fidelity_indices >= 0) & (generated.fidelity_indices < 2)
     )
+
+
+def test_generate_discards_unterminated_rows_before_decoding(make_model) -> None:
+    model = make_model(
+        language_model=_MixedGenerationModel,
+        tokenizer=_GenerationTokenizer(),
+    )
+
+    generated = model.generate(count=2, max_length=4)
+
+    assert generated.input_ids.tolist() == [[1, 2, 0]]
+    assert generated.smiles == ("CC",)
+    assert generated.fidelity_indices is not None
+    assert generated.fidelity_indices.shape == (1,)
+
+
+def test_generate_returns_aligned_empty_batch_when_all_rows_are_unterminated(
+    make_model,
+) -> None:
+    model = make_model(
+        language_model=_UnterminatedGenerationModel,
+        tokenizer=_GenerationTokenizer(),
+    )
+
+    generated = model.generate(count=2, max_length=4)
+
+    assert generated.input_ids.shape == (0, 3)
+    assert generated.smiles == ()
+    assert generated.fidelity_indices is not None
+    assert generated.fidelity_indices.shape == (0,)
 
 
 def test_joint_rtb_loss_backpropagates_through_fidelity_action_head(make_model) -> None:

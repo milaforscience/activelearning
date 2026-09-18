@@ -165,10 +165,10 @@ class ReplayBuffer:
         reward_scores: Tensor | Sequence[float] | None = None,
         fidelity_indices: Tensor | Sequence[int] | None = None,
     ) -> int:
-        """Add aligned trajectories and scaled reward scores.
+        """Add aligned trajectories and acquisition reward scores.
 
-        ``reward_scores`` stores the scaled acquisition score ``r(x)`` used by
-        RTB. The loss eventually converts it to the log target reward
+        ``reward_scores`` stores the acquisition score ``r(x)`` used by RTB.
+        The loss converts it to the log target reward
         ``log R(x) = beta * r(x)``.
 
         Parameters
@@ -179,7 +179,7 @@ class ReplayBuffer:
         smiles : Sequence[str]
             Molecule strings aligned with the rows of ``input_ids``.
         reward_scores : Tensor or Sequence[float] or None, optional
-            Scaled acquisition scores ``r(x)`` aligned with ``smiles``. If
+            Acquisition scores ``r(x)`` aligned with ``smiles``. If
             omitted, every trajectory receives a score of zero.
         fidelity_indices : Tensor or Sequence[int] or None, optional
             Optional terminal fidelity-action indices aligned with ``smiles``.
@@ -339,8 +339,9 @@ class ReplayBuffer:
         device : str or torch.device
             Device for the returned token ids and reward scores.
         dtype : torch.dtype or None, optional
-            Floating-point dtype for returned reward scores and priority
-            weights. Defaults to PyTorch's default floating-point dtype.
+            Floating-point dtype for returned reward scores. Priority weights
+            always use float32. Defaults to PyTorch's default floating-point
+            dtype.
         reward_prioritized : bool, optional
             Whether to sample according to stored reward scores.
         replace : bool, optional
@@ -378,12 +379,11 @@ class ReplayBuffer:
         if reward_prioritized:
             weights = torch.tensor(
                 [entry.reward_score for entry in self._entries],
-                dtype=score_dtype,
+                dtype=torch.float32,
             )
             minimum = float(weights.min())
             if minimum <= 0.0:
-                weights = weights - minimum
-            weights = weights + torch.finfo(weights.dtype).eps
+                weights = weights - minimum + 1.0e-6
             if float(weights.sum()) == 0.0:
                 weights.fill_(1.0)
             indices = torch.multinomial(
