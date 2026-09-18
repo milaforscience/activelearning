@@ -11,10 +11,14 @@ logger = logging.getLogger(__name__)
 class ListDataset(Dataset):
     """In-memory dataset storing observations in a list."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self, initial_observations: Sequence[Observation] | None = None
+    ) -> None:
         self._records: list[Observation] = []
         self._latest_start_idx = 0
         self._latest_end_idx = 0
+        if initial_observations is not None:
+            self.add_observations(initial_observations)
 
     def add_observations(self, observations: Sequence[Observation]) -> None:
         """Add new observations to the dataset by appending all provided records.

@@ -1,7 +1,7 @@
-# Tutorial experiment: 2D Branin benchmark with a single fidelity level
+# Tutorial experiment: Branin 2D benchmark with a single fidelity level.
 #
 # Run with:
-#   uv run activelearning config/branin_single_fidelity.yaml
+#   uv run activelearning config/branin/single_fidelity.yaml
 
 runtime:
   device: cpu
@@ -40,13 +40,12 @@ oracle:
   type: BraninOracle
   fidelity_costs:
     1: 1.0
-  log_landscape: true
 
 budget:
-  available_budget: 300.0
+  available_budget: 100.0
   schedule:
     type: constant
-    value: 30.0
+    value: 10.0
 
 logger:
   type: ConsoleLogger

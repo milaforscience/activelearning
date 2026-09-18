@@ -10,6 +10,7 @@ from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field, PositiveFloat, StrictInt
 
+from activelearning.sampler.exact_grid_sampler import ExactGridSampler
 from activelearning.sampler.hypercube_sampler import HypercubeSampler
 from activelearning.sampler.sampler import Sampler
 from activelearning.sampler.pool_file_sampler import PoolFileSampler
@@ -49,6 +50,26 @@ class HypercubeSamplerConfig(BaseModel):
             num_samples=self.num_samples,
             fidelities=_resolve_fidelities(self.fidelities),
             point_strategy=self.point_strategy,
+        )
+
+
+class ExactGridSamplerConfig(BaseModel):
+    type: Literal["ExactGridSampler"] = "ExactGridSampler"
+    bounds: list[tuple[float, float]]
+    points_per_dimension: list[int]
+    fidelities: _Fidelities = None
+    num_samples: int | None = Field(default=None, gt=0)
+    use_acquisition_scores: bool = False
+    with_replacement: bool = False
+
+    def build(self) -> Sampler:
+        return ExactGridSampler(
+            bounds=self.bounds,
+            points_per_dimension=self.points_per_dimension,
+            fidelities=_resolve_fidelities(self.fidelities),
+            num_samples=self.num_samples,
+            use_acquisition_scores=self.use_acquisition_scores,
+            with_replacement=self.with_replacement,
         )
 
 
@@ -163,6 +184,7 @@ class GFlowNetGridSamplerConfig(GFlowNetSamplerConfig):
 SamplerConfig = Annotated[
     Union[
         HypercubeSamplerConfig,
+        ExactGridSamplerConfig,
         PoolFileSamplerConfig,
         GFlowNetSamplerConfig,
         GFlowNetGridSamplerConfig,
