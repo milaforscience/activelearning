@@ -1,4 +1,6 @@
-.PHONY: help install-uv setup check test docs-build-api docs-sync-api docs-serve docs-build clean
+.PHONY: help install-uv setup check test-core test-molecules test-all test \
+	docs-build-api docs-sync-api docs-serve docs-build build-core build-molecules \
+	build check-all clean
 
 help: ## Show this help message
 	@awk -F':.*?## ' '/^[a-zA-Z0-9_-]+:.*## / {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -8,14 +10,32 @@ install-uv: ## Install uv package manager
 	curl -LsSf https://astral.sh/uv/install.sh | sh
 
 setup: ## Initialize environment and install dependencies
-	uv sync
+	uv sync --all-packages --group dev
 	uv run pre-commit install
 
 check: ## Run pre-commit checks using uv
 	uv run pre-commit run --all-files --show-diff-on-failure
 
-test: ## Run tests within the uv environment
-	uv run pytest
+test-core: ## Run tests owned by the activelearning core package
+	uv run pytest tests
+
+test-molecules: ## Run tests owned by the activelearning-molecules package
+	uv run pytest applications/molecules/tests
+
+test-all: ## Run core and application tests
+	uv run pytest tests applications/molecules/tests
+
+test: test-all ## Run all workspace tests (core and applications)
+
+build-core: ## Build the activelearning distribution
+	uv build --package activelearning
+
+build-molecules: ## Build the activelearning-molecules distribution
+	uv build --package activelearning-molecules
+
+build: build-core build-molecules ## Build every workspace distribution
+
+check-all: check test-all build ## Run checks, all tests, and both package builds
 
 docs-build-api: ## Build the Sphinx API reference into site/reference/
 	mkdir -p site

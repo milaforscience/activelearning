@@ -52,28 +52,52 @@ Source: `src/activelearning/oracle/augmented_function_oracle.py` and `src/active
 
 ## **Config model and registration**
 
-Add a Pydantic config model in `src/activelearning/oracle/config.py` and extend the `OracleConfig` union. See the existing models in that file as reference.
+For a core benchmark, add a Pydantic config model in
+`src/activelearning/oracle/config.py` and list it in `ORACLE_CONFIGS` in that
+same file.
+For a domain-specific oracle, keep the schema beside its implementation in an
+application distribution and add its category tuple to the package's
+`CONFIG_CATALOGS` mapping.
 
 ```python
-class MyOracleConfig(BaseModel):
+from typing import Literal
+
+from activelearning.config_registry import BuildableConfig
+
+
+class MyOracleConfig(BuildableConfig):
     type: Literal["MyOracle"] = "MyOracle"
     # your parameters here
 
     def build(self) -> Oracle:
         return MyOracle(...)
 
-OracleConfig = Annotated[
-    Union[..., MyOracleConfig],
-    Field(discriminator="type"),
-]
+
+ORACLE_CONFIGS = (MyOracleConfig,)
 ```
 
-Then specify it in your YAML:
+In `my_package/config_catalogs.py`, expose the mapping:
+
+```python
+CONFIG_CATALOGS = {
+    "oracle": ORACLE_CONFIGS,
+}
+```
+
+```python
+from activelearning.main import run
+from my_package.config_catalogs import CONFIG_CATALOGS
+
+run(catalogs={"my-package": CONFIG_CATALOGS}, program_name="my-package")
+```
 
 ```yaml
 oracle:
   type: MyOracle
 ```
+
+The application command composes the mapping before parsing. YAML files remain
+ordinary user-owned files and can be stored outside the package.
 
 ## **Fidelity id alignment with the sampler**
 

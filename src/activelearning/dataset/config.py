@@ -1,9 +1,12 @@
+"""Pydantic models of datasets."""
+
 import csv
 from pathlib import Path
-from typing import Annotated, Literal, Union
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
+from activelearning.config_registry import BuildableConfig, registered_config
 from activelearning.dataset.dataset import Dataset
 from activelearning.dataset.list_dataset import ListDataset
 from activelearning.utils.types import DEFAULT_FIDELITY, Observation
@@ -170,7 +173,7 @@ class CSVInitialDataConfig(BaseModel):
         return value
 
 
-class ListDatasetConfig(BaseModel):
+class ListDatasetConfig(BuildableConfig):
     type: Literal["ListDataset"] = "ListDataset"
     initial_data: CSVInitialDataConfig | None = None
     negate_initial_targets: bool = False
@@ -191,7 +194,5 @@ def _maybe_negate_target(value: float, *, negate_targets: bool) -> float:
     return -value if negate_targets else value
 
 
-DatasetConfig = Annotated[
-    Union[ListDatasetConfig],
-    Field(discriminator="type"),
-]
+DATASET_CONFIGS = (ListDatasetConfig,)
+DatasetConfig = registered_config("dataset")

@@ -1,0 +1,12 @@
+surrogate:
+  type: BoTorchGPSurrogate
+  multi_fidelity_model: discrete_icm
+
+oracle:
+  fidelity_confidences:
+    1: 0.5
+    2: 1.0
+
+experiment:
+  name: varying_fidelity_multitaskgp
+  method: mtgp_conf_0.5
