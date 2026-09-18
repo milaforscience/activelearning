@@ -91,6 +91,74 @@ def test_replay_sample_uses_requested_reward_dtype():
     assert batch.reward_scores.dtype == torch.float64
 
 
+def test_reward_priorities_use_float32_without_positive_epsilon(monkeypatch):
+    monkeypatch.setattr(replay_module, "require_rdkit", _fake_rdkit)
+    recorded: dict[str, torch.Tensor] = {}
+
+    def recording_multinomial(
+        weights,
+        num_samples,
+        replacement=False,
+        *,
+        generator=None,
+    ):
+        del replacement, generator
+        recorded["weights"] = weights.clone()
+        return torch.arange(num_samples)
+
+    monkeypatch.setattr(replay_module.torch, "multinomial", recording_multinomial)
+    buffer = replay_module.ReplayBuffer(
+        pad_token_id=0,
+        capacity=2,
+        policy="reward",
+    )
+    tokens = torch.tensor([[1, 2, 0], [1, 3, 0]])
+    buffer.add_batch(tokens, ["a", "b"], [0.001, 0.002])
+
+    batch = buffer.sample(
+        count=2,
+        device="cpu",
+        dtype=torch.bfloat16,
+        reward_prioritized=True,
+    )
+
+    weights = recorded["weights"]
+    assert weights.dtype == torch.float32
+    assert float(weights[1] / weights[0]) == pytest.approx(2.0)
+    assert batch.reward_scores.dtype == torch.bfloat16
+
+
+def test_reward_priorities_shift_nonpositive_values_to_positive_weights(monkeypatch):
+    monkeypatch.setattr(replay_module, "require_rdkit", _fake_rdkit)
+    recorded: dict[str, torch.Tensor] = {}
+
+    def recording_multinomial(
+        weights,
+        num_samples,
+        replacement=False,
+        *,
+        generator=None,
+    ):
+        del replacement, generator
+        recorded["weights"] = weights.clone()
+        return torch.arange(num_samples)
+
+    monkeypatch.setattr(replay_module.torch, "multinomial", recording_multinomial)
+    buffer = replay_module.ReplayBuffer(
+        pad_token_id=0,
+        capacity=2,
+        policy="reward",
+    )
+    tokens = torch.tensor([[1, 2, 0], [1, 3, 0]])
+    buffer.add_batch(tokens, ["a", "b"], [-1.0, 0.0])
+
+    buffer.sample(count=2, device="cpu", reward_prioritized=True)
+
+    weights = recorded["weights"]
+    assert torch.isfinite(weights).all()
+    assert torch.all(weights > 0)
+
+
 def test_replay_round_trips_terminal_fidelity_indices():
     buffer = replay_module.ReplayBuffer(
         pad_token_id=0,

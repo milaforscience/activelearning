@@ -151,7 +151,7 @@ def test_prepare_batch_scores_the_selected_fidelity(
         cost_fn=None,
     )
 
-    assert prepared.reward_scores.tolist() == [1.0, 0.0]
+    assert prepared.reward_scores.tolist() == [2.0, 1.0]
     assert fake_acquisition.seen_fidelities == [2, 1]
 
 
@@ -173,7 +173,7 @@ def test_single_fidelity_preparation_omits_terminal_action(
     )
 
     assert prepared.fidelity_indices is None
-    assert prepared.reward_scores.tolist() == [0.0]
+    assert prepared.reward_scores.tolist() == [7.0]
 
 
 def test_sampler_rejects_batch_only_acquisitions(make_sampler):
@@ -193,12 +193,78 @@ def test_canonicalization_rejects_disconnected_molecules():
     )
 
 
-def test_reward_scores_are_normalized_to_the_rtb_range() -> None:
-    normalized = sampler_module._normalize_reward_scores([-2.0, 0.0, 4.0])
-    assert normalized[0] == 0.0
-    assert normalized[1] == pytest.approx(1.0 / 3.0)
-    assert normalized[2] == 1.0
-    assert sampler_module._normalize_reward_scores([3.0, 3.0]) == [0.0, 0.0]
+def test_training_counts_requested_rows_when_generation_filters_rows(make_sampler):
+    class _FilteredTrainingModel(_GradientTrainingModel):
+        def generate(self, count, max_length, temperature):
+            del max_length, temperature
+            assert count == 3
+            return SimpleNamespace(
+                smiles=("CC",),
+                input_ids=torch.ones((1, 3), dtype=torch.long),
+                fidelity_indices=torch.tensor([0], dtype=torch.long),
+            )
+
+    model = _FilteredTrainingModel()
+    sampler = make_sampler(
+        n_samples=1,
+        batch_size=3,
+        replay_batch_size=4,
+        num_warmup_steps=0,
+        learning_rate=0.1,
+        log_z_learning_rate=0.1,
+    )
+    positive_buffer = sampler_module.ReplayBuffer(pad_token_id=0, capacity=4)
+    optimizer = torch.optim.SGD(
+        [
+            *model.policy.parameters(),
+            *model.fidelity_head.parameters(),
+            model.log_z,
+        ],
+        lr=0.1,
+    )
+
+    result = sampler._train_step(
+        model=model,
+        synthesizability=FakeSynthesizability(),
+        positive_buffer=positive_buffer,
+        negative_buffer=None,
+        molecule_chem=FakeChem,
+        acquisition=FakeAcquisition(),
+        cost_fn=None,
+        optimizer=optimizer,
+    )
+
+    assert result[0] == 3
+    assert sampler.round_metrics.generated_counts == [3]
+
+
+def test_final_generation_counts_unterminated_rows_as_invalid(make_sampler):
+    class _PartialGenerationModel:
+        policy = nn.Linear(1, 1)
+        prior = nn.Linear(1, 1)
+
+        def generate(self, count, max_length, temperature):
+            del max_length, temperature
+            assert count == 3
+            return SimpleNamespace(
+                smiles=("CC",),
+                fidelity_indices=None,
+            )
+
+    sampler = make_sampler(
+        n_samples=1,
+        fidelities=[1],
+        batch_size=3,
+        max_generation_attempts=3,
+    )
+
+    candidates = sampler._generate_final_candidates(
+        model=_PartialGenerationModel(),
+        molecule_chem=FakeChem,
+    )
+
+    assert [candidate.x for candidate in candidates] == ["CC"]
+    assert sampler.round_metrics.generation_invalid == 2
 
 
 def test_training_updates_policy_and_fidelity_parameters(
@@ -473,7 +539,7 @@ def test_round_metrics_are_a_noop_without_runtime_logger(
     assert metrics.generated_counts == [1]
 
 
-def test_prepare_batch_retains_raw_reward_scores(
+def test_prepare_batch_retains_acquisition_reward_scores(
     make_sampler,
     fake_model,
     patch_molecule_dependencies,
@@ -490,5 +556,4 @@ def test_prepare_batch_retains_raw_reward_scores(
         cost_fn=None,
     )
 
-    assert prepared.raw_reward_scores == (2.0, 1.0)
-    assert prepared.reward_scores.tolist() == [1.0, 0.0]
+    assert prepared.reward_scores.tolist() == [2.0, 1.0]
