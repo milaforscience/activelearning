@@ -6,7 +6,7 @@ discriminated union below.
 """
 
 from pathlib import Path
-from typing import Annotated, Any, Literal, Union, overload
+from typing import Annotated, Any, ClassVar, Literal, Union, overload
 
 from pydantic import BaseModel, Field, PositiveFloat, StrictInt
 
@@ -64,6 +64,7 @@ class HypercubeSamplerConfig(BaseModel):
     """
 
     type: Literal["HypercubeSampler"] = "HypercubeSampler"
+    output_representation: ClassVar[str] = "numeric"
     bounds: list[tuple[float, float]]
     num_samples: int = Field(gt=0)
     fidelities: _Fidelities = None
@@ -105,6 +106,7 @@ class ExactGridSamplerConfig(BaseModel):
     """
 
     type: Literal["ExactGridSampler"] = "ExactGridSampler"
+    output_representation: ClassVar[str] = "numeric"
     bounds: list[tuple[float, float]]
     points_per_dimension: list[int]
     fidelities: _Fidelities = None
@@ -147,7 +149,7 @@ class PoolFileSamplerConfig(BaseModel):
     """
 
     type: Literal["PoolFileSampler"] = "PoolFileSampler"
-    type: Literal["PoolFileSampler"] = "PoolFileSampler"
+    output_representation: ClassVar[str | None] = None
     candidate_pool_file: Path
     num_samples: int = Field(gt=0)
     fidelities: _Fidelities = None
@@ -207,7 +209,7 @@ class GFlowNetSamplerConfig(BaseModel):
     """
 
     type: Literal["GFlowNetSampler"] = "GFlowNetSampler"
-    type: Literal["GFlowNetSampler"] = "GFlowNetSampler"
+    output_representation: ClassVar[str | None] = None
     n_samples: int = Field(gt=0)
     fidelities: _FidelityLevels | None = None
     fidelity_action: _FidelityAction = "any"
@@ -327,7 +329,7 @@ class S3GFNSamplerConfig(BaseModel):
     """
 
     type: Literal["S3GFNSampler"] = "S3GFNSampler"
-    type: Literal["S3GFNSampler"] = "S3GFNSampler"
+    output_representation: ClassVar[str] = "smiles"
     n_samples: int = Field(gt=0)
     fidelities: _FidelityLevels | None = None
     model_name_or_path: str = Field(
