@@ -149,7 +149,6 @@ class GFlowNetSampler(Sampler):
                 "GFlowNet configuration must construct a RuntimeGFlowNetLoggerWrapper."
             )
         self._round_logger_wrapper = agent.logger
-        agent.proxy.set_round_index(self._round_index)
         if getattr(agent, "evaluator", None) is not None:
             set_agent = getattr(agent.evaluator, "set_agent", None)
             if callable(set_agent):
