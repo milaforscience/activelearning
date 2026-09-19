@@ -69,6 +69,36 @@ class GPMoLFormerSmilesEncoderConfig(HuggingFaceEncoderConfig):
         return GPMoLFormerSmilesEncoder
 
 
+class GPMoLFormerSmilesFixedEncoderConfig(BuildableConfig):
+    """Configuration for fixed pooled GP-MoLFormer SMILES features."""
+
+    type: Literal["GPMoLFormerSmilesFixedEncoder"] = "GPMoLFormerSmilesFixedEncoder"
+    input_representation: ClassVar[str] = "smiles"
+    model_name_or_path: str = "ibm-research/GP-MoLFormer-Uniq"
+    tokenizer_name_or_path: str = "ibm-research/MoLFormer-XL-both-10pct"
+    trust_remote_code: bool = True
+    cache_dir: str | None = None
+    max_mol_tokens: int = Field(default=140, ge=2)
+    pooling: Literal["last", "mean"] = "last"
+    cache_size: int = Field(default=4096, ge=0)
+
+    def build(self) -> object:
+        """Instantiate the fixed GP-MoLFormer encoder lazily."""
+        from activelearning_molecules.encoders.molformer import (
+            GPMoLFormerSmilesFixedEncoder,
+        )
+
+        return GPMoLFormerSmilesFixedEncoder(
+            model_name_or_path=self.model_name_or_path,
+            tokenizer_name_or_path=self.tokenizer_name_or_path,
+            max_mol_tokens=self.max_mol_tokens,
+            pooling=self.pooling,
+            trust_remote_code=self.trust_remote_code,
+            cache_dir=self.cache_dir,
+            cache_size=self.cache_size,
+        )
+
+
 class MoLFormerSmilesEncoderConfig(HuggingFaceEncoderConfig):
     """Configuration for the frozen bidirectional MoLFormer SMILES encoder."""
 
@@ -137,10 +167,14 @@ MOLECULE_ENCODER_CONFIGS = (
     MiniMolSmilesEncoderConfig,
 )
 
-MOLECULE_FIXED_ENCODER_CONFIGS = (MiniMolSmilesFixedEncoderConfig,)
+MOLECULE_FIXED_ENCODER_CONFIGS = (
+    GPMoLFormerSmilesFixedEncoderConfig,
+    MiniMolSmilesFixedEncoderConfig,
+)
 
 __all__ = [
     "GPMoLFormerSmilesEncoderConfig",
+    "GPMoLFormerSmilesFixedEncoderConfig",
     "MOLECULE_ENCODER_CONFIGS",
     "MOLECULE_FIXED_ENCODER_CONFIGS",
     "MiniMolSmilesEncoderConfig",

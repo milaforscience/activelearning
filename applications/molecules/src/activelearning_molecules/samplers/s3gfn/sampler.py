@@ -103,6 +103,8 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
         model_name_or_path: str = "ibm-research/GP-MoLFormer-Uniq",
         tokenizer_name_or_path: str = "ibm-research/MoLFormer-XL-both-10pct",
         *,
+        fidelity_policy: Literal["learned", "uniform"] = "learned",
+        reward_fidelity: int | None = None,
         trust_remote_code: bool = True,
         deterministic_eval: bool | None = True,
         compile_strategy: Literal[
@@ -145,6 +147,11 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             GP-MoLFormer causal language model.
         tokenizer_name_or_path : str, optional
             Hugging Face identifier or local path for its tokenizer.
+        fidelity_policy : {"learned", "uniform"}, optional
+            Whether multi-fidelity terminal actions are learned by the policy
+            or assigned uniformly after molecule generation.
+        reward_fidelity : int, optional
+            Fidelity used to score generated molecules in uniform mode.
         trust_remote_code : bool, optional
             Whether Transformers may load custom model and tokenizer code.
             This defaults to ``True`` because the default GP-MoLFormer
@@ -230,6 +237,21 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             raise ValueError("fidelities must contain at least one level.")
         if len(set(fidelities)) != len(fidelities):
             raise ValueError("fidelities must not contain duplicates.")
+        if fidelity_policy == "uniform":
+            if len(fidelities) < 2:
+                raise ValueError(
+                    "uniform fidelity_policy requires at least two oracle fidelities."
+                )
+            if reward_fidelity is None:
+                raise ValueError("uniform fidelity_policy requires reward_fidelity.")
+            if reward_fidelity not in fidelities:
+                raise ValueError(
+                    "reward_fidelity must be contained in the configured fidelities."
+                )
+        elif reward_fidelity is not None:
+            raise ValueError(
+                "reward_fidelity is only valid with uniform fidelity_policy."
+            )
         if max_length < 2:
             raise ValueError("max_length must be at least two.")
         if batch_size <= 0 or replay_batch_size <= 0:
@@ -276,6 +298,8 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
 
         self.n_samples = n_samples
         self.fidelities = tuple(int(fidelity) for fidelity in fidelities)
+        self.fidelity_policy = fidelity_policy
+        self.reward_fidelity = reward_fidelity
         self.model_name_or_path = model_name_or_path
         self.tokenizer_name_or_path = tokenizer_name_or_path
         self.trust_remote_code = trust_remote_code
@@ -453,7 +477,9 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
                 cache_dir=self.cache_dir,
                 device=self.device,
                 dtype=self.effective_model_dtype,
-                n_fidelities=len(self.fidelities),
+                n_fidelities=(
+                    len(self.fidelities) if self.fidelity_policy == "learned" else None
+                ),
             )
             self._keep_pretrained_template_on_cpu()
         else:
@@ -877,6 +903,9 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             return ()
         if fidelity_indices is None:
             if len(self.fidelities) > 1:
+                if self.fidelity_policy == "uniform":
+                    assert self.reward_fidelity is not None
+                    return (self.reward_fidelity,) * count
                 raise ValueError(
                     "Multi-fidelity generation must return fidelity action indices."
                 )
@@ -968,12 +997,29 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
                 f"S3GFNSampler generated {len(candidates)} valid unique molecules "
                 f"after {generated_attempts} attempts; requested {self.n_samples}."
             )
+        if self.fidelity_policy == "uniform":
+            candidates = self._assign_uniform_fidelities(candidates)
         self.round_metrics.record_final_candidates(candidates)
         _logger.info(
             "Final candidate generation complete: %d unique candidate(s).",
             len(candidates),
         )
         return candidates
+
+    def _assign_uniform_fidelities(
+        self,
+        candidates: Sequence[Candidate],
+    ) -> list[Candidate]:
+        """Assign final query fidelities with a round-local uniform RNG."""
+        rng = random.Random(self.seed + self._round_index)
+        return [
+            Candidate(
+                x=candidate.x,
+                fidelity=rng.choice(self.fidelities),
+                metadata=candidate.metadata,
+            )
+            for candidate in candidates
+        ]
 
     def _process_candidate_batch(
         self,

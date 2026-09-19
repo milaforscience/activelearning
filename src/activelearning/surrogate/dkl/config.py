@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar, Literal, Optional
 
-from pydantic import BaseModel, Field, PrivateAttr
+from pydantic import BaseModel, Field, PrivateAttr, model_validator
 
 from activelearning.config_registry import BuildableConfig
 from activelearning.surrogate.encoder_config import EncoderConfig
@@ -25,12 +25,39 @@ class DKLTrainingConfig(BaseModel):
         an ``mlm_loss`` method.
     pretrain_epochs : int
         Number of auxiliary MLM warm-up epochs before GP training.
+    betas : tuple[float, float]
+        Adam beta coefficients.
+    batch_size : int, optional
+        Maximum number of observations per variational-GP update.
+    validation_fraction : float
+        Fraction of observations reserved for validation.
+    validation_seed : int, optional
+        Seed for the validation split and mini-batch ordering. When omitted,
+        the runtime seed is used.
+    early_stopping_patience : int, optional
+        Number of non-improving validation epochs tolerated.
     """
 
-    epochs: int = 50
-    lr: float = 1e-3
-    mask_ratio: float = 0.125
-    pretrain_epochs: int = 0
+    epochs: int = Field(default=50, ge=1)
+    lr: float = Field(default=1e-3, gt=0.0)
+    mask_ratio: float = Field(default=0.125, ge=0.0, lt=1.0)
+    pretrain_epochs: int = Field(default=0, ge=0)
+    betas: tuple[float, float] = (0.9, 0.999)
+    optimizer_betas: tuple[float, float] | None = None
+    batch_size: int | None = Field(default=None, gt=0)
+    validation_fraction: float = Field(default=0.0, ge=0.0, lt=1.0)
+    validation_seed: int | None = Field(default=None, ge=0)
+    early_stopping_patience: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _validate_optimizer_settings(self) -> "DKLTrainingConfig":
+        """Validate Adam coefficients and synchronize their two public names."""
+        if self.optimizer_betas is not None:
+            self.betas = self.optimizer_betas
+        if any(beta < 0.0 or beta >= 1.0 for beta in self.betas):
+            raise ValueError("Adam betas must be in the interval [0, 1).")
+        self.optimizer_betas = self.betas
+        return self
 
 
 class DKLSurrogateConfigBase(BuildableConfig):
@@ -145,6 +172,7 @@ class VariationalDKLSurrogateConfig(DKLSurrogateConfigBase):
 
     type: Literal["VariationalDKLSurrogate"] = "VariationalDKLSurrogate"
     num_inducing: int = 64
+    initial_likelihood_noise: float = Field(default=0.1, gt=0.0)
 
     def _surrogate_class(self) -> type[Surrogate]:
         """Return the variational DKL surrogate class."""
@@ -154,4 +182,7 @@ class VariationalDKLSurrogateConfig(DKLSurrogateConfigBase):
 
     def _additional_build_kwargs(self) -> dict[str, Any]:
         """Return the variational GP constructor arguments."""
-        return {"num_inducing": self.num_inducing}
+        return {
+            "num_inducing": self.num_inducing,
+            "initial_likelihood_noise": self.initial_likelihood_noise,
+        }

@@ -30,6 +30,9 @@ from activelearning.acquisition.botorch.botorch_multifidelity import (
     QMultiFidelityLowerBoundMaxValueEntropy,
     QMultiFidelityMaxValueEntropy,
 )
+from activelearning.acquisition.botorch.botorch_single_fidelity import (
+    QLowerBoundMaxValueEntropy,
+)
 
 
 class HypercubeCandidateSetSpecConfig(BaseModel):
@@ -155,6 +158,23 @@ class PosteriorMeanConfig(_BoTorchAcquisitionConfig):
         )
 
 
+class QLowerBoundMaxValueEntropyConfig(_BoTorchAcquisitionConfig):
+    """Configuration for single-fidelity lower-bound max-value entropy search."""
+
+    type: Literal["QLowerBoundMaxValueEntropy"] = "QLowerBoundMaxValueEntropy"
+    candidate_set_spec: CandidateSetSpecConfig
+    num_mv_samples: int = Field(default=10, gt=0)
+    maximize: bool = True
+
+    def build(self) -> Acquisition:
+        """Build the single-fidelity lower-bound entropy acquisition."""
+        return QLowerBoundMaxValueEntropy(
+            candidate_set_spec=self.candidate_set_spec.build(),  # type: ignore[arg-type]
+            num_mv_samples=self.num_mv_samples,
+            maximize=self.maximize,
+        )
+
+
 class QMultiFidelityMaxValueEntropyConfig(_BoTorchAcquisitionConfig):
     type: Literal["QMultiFidelityMaxValueEntropy"] = "QMultiFidelityMaxValueEntropy"
     candidate_set_spec: CandidateSetSpecConfig
@@ -221,6 +241,7 @@ ACQUISITION_CONFIGS = (
     ProbabilityOfImprovementConfig,
     LogProbabilityOfImprovementConfig,
     PosteriorMeanConfig,
+    QLowerBoundMaxValueEntropyConfig,
     QMultiFidelityMaxValueEntropyConfig,
     QMultiFidelityLowerBoundMaxValueEntropyConfig,
     QMultiFidelityKnowledgeGradientConfig,

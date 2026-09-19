@@ -298,7 +298,8 @@ def _resolve_sampler_fidelities(
     """
     configured = _sampler_fidelity_keys(sampler.fidelities)
     if configured is None:
-        return sampler.model_copy(update={"fidelities": sorted(oracle_fidelities)})
+        resolved = sampler.model_copy(update={"fidelities": sorted(oracle_fidelities)})
+        return type(sampler).model_validate(resolved.model_dump())
 
     unknown = configured - oracle_fidelities
     if unknown:

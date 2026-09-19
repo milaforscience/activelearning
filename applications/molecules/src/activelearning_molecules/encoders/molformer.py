@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Literal
 
+import torch
 from torch import Tensor, nn
 
+from activelearning.surrogate.encoder import FixedEncoder
 from activelearning_molecules._optional import (
     missing_molecules_dependency_error,
 )
@@ -14,7 +17,11 @@ from activelearning.surrogate.sequence.huggingface_encoder import (
     HuggingFaceSequenceEncoder,
 )
 
-__all__ = ["GPMoLFormerSmilesEncoder", "MoLFormerSmilesEncoder"]
+__all__ = [
+    "GPMoLFormerSmilesEncoder",
+    "GPMoLFormerSmilesFixedEncoder",
+    "MoLFormerSmilesEncoder",
+]
 
 
 def _load_transformers() -> tuple[Any, Any, Any]:
@@ -203,6 +210,69 @@ class GPMoLFormerSmilesEncoder(_PretrainedSmilesEncoder):
             use_cache=False,
             return_dict=True,
         )
+
+
+class GPMoLFormerSmilesFixedEncoder(FixedEncoder):
+    """Encode SMILES as frozen pooled GP-MoLFormer backbone features."""
+
+    input_representation = "smiles"
+
+    def __init__(
+        self,
+        model_name_or_path: str = "ibm-research/GP-MoLFormer-Uniq",
+        tokenizer_name_or_path: str = "ibm-research/MoLFormer-XL-both-10pct",
+        *,
+        max_mol_tokens: int = 140,
+        pooling: Literal["last", "mean"] = "last",
+        trust_remote_code: bool = True,
+        cache_dir: str | None = None,
+        cache_size: int = 4096,
+    ) -> None:
+        """Load GP-MoLFormer and expose its pooled features without projection."""
+        if max_mol_tokens < 2:
+            raise ValueError("max_mol_tokens must be at least two.")
+        if cache_size < 0:
+            raise ValueError("cache_size must be non-negative.")
+
+        self._encoder = GPMoLFormerSmilesEncoder(
+            model_name_or_path=model_name_or_path,
+            tokenizer_name_or_path=tokenizer_name_or_path,
+            max_mol_tokens=max_mol_tokens,
+            latent_dim=1,
+            pooling=pooling,
+            trust_remote_code=trust_remote_code,
+            cache_dir=cache_dir,
+            cache_size=cache_size,
+        )
+        self.feature_dim = self._encoder.backbone_hidden_dim
+
+    def bind_runtime_context(self, runtime_context: Any) -> None:
+        """Bind runtime settings and move the frozen backbone to its device."""
+        super().bind_runtime_context(runtime_context)
+        self._encoder.to(device=runtime_context.device)
+
+    def encode(
+        self,
+        values: Sequence[Any],
+        *,
+        device: torch.device,
+    ) -> Tensor:
+        """Return pooled frozen backbone features for a batch of SMILES."""
+        strings: list[str] = []
+        for value in values:
+            if not isinstance(value, str):
+                raise ValueError(
+                    "GP-MoLFormer fixed encoders require string inputs, got "
+                    f"{type(value).__name__}."
+                )
+            strings.append(value)
+
+        model_device = next(self._encoder.backbone.parameters()).device
+        token_batch = self._encoder.prepare_inputs(strings, device=model_device)
+        attention_mask = self._encoder.tokenizer.attention_mask_from_batch(token_batch)
+        with torch.inference_mode():
+            features = self._encoder._backbone_features(token_batch, attention_mask)
+        return features.to(device=device)
 
 
 class MoLFormerSmilesEncoder(_PretrainedSmilesEncoder):

@@ -21,6 +21,7 @@ class CSVInitialDataConfig(BaseModel):
     x_columns: str | list[str]
     y_column: str = "y"
     fidelity_column: str | None = None
+    default_fidelity: int = DEFAULT_FIDELITY
     metadata_columns: MetadataColumns = "remaining"
 
     def load_observations(
@@ -114,7 +115,7 @@ class CSVInitialDataConfig(BaseModel):
 
     def _read_fidelity(self, row: dict[str, str], row_number: int) -> int:
         if self.fidelity_column is None:
-            return DEFAULT_FIDELITY
+            return self.default_fidelity
 
         raw_value = row[self.fidelity_column].strip()
         if raw_value == "":

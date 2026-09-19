@@ -16,6 +16,8 @@ class S3GFNSamplerConfig(BuildableConfig):
     output_representation: ClassVar[str] = "smiles"
     n_samples: int = Field(gt=0)
     fidelities: FidelityLevels | None = None
+    fidelity_policy: Literal["learned", "uniform"] = "learned"
+    reward_fidelity: int | None = None
     model_name_or_path: str = Field(
         default="ibm-research/GP-MoLFormer-Uniq",
         min_length=1,
@@ -52,6 +54,29 @@ class S3GFNSamplerConfig(BuildableConfig):
     gradient_clip_norm: PositiveFloat = 10.0
     max_generation_attempts: int | None = Field(default=None, gt=0)
     seed: int = Field(default=42, ge=0)
+
+    @model_validator(mode="after")
+    def _validate_fidelity_policy(self) -> "S3GFNSamplerConfig":
+        """Validate fidelity-policy fields when sampler levels are explicit."""
+        if self.fidelity_policy == "uniform":
+            if self.fidelities is not None and len(self.fidelities) < 2:
+                raise ValueError(
+                    "uniform fidelity_policy requires at least two oracle fidelities."
+                )
+            if self.reward_fidelity is None:
+                raise ValueError("uniform fidelity_policy requires reward_fidelity.")
+            if (
+                self.fidelities is not None
+                and self.reward_fidelity not in self.fidelities
+            ):
+                raise ValueError(
+                    "reward_fidelity must be contained in the configured fidelities."
+                )
+        elif self.reward_fidelity is not None:
+            raise ValueError(
+                "reward_fidelity is only valid with uniform fidelity_policy."
+            )
+        return self
 
     @model_validator(mode="before")
     @classmethod
@@ -91,6 +116,8 @@ class S3GFNSamplerConfig(BuildableConfig):
         return S3GFNSampler(
             n_samples=self.n_samples,
             fidelities=resolve_fidelities(self.fidelities),
+            fidelity_policy=self.fidelity_policy,
+            reward_fidelity=self.reward_fidelity,
             model_name_or_path=self.model_name_or_path,
             tokenizer_name_or_path=self.tokenizer_name_or_path,
             trust_remote_code=self.trust_remote_code,
@@ -121,6 +148,50 @@ class S3GFNSamplerConfig(BuildableConfig):
         )
 
 
-MOLECULE_SAMPLER_CONFIGS = (S3GFNSamplerConfig,)
+class RandomMoleculeSamplerConfig(BuildableConfig):
+    """Configuration for uniformly sampled valid SELFIES molecules."""
 
-__all__ = ["MOLECULE_SAMPLER_CONFIGS", "S3GFNSamplerConfig"]
+    type: Literal["RandomMoleculeSampler"] = "RandomMoleculeSampler"
+    output_representation: ClassVar[str] = "smiles"
+    n_samples: int = Field(gt=0)
+    fidelities: FidelityLevels | None = None
+    min_length: int = Field(default=1, ge=1)
+    max_length: int = Field(default=64, ge=1)
+    max_generation_attempts: int = Field(default=100_000, gt=0)
+    seed: int = Field(default=42, ge=0)
+
+    @model_validator(mode="after")
+    def _validate_length_range(self) -> "RandomMoleculeSamplerConfig":
+        """Reject an invalid inclusive SELFIES length range."""
+        if self.max_length < self.min_length:
+            raise ValueError("max_length must be greater than or equal to min_length.")
+        return self
+
+    def build(self) -> Sampler:
+        """Build the random molecular sampler lazily."""
+        from activelearning_molecules.samplers.random_sampler import (
+            RandomMoleculeSampler,
+        )
+
+        resolved_fidelities = resolve_fidelities(self.fidelities)
+        if isinstance(resolved_fidelities, dict):
+            raise TypeError(
+                "RandomMoleculeSampler requires fidelity levels, not costs."
+            )
+        return RandomMoleculeSampler(
+            n_samples=self.n_samples,
+            fidelities=resolved_fidelities,
+            min_length=self.min_length,
+            max_length=self.max_length,
+            max_generation_attempts=self.max_generation_attempts,
+            seed=self.seed,
+        )
+
+
+MOLECULE_SAMPLER_CONFIGS = (S3GFNSamplerConfig, RandomMoleculeSamplerConfig)
+
+__all__ = [
+    "MOLECULE_SAMPLER_CONFIGS",
+    "RandomMoleculeSamplerConfig",
+    "S3GFNSamplerConfig",
+]
