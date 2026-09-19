@@ -61,6 +61,7 @@ class GFlowNetSampler(Sampler):
         self.fidelities = list(fidelities)
         self._n_fidelities = len(self.fidelities)
         self.fidelity_action = fidelity_action
+        self._round_index = 0
         self._round_logger_wrapper: RuntimeGFlowNetLoggerWrapper | None = None
         if self._n_fidelities == 1 and fidelity_action != "any":
             logger.warning(
@@ -141,6 +142,7 @@ class GFlowNetSampler(Sampler):
         agent.proxy.set_acquisition(acquisition)
         agent.proxy.set_cost_fn(cost_fn)
         agent.proxy.set_fidelity_map(self.fidelities)
+        agent.proxy.set_round_index(self._round_index)
 
         if not isinstance(agent.logger, RuntimeGFlowNetLoggerWrapper):
             raise TypeError(
@@ -283,6 +285,7 @@ class GFlowNetSampler(Sampler):
             agent.train()
             batch, _ = agent.sample_batch(n_forward=self.n_samples, train=False)
             states_term = batch.get_terminating_states()
+            self._round_index += 1
             return self._states_to_candidates(states_term, agent.env)
         except Exception:
             self._close_pending_logger()

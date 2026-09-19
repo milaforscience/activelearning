@@ -215,6 +215,24 @@ class TestGFlowNetSamplerFidelityActionWrapperSelection:
         with pytest.raises(ValueError, match="fidelity_action"):
             sampler._build_agent(acquisition=Mock())
 
+    def test_round_index_is_passed_to_proxy(self, gflownet_conf_2d):
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=2, conf=conf)
+        sampler._round_index = 3
+
+        mock_agent = Mock()
+        mock_agent.proxy = Mock()
+        mock_agent.env = Mock()
+        mock_agent.logger = Mock(spec=RuntimeGFlowNetLoggerWrapper)
+
+        with patch(
+            "activelearning.sampler.gflownet.gflownet_sampler.gflownet_from_config",
+            return_value=mock_agent,
+        ):
+            sampler._build_agent(acquisition=Mock())
+
+        mock_agent.proxy.set_round_index.assert_called_once_with(3)
+
 
 # ---------------------------------------------------------------------------
 # Helper methods

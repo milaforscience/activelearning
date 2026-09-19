@@ -1,6 +1,7 @@
 # Molecule IP/EA optimisation with exact SELFIES DKL + MF-MES over three xTB fidelities.
 #
-# This extends the single-fidelity pool example (exact.yaml) by adding multi-fidelity
+# This extends the single-fidelity pool example (exact_single_fidelity.yaml) by adding
+# multi-fidelity
 # surrogate models and acquisition functions. The main differences are:
 # - ExactDKLSurrogate is reused but with multi_fidelity enabled, so the GP also
 #   conditions on a fidelity confidence embedding alongside molecule features.

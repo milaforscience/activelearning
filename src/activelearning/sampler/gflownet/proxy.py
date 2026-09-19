@@ -34,6 +34,11 @@ class AcquisitionProxy(Proxy):
     cost_fn : callable, optional
         Optional candidate cost function. When provided, proxy scores are
         reweighted by inverse cost before they are returned to GFlowNet.
+    reward_scale_beta : float, default=1.0
+        Positive acquisition normalizer used by the MF-GFN reward scale.
+    reward_scale_rho : float, default=1.0
+        Positive per-round acquisition multiplier base used by the MF-GFN
+        reward scale.
     **kwargs
         Forwarded to :class:`gflownet.proxy.base.Proxy` (device,
         float_precision, reward_function, reward_min, etc.).
@@ -43,13 +48,22 @@ class AcquisitionProxy(Proxy):
         self,
         acquisition: Acquisition = None,
         cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
+        reward_scale_beta: float = 1.0,
+        reward_scale_rho: float = 1.0,
         **kwargs: Any,
     ) -> None:
+        if reward_scale_beta <= 0:
+            raise ValueError("reward_scale_beta must be positive.")
+        if reward_scale_rho <= 0:
+            raise ValueError("reward_scale_rho must be positive.")
         super().__init__(**kwargs)
         self.acquisition = acquisition
         self.cost_fn = cost_fn
+        self.reward_scale_beta = float(reward_scale_beta)
+        self.reward_scale_rho = float(reward_scale_rho)
         self._env: Optional[Any] = None
         self._fidelity_map: list[int] = [DEFAULT_FIDELITY]
+        self._round_index = 0
 
     def setup(self, env: Any = None) -> None:
         """Store the environment for multi-fidelity index resolution.
@@ -99,16 +113,23 @@ class AcquisitionProxy(Proxy):
             raise ValueError("fidelity_map must not be empty")
         self._fidelity_map = list(fidelity_map)
 
-    def __call__(self, states: Union[torch.Tensor, List, npt.NDArray]) -> torch.Tensor:
-        """Evaluate *raw* proxy values for a batch of states in proxy format.
+    def set_round_index(self, round_index: int) -> None:
+        """Set the active-learning round used by the MF-GFN reward scale."""
+        if round_index < 0:
+            raise ValueError("round_index must be non-negative.")
+        self._round_index = round_index
 
-        Returns raw acquisition scores without any reward transformation.
-        Reward shaping (``reward_function``, ``reward_min``, clipping, etc.)
-        is applied by the base-class :meth:`~gflownet.proxy.base.Proxy.rewards`
-        method, which calls this method internally and then passes the result
-        through ``proxy2reward`` / ``proxy2logreward``. GFlowNet always
-        calls ``proxy.rewards()`` during training, so the full transformation
-        pipeline is exercised automatically.
+    def _round_reward_scale(self) -> float:
+        """Return ``rho**round / beta`` for MF-GFN reward scaling."""
+        return (self.reward_scale_rho**self._round_index) / self.reward_scale_beta
+
+    def __call__(self, states: Union[torch.Tensor, List, npt.NDArray]) -> torch.Tensor:
+        """Evaluate acquisition values for a batch of states in proxy format.
+
+        MF-GFN round scaling is applied before the base-class reward
+        transformation (``reward_function``, ``reward_min``, clipping, etc.).
+        GFlowNet calls ``proxy.rewards()`` during training, so the full
+        transformation pipeline is exercised automatically.
 
         Handles both single-fidelity (tensor/list of coord vectors) and
         multi-fidelity (list of dicts produced by a composite env's
@@ -122,7 +143,7 @@ class AcquisitionProxy(Proxy):
         Returns
         -------
         values : torch.Tensor
-            1-D tensor of raw proxy values, one per state.
+            1-D tensor of scaled proxy values, one per state.
 
         Raises
         ------
@@ -147,4 +168,5 @@ class AcquisitionProxy(Proxy):
                 candidates,
                 cost_weighting=cost_weighting_from_cost_fn(self.cost_fn),
             )
-        return torch.tensor(acq_values, dtype=self.float, device=self.device)
+        values = torch.tensor(acq_values, dtype=self.float, device=self.device)
+        return values * self._round_reward_scale()

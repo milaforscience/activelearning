@@ -72,8 +72,8 @@ sampler:
       max_length: 64
     proxy:
       reward_function: identity
-      reward_beta: 1.0e-6
-      reward_rho: 1.5
+      reward_scale_beta: 1.0e-6
+      reward_scale_rho: 1.5
       reward_min: 1.0e-8
     policy:
       forward:
