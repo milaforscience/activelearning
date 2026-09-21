@@ -5,10 +5,10 @@ MF-GFN paper.  The binary must be available in the system PATH.
 
 Fidelity levels
 ---------------
-1 → RDKit/MMFF geometry + ``xtb --gfn 2 --vip``/``--vea`` (vertical, no geometry opt)
-2 → RDKit/MMFF geometry + ``xtb --gfn 2 --opt`` (neutral opt) + vertical IP/EA
-3 → RDKit/MMFF + neutral xtb opt + ionic xtb opt → adiabatic IP/EA from
-    ``TOTAL ENERGY`` fields in the optimisation logs
+- 1: RDKit/MMFF geometry and vertical IP/EA without geometry optimization.
+- 2: RDKit/MMFF geometry, neutral optimization, and vertical IP/EA.
+- 3: RDKit/MMFF geometry plus neutral and ionic optimization, with adiabatic
+    IP/EA calculated from ``TOTAL ENERGY`` fields in the optimization logs.
 
 Notes
 -----
@@ -17,7 +17,7 @@ or download the standalone binary from https://github.com/grimme-lab/xtb/release
 
 Dependencies
 ------------
-uv sync --extra molecules   # includes selfies, rdkit
+Install molecule dependencies with ``uv sync --extra molecules``.
 """
 
 from __future__ import annotations
@@ -30,8 +30,6 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, List, Optional, Sequence
-
-import matplotlib.pyplot as plt
 
 from activelearning.applications.molecules._optional import (
     missing_molecules_dependency_error,
@@ -598,6 +596,10 @@ class XTBIPEAOracle(MultiFidelityOracle):
         self._negate_score = task == "ip" if negate_score is None else negate_score
         self.log_molecule_visualizations = log_molecule_visualizations
         self._molecule_visualization_limit = molecule_visualization_limit
+        self._pending_molecule_visualization: (
+            tuple[Candidate, ...],
+            tuple[Observation, ...],
+        ) | None = None
 
         confidences = self._resolve_fidelity_confidences(
             fidelity_costs, fidelity_confidences
@@ -651,7 +653,10 @@ class XTBIPEAOracle(MultiFidelityOracle):
                 )
             )
         if self.log_molecule_visualizations:
-            self._log_query_molecule_visualizations(candidates, observations)
+            self._pending_molecule_visualization = (
+                tuple(candidates),
+                tuple(observations),
+            )
         return observations
 
     # ------------------------------------------------------------------
@@ -685,35 +690,34 @@ class XTBIPEAOracle(MultiFidelityOracle):
             f"got {type(candidate.x).__name__}."
         )
 
-    def _log_query_molecule_visualizations(
+    def drain_round_diagnostics(
         self,
-        candidates: Sequence[Candidate],
-        observations: Sequence[Observation],
-    ) -> None:
-        """Log a capped RDKit grid of queried molecules, if a logger is bound.
+        *,
+        include_figures: bool,
+        max_points: int,
+    ) -> tuple[dict[str, float | int], dict[str, Any]]:
+        """Return a capped RDKit grid for the most recent queried molecules.
 
         Parameters
         ----------
-        candidates : Sequence[Candidate]
-            Candidates passed to the most recent :meth:`query` call.
-        observations : Sequence[Observation]
-            Corresponding observations, used to rank molecules by score before
-            applying the visualisation cap.
+        include_figures : bool
+            Whether the current active-learning round emits figures.
+        max_points : int
+            General upper bound applied alongside the oracle-specific limit.
         """
-        if self.logger is None:
-            return
-
+        pending = self._pending_molecule_visualization
+        self._pending_molecule_visualization = None
+        if pending is None or not include_figures:
+            return {}, {}
+        candidates, observations = pending
         figure = build_xtb_query_molecule_figure(
             candidates=candidates,
             observations=observations,
             task=self._task,
             mol_repr=self._mol_repr,
-            limit=self._molecule_visualization_limit,
+            limit=min(self._molecule_visualization_limit, max_points),
         )
-        try:
-            self.logger.log_figure(f"xtb_{self._task}_query_molecules", figure)
-        finally:
-            plt.close(figure)
+        return {}, {f"oracle/xtb/{self._task}/query_molecules": figure}
 
     def _xtb_score(self, molecule: str, fidelity: int) -> float:
         """Evaluate a single molecules at the given fidelity level.
