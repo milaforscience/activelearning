@@ -81,6 +81,10 @@ class GPMoLFormerSmilesFixedEncoderConfig(BuildableConfig):
     max_mol_tokens: int = Field(default=140, ge=2)
     pooling: Literal["last", "mean"] = "last"
     cache_size: int = Field(default=4096, ge=0)
+    batch_size: int = Field(default=128, ge=1)
+    torch_compile: bool = False
+    torch_compile_mode: str = Field(default="default", min_length=1)
+    torch_compile_dynamic: bool | None = None
 
     def build(self) -> object:
         """Instantiate the fixed GP-MoLFormer encoder lazily."""
@@ -96,6 +100,10 @@ class GPMoLFormerSmilesFixedEncoderConfig(BuildableConfig):
             trust_remote_code=self.trust_remote_code,
             cache_dir=self.cache_dir,
             cache_size=self.cache_size,
+            batch_size=self.batch_size,
+            torch_compile=self.torch_compile,
+            torch_compile_mode=self.torch_compile_mode,
+            torch_compile_dynamic=self.torch_compile_dynamic,
         )
 
 

@@ -7,16 +7,11 @@ dataset:
   type: ListDataset
 
 surrogate:
-  type: VariationalGPSurrogate
-  training_params:
-    epochs: 512
-    lr: 1.0e-3
-  num_inducing: 64
+  type: ExactGPSurrogate
   standardize_outputs: true
 
 selector:
-  type: TopKAcquisitionSelector
-  num_samples: 128
+  type: CostAwareSelector
 
 budget:
   available_budget: 1260.0
@@ -25,9 +20,15 @@ budget:
     value: 896.0
 
 logger:
-  type: ConsoleLogger
-  project_name: xtb_ipea_benchmark
+  type: MultiLogger
   run_name: molecule-benchmark-seed${runtime.seed}
+  loggers:
+    - type: ConsoleLogger
+      project_name: xtb_ipea_benchmark
+      run_name: ${logger.run_name}
+    - type: CometLogger
+      project_name: xtb_ipea_benchmark
+      run_name: ${logger.run_name}
 
 run_writer:
   type: JSONLinesRunWriter

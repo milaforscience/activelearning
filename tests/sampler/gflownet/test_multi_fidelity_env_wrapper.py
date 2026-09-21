@@ -275,3 +275,58 @@ def test__env_maker_creates_independent_env_base_instances(wrapper_class):
     initial_state = list(env2.env_base.state)
     env1.get_random_states(n_states=1)
     assert env2.env_base.equal(env2.env_base.state, initial_state)
+
+
+def test__uniform_choice_ignores_policy_outputs():
+    """UniformChoice samples and scores fidelities uniformly regardless of logits."""
+    import math
+
+    import torch
+
+    from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
+        UniformChoice,
+    )
+
+    torch.manual_seed(0)
+    env = UniformChoice(n_options=3)
+    n_states = 3000
+    states = [env.source] * n_states
+    masks = torch.tensor(
+        [env.get_mask_invalid_actions_forward(state, False) for state in states]
+    )
+    # Policy outputs strongly favour the first option; they must be ignored.
+    policy_outputs = torch.zeros(n_states, env.policy_output_dim)
+    policy_outputs[:, 0] = 100.0
+
+    actions = env.sample_actions_batch(policy_outputs, masks, states)
+    counts = torch.bincount(torch.tensor([a[0] for a in actions]))[1:]
+    logprobs = env.get_logprobs(
+        policy_outputs, torch.tensor(actions), masks, states, False
+    )
+
+    assert counts.min() > 800
+    assert torch.allclose(logprobs, torch.full_like(logprobs, -math.log(3)))
+
+
+@pytest.mark.parametrize(
+    "wrapper_class",
+    ALL_WRAPPER_CLASSES,
+    ids=lambda c: c.__name__,
+)
+def test__uniform_fidelity_uses_uniform_choice(wrapper_class):
+    """uniform_fidelity=True swaps the fidelity sub-environment."""
+    from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
+        UniformChoice,
+    )
+
+    env_base = partial(Grid, n_dim=2, length=3)
+    assert not isinstance(
+        wrapper_class(env_base_maker=env_base, n_fidelities=2).env_fidelity,
+        UniformChoice,
+    )
+    assert isinstance(
+        wrapper_class(
+            env_base_maker=env_base, n_fidelities=2, uniform_fidelity=True
+        ).env_fidelity,
+        UniformChoice,
+    )

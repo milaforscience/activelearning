@@ -24,6 +24,7 @@ from activelearning.surrogate.sequence.transformer_encoder import (
 )
 from activelearning_molecules.encoders.molformer import (
     GPMoLFormerSmilesEncoder,
+    GPMoLFormerSmilesFixedEncoder,
     MoLFormerSmilesEncoder,
 )
 from activelearning.utils.types import Observation
@@ -536,3 +537,30 @@ def test_gpmolformer_encoder_works_with_variational_dkl_without_mlm(
     assert all(
         not parameter.requires_grad for parameter in encoder.backbone.parameters()
     )
+
+
+def test_gpmolformer_fixed_encoder_encodes_in_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Chunked feature extraction matches a single batch."""
+    _patch_transformers(monkeypatch)
+    strings = ["C", "CC", "C[Si]", "N#N", "CO"]
+
+    def build(batch_size: int) -> GPMoLFormerSmilesFixedEncoder:
+        return GPMoLFormerSmilesFixedEncoder(
+            model_name_or_path="model",
+            tokenizer_name_or_path="tokenizer",
+            max_mol_tokens=8,
+            cache_size=0,
+            batch_size=batch_size,
+        )
+
+    chunked = build(batch_size=2)
+    single = build(batch_size=10)
+
+    torch.testing.assert_close(
+        chunked.encode(strings, device=torch.device("cpu")),
+        single.encode(strings, device=torch.device("cpu")),
+    )
+    assert chunked._encoder.backbone.base.forward_calls == 3
+    assert single._encoder.backbone.base.forward_calls == 1

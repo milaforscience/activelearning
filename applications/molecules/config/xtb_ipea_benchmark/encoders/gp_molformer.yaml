@@ -7,3 +7,4 @@ surrogate:
     pooling: last
     max_mol_tokens: 140
     cache_size: 4096
+    torch_compile: true

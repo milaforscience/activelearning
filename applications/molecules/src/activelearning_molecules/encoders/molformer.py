@@ -227,12 +227,23 @@ class GPMoLFormerSmilesFixedEncoder(FixedEncoder):
         trust_remote_code: bool = True,
         cache_dir: str | None = None,
         cache_size: int = 4096,
+        batch_size: int = 128,
+        torch_compile: bool = False,
+        torch_compile_mode: str = "default",
+        torch_compile_dynamic: bool | None = None,
     ) -> None:
-        """Load GP-MoLFormer and expose its pooled features without projection."""
+        """Load GP-MoLFormer and expose its pooled features without projection.
+
+        Features are computed in chunks of ``batch_size`` molecules to bound
+        activation memory. ``torch_compile`` compiles the backbone forward with
+        the S3-GFN attention-mask adapter installed.
+        """
         if max_mol_tokens < 2:
             raise ValueError("max_mol_tokens must be at least two.")
         if cache_size < 0:
             raise ValueError("cache_size must be non-negative.")
+        if batch_size < 1:
+            raise ValueError("batch_size must be positive.")
 
         self._encoder = GPMoLFormerSmilesEncoder(
             model_name_or_path=model_name_or_path,
@@ -245,6 +256,19 @@ class GPMoLFormerSmilesFixedEncoder(FixedEncoder):
             cache_size=cache_size,
         )
         self.feature_dim = self._encoder.backbone_hidden_dim
+        self.batch_size = batch_size
+        if torch_compile:
+            from activelearning_molecules.samplers.s3gfn.model import (
+                _install_gp_molformer_attention_mask_adapter,
+            )
+
+            _install_gp_molformer_attention_mask_adapter(self._encoder.backbone)
+            base_model = self._encoder._base_model()
+            base_model.forward = torch.compile(
+                base_model.forward,
+                mode=torch_compile_mode,
+                dynamic=torch_compile_dynamic,
+            )
 
     def bind_runtime_context(self, runtime_context: Any) -> None:
         """Bind runtime settings and move the frozen backbone to its device."""
@@ -268,11 +292,19 @@ class GPMoLFormerSmilesFixedEncoder(FixedEncoder):
             strings.append(value)
 
         model_device = next(self._encoder.backbone.parameters()).device
-        token_batch = self._encoder.prepare_inputs(strings, device=model_device)
-        attention_mask = self._encoder.tokenizer.attention_mask_from_batch(token_batch)
+        features: list[Tensor] = []
         with torch.inference_mode():
-            features = self._encoder._backbone_features(token_batch, attention_mask)
-        return features.to(device=device)
+            for start in range(0, len(strings), self.batch_size):
+                token_batch = self._encoder.prepare_inputs(
+                    strings[start : start + self.batch_size], device=model_device
+                )
+                attention_mask = self._encoder.tokenizer.attention_mask_from_batch(
+                    token_batch
+                )
+                features.append(
+                    self._encoder._backbone_features(token_batch, attention_mask)
+                )
+        return torch.cat(features).to(device=device)
 
 
 class MoLFormerSmilesEncoder(_PretrainedSmilesEncoder):

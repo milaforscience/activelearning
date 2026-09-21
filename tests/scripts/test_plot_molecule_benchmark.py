@@ -38,7 +38,7 @@ def test_plot_data_uses_common_costs_and_carries_completed_checkpoints() -> None
         row
         for row in rows
         if row["task"] == "ip"
-        and row["method"] == "mf_s3gfn"
+        and row["method"] == "mf_gfn"
         and row["metric"] == "mean_top_100_score"
     ]
     assert [row["cumulative_acquisition_cost"] for row in score_rows] == [

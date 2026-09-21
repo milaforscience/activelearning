@@ -19,9 +19,9 @@ import numpy as np
 
 EXPECTED_SEEDS = (42, 43, 44)
 EXPECTED_METHODS = (
-    "mf_s3gfn",
-    "random_fidelity_s3gfn",
-    "sf_s3gfn",
+    "mf_gfn",
+    "random_fidelity_gfn",
+    "sf_gfn",
     "random",
 )
 TASKS = ("ip", "ea")
@@ -29,9 +29,9 @@ METRICS = ("mean_top_100_score", "mean_top_100_diversity")
 DEFAULT_BUDGET = 1260.0
 BOOTSTRAP_RESAMPLES = 5000
 METHOD_STYLES = {
-    "mf_s3gfn": ("MF-S3-GFN", "#1f77b4", "-"),
-    "random_fidelity_s3gfn": ("Random-fidelity S3-GFN", "#ff7f0e", "--"),
-    "sf_s3gfn": ("SF-S3-GFN", "#2ca02c", "-."),
+    "mf_gfn": ("MF-GFN", "#1f77b4", "-"),
+    "random_fidelity_gfn": ("Random-fidelity GFN", "#ff7f0e", "--"),
+    "sf_gfn": ("SF-GFN", "#2ca02c", "-."),
     "random": ("Random", "#d62728", ":"),
 }
 

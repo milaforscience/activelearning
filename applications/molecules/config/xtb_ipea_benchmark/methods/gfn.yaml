@@ -1,0 +1,16 @@
+sampler:
+  type: GFlowNetSampler
+  n_samples: 640
+  conf:
+    env:
+      _target_: activelearning_molecules.samplers.gflownet_envs.SelfiesSmiles
+      env_id: selfies
+      id: selfies
+      max_length: 64
+    gflownet:
+      optimizer:
+        lr: 5.0e-4
+        lr_z_mult: 20
+        n_train_steps: 5000
+        batch_size:
+          forward: 128

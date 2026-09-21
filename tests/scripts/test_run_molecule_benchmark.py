@@ -16,8 +16,8 @@ def make_config_tree(root: Path) -> None:
     for relative_path in (
         "base.yaml",
         "encoders/gp_molformer.yaml",
-        "methods/s3gfn.yaml",
-        "methods/random_fidelity_s3gfn.yaml",
+        "methods/gfn.yaml",
+        "methods/random_fidelity_gfn.yaml",
         "methods/random.yaml",
         "tasks/ea_sf.yaml",
         "tasks/ea_mf.yaml",
@@ -44,20 +44,20 @@ def test_default_matrix_has_all_task_method_seed_combinations(tmp_path: Path) ->
     assert all("runtime.seed=" in " ".join(job.command) for job in jobs)
 
 
-def test_sf_method_uses_sf_task_and_s3gfn_overlay(tmp_path: Path) -> None:
-    """SF-S3-GFN selects the single-fidelity task overlay."""
+def test_sf_method_uses_sf_task_and_gfn_overlay(tmp_path: Path) -> None:
+    """SF-GFN selects the single-fidelity task overlay."""
     make_config_tree(tmp_path)
 
     job = build_jobs(
         repository_root=tmp_path,
         tasks=("ea",),
-        methods=("sf_s3gfn",),
+        methods=("sf_gfn",),
         seeds=(42,),
     )[0]
 
     assert any("tasks/ea_sf.yaml" in argument for argument in job.command)
-    assert any("methods/s3gfn.yaml" in argument for argument in job.command)
-    assert job.output_dir == tmp_path / "outputs/xtb_ipea_benchmark/ea/sf_s3gfn/seed_42"
+    assert any("methods/gfn.yaml" in argument for argument in job.command)
+    assert job.output_dir == tmp_path / "outputs/xtb_ipea_benchmark/ea/sf_gfn/seed_42"
 
 
 def test_random_methods_use_multi_fidelity_task(tmp_path: Path) -> None:
@@ -67,7 +67,7 @@ def test_random_methods_use_multi_fidelity_task(tmp_path: Path) -> None:
     jobs = build_jobs(
         repository_root=tmp_path,
         tasks=("ip",),
-        methods=("random_fidelity_s3gfn", "random"),
+        methods=("random_fidelity_gfn", "random"),
         seeds=(43,),
         extra_overrides=("budget.available_budget=7",),
     )

@@ -18,11 +18,11 @@ CATALOGS = {"activelearning-molecules": CONFIG_CATALOGS}
 
 def load_benchmark_config(task: str, method: str) -> ActiveLearningConfig:
     """Load one benchmark composition through the production registries."""
-    task_kind = "sf" if method == "sf_s3gfn" else "mf"
+    task_kind = "sf" if method == "sf_gfn" else "mf"
     method_overlay = {
-        "sf_s3gfn": "s3gfn",
-        "mf_s3gfn": "s3gfn",
-        "random_fidelity_s3gfn": "random_fidelity_s3gfn",
+        "sf_gfn": "gfn",
+        "mf_gfn": "gfn",
+        "random_fidelity_gfn": "random_fidelity_gfn",
         "random": "random",
     }[method]
     return load_and_parse(
@@ -40,41 +40,41 @@ def load_benchmark_config(task: str, method: str) -> ActiveLearningConfig:
 @pytest.mark.parametrize("task", ["ea", "ip"])
 @pytest.mark.parametrize(
     "method",
-    ["sf_s3gfn", "mf_s3gfn", "random_fidelity_s3gfn", "random"],
+    ["sf_gfn", "mf_gfn", "random_fidelity_gfn", "random"],
 )
 def test_all_public_benchmark_compositions_parse(task: str, method: str) -> None:
     """All two-task/four-method compositions resolve through Pydantic."""
     config = load_benchmark_config(task, method)
 
-    assert config.surrogate.type == "VariationalGPSurrogate"
+    assert config.surrogate.type == "ExactGPSurrogate"
     assert config.surrogate.encoder.type == "GPMoLFormerSmilesFixedEncoder"
     assert config.surrogate.encoder.input_representation == "smiles"
     assert config.oracle.task == task
     assert config.oracle.mol_repr == "smiles"
-    assert config.selector.num_samples == 128
+    assert config.selector.type == "CostAwareSelector"
     assert config.budget.available_budget == 1260.0
     assert config.run_writer is not None
     assert config.run_writer.output_dir == Path(
         "outputs/xtb_ipea_benchmark/default/seed_42"
     )
 
-    if method == "sf_s3gfn":
+    if method == "sf_gfn":
         assert config.oracle.fidelity_costs == {3: 7.0}
         assert config.oracle.per_fidelity_num_conformers == {3: 4}
         assert config.sampler.fidelities == [3]
         assert config.acquisition.type == "QLowerBoundMaxValueEntropy"
         assert config.dataset.initial_data.default_fidelity == 3
         assert config.surrogate.is_multi_fidelity is False
-    elif method == "mf_s3gfn":
+    elif method == "mf_gfn":
         assert config.oracle.fidelity_costs == {1: 1.0, 2: 3.5, 3: 7.0}
         assert config.oracle.per_fidelity_num_conformers == {1: 1, 2: 2, 3: 4}
         assert config.sampler.fidelities == [1, 2, 3]
         assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
         assert config.sampler.fidelity_policy == "learned"
         assert config.surrogate.is_multi_fidelity is True
-    elif method == "random_fidelity_s3gfn":
+    elif method == "random_fidelity_gfn":
         assert config.sampler.fidelity_policy == "uniform"
-        assert config.sampler.reward_fidelity == 3
+        assert config.sampler.fidelity_action == "first"
         assert config.sampler.fidelities == [1, 2, 3]
     else:
         assert isinstance(config.sampler, RandomMoleculeSamplerConfig)
@@ -83,7 +83,7 @@ def test_all_public_benchmark_compositions_parse(task: str, method: str) -> None
 
 def test_ip_initial_targets_are_negated_and_sf_rows_use_fidelity_three() -> None:
     """IP signs and the SF default fidelity are resolved at data load time."""
-    config = load_benchmark_config("ip", "sf_s3gfn")
+    config = load_benchmark_config("ip", "sf_gfn")
     observations = config.dataset.initial_data.load_observations(
         negate_targets=config.dataset.negate_initial_targets
     )
@@ -106,7 +106,7 @@ def test_encoder_overlay_can_be_replaced_with_minimol(tmp_path: Path) -> None:
             CONFIG_ROOT / "base.yaml",
             encoder,
             CONFIG_ROOT / "tasks/ea_mf.yaml",
-            CONFIG_ROOT / "methods/s3gfn.yaml",
+            CONFIG_ROOT / "methods/gfn.yaml",
         ],
         ActiveLearningConfig,
         catalogs=CATALOGS,

@@ -207,6 +207,8 @@ class GFlowNetSamplerConfig(BuildableConfig):
     fidelities : list[int] or None
         Fidelity levels to generate. When ``None``, the top-level config
         validator fills this from the oracle's fidelity set.
+    fidelity_policy : {"learned", "uniform"}
+        Whether the multi-fidelity action is learned or sampled uniformly.
     log_dir : str or None
         Root directory for GFlowNet logs. A temporary directory is created
         automatically when ``None``.
@@ -220,6 +222,7 @@ class GFlowNetSamplerConfig(BuildableConfig):
     n_samples: int = Field(gt=0)
     fidelities: _FidelityLevels | None = None
     fidelity_action: _FidelityAction = "any"
+    fidelity_policy: Literal["learned", "uniform"] = "learned"
     log_dir: str | None = None
     conf: dict[str, Any] | None = None
 
@@ -236,6 +239,7 @@ class GFlowNetSamplerConfig(BuildableConfig):
             conf=compose_gflownet_conf(conf_overrides=self.conf, log_dir=self.log_dir),
             fidelities=_resolve_fidelities(self.fidelities),
             fidelity_action=self.fidelity_action,
+            fidelity_policy=self.fidelity_policy,
         )
 
 

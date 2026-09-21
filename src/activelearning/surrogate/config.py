@@ -317,11 +317,64 @@ class VariationalGPSurrogateConfig(BuildableConfig):
         )
 
 
+class ExactGPSurrogateConfig(BuildableConfig):
+    """Configuration for an exact GP on fixed features."""
+
+    type: Literal["ExactGPSurrogate"] = "ExactGPSurrogate"
+    is_botorch_compatible: ClassVar[bool] = True
+    encoder: FixedEncoderConfig
+    target_fidelity: int | None = None
+    scale_inputs: bool = True
+    standardize_outputs: bool = True
+    fit_kwargs: dict[str, Any] = Field(default_factory=dict)
+    _is_multi_fidelity: bool = PrivateAttr(default=False)
+
+    @property
+    def is_multi_fidelity(self) -> bool:
+        """Return the fidelity mode derived from the configured oracle."""
+        return self._is_multi_fidelity
+
+    def resolve_fidelity_confidences(
+        self,
+        confidences: dict[int, float],
+    ) -> "ExactGPSurrogateConfig":
+        """Resolve multi-fidelity mode and the target fidelity."""
+        is_multi_fidelity = len(confidences) > 1
+        target_fidelity = self.target_fidelity
+        if not is_multi_fidelity:
+            target_fidelity = None
+        elif target_fidelity is None:
+            target_fidelity = max(confidences, key=confidences.__getitem__)
+        elif target_fidelity not in confidences:
+            raise ValueError(
+                f"Surrogate target_fidelity {target_fidelity} is not declared by "
+                f"the oracle. Oracle declares: {sorted(confidences)}."
+            )
+
+        resolved = self.model_copy(update={"target_fidelity": target_fidelity})
+        resolved._is_multi_fidelity = is_multi_fidelity
+        return resolved
+
+    def build(self) -> Surrogate:
+        """Build the fixed-feature exact GP surrogate."""
+        from activelearning.surrogate.exact_gp import ExactGPSurrogate
+
+        return ExactGPSurrogate(
+            encoder=self.encoder.build(),
+            is_multi_fidelity=self.is_multi_fidelity,
+            target_fidelity=self.target_fidelity,
+            scale_inputs=self.scale_inputs,
+            standardize_outputs=self.standardize_outputs,
+            fit_kwargs=self.fit_kwargs,
+        )
+
+
 SURROGATE_CONFIGS = (
     DummyMeanSurrogateConfig,
     BoTorchGPSurrogateConfig,
     ExactDKLSurrogateConfig,
     VariationalDKLSurrogateConfig,
     VariationalGPSurrogateConfig,
+    ExactGPSurrogateConfig,
 )
 SurrogateConfig = registered_config("surrogate")

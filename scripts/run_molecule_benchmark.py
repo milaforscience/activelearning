@@ -14,9 +14,9 @@ from typing import Sequence
 DEFAULT_SEEDS = (42, 43, 44)
 DEFAULT_TASKS = ("ea", "ip")
 DEFAULT_METHODS = (
-    "sf_s3gfn",
-    "mf_s3gfn",
-    "random_fidelity_s3gfn",
+    "sf_gfn",
+    "mf_gfn",
+    "random_fidelity_gfn",
     "random",
 )
 
@@ -67,7 +67,7 @@ def build_jobs(
     jobs: list[BenchmarkJob] = []
     for task in task_values:
         for method in method_values:
-            task_name = "sf" if method == "sf_s3gfn" else "mf"
+            task_name = "sf" if method == "sf_gfn" else "mf"
             task_config = config_root / "tasks" / f"{task}_{task_name}.yaml"
             method_config = config_root / "methods" / f"{_method_overlay(method)}.yaml"
             data_file = config_root / "data" / f"{task}_{task_name}.csv"
@@ -224,8 +224,8 @@ def _validate_seeds(values: Sequence[int]) -> tuple[int, ...]:
 
 def _method_overlay(method: str) -> str:
     """Map a public method identifier to its YAML overlay name."""
-    if method in {"sf_s3gfn", "mf_s3gfn"}:
-        return "s3gfn"
+    if method in {"sf_gfn", "mf_gfn"}:
+        return "gfn"
     return method
 
 

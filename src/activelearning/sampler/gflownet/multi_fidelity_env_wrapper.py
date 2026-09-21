@@ -11,6 +11,32 @@ from gflownet.envs.composite.stack import Stack
 #: Populated at the bottom of this module after all classes are defined.
 
 
+class UniformChoice(Choice):
+    """Choice environment whose actions ignore the policy and are uniform.
+
+    The policy outputs for this sub-environment are replaced by the random
+    policy output both when sampling and when scoring actions, so the chosen
+    option is uniform over the valid actions and is never learned.
+    """
+
+    def _uniform_policy_outputs(self, policy_outputs: Any) -> Any:
+        """Return uniform policy outputs with the shape of ``policy_outputs``."""
+        uniform = self.random_policy_output.to(policy_outputs)
+        return uniform.expand_as(policy_outputs).clone()
+
+    def sample_actions_batch(self, policy_outputs, *args, **kwargs):
+        """Sample actions uniformly among the valid ones."""
+        return super().sample_actions_batch(
+            self._uniform_policy_outputs(policy_outputs), *args, **kwargs
+        )
+
+    def get_logprobs(self, policy_outputs, *args, **kwargs):
+        """Return log-probabilities of actions under the uniform policy."""
+        return super().get_logprobs(
+            self._uniform_policy_outputs(policy_outputs), *args, **kwargs
+        )
+
+
 class MultiFidelityGFlowNetEnvWrapperBase(CompositeBase, ABC):
     """Common base environment for all the multi-fidelity environment wrappers.
 
@@ -114,6 +140,7 @@ class MultiFidelityGFlowNetEnvWrapper(SetFix, MultiFidelityGFlowNetEnvWrapperBas
         self,
         env_base_maker: Callable[..., GFlowNetEnv],
         n_fidelities: int,
+        uniform_fidelity: bool = False,
         **kwargs,
     ) -> None:
         """Initializes a MultiFidelityGFlowNetEnvWrapper instance.
@@ -126,9 +153,12 @@ class MultiFidelityGFlowNetEnvWrapper(SetFix, MultiFidelityGFlowNetEnvWrapperBas
             The number of possible fidelity choices. The underlying
             ``Choice(n_options=n_fidelities)`` env produces **1-based** states
             (``1..n_fidelities``); state ``0`` is the uncommitted source.
+        uniform_fidelity : bool
+            If True, the fidelity is sampled uniformly at random instead of
+            from the policy (see :class:`UniformChoice`).
         """
         self.env_base = env_base_maker()
-        self.env_fidelity = Choice(
+        self.env_fidelity = (UniformChoice if uniform_fidelity else Choice)(
             n_options=n_fidelities,
             float_precision=kwargs.get("float_precision", 32),
             device=kwargs.get("device", "cpu"),
@@ -160,6 +190,7 @@ class MultiFidelityGFlowNetEnvWrapperFidFirst(
         self,
         env_base_maker: Callable[..., GFlowNetEnv],
         n_fidelities: int,
+        uniform_fidelity: bool = False,
         **kwargs,
     ) -> None:
         """Initializes a MultiFidelityGFlowNetEnvWrapperFidFirst instance.
@@ -172,9 +203,12 @@ class MultiFidelityGFlowNetEnvWrapperFidFirst(
             The number of possible fidelity choices. The underlying
             ``Choice(n_options=n_fidelities)`` env produces **1-based** states
             (``1..n_fidelities``); state ``0`` is the uncommitted source.
+        uniform_fidelity : bool
+            If True, the fidelity is sampled uniformly at random instead of
+            from the policy (see :class:`UniformChoice`).
         """
         self.env_base = env_base_maker()
-        self.env_fidelity = Choice(
+        self.env_fidelity = (UniformChoice if uniform_fidelity else Choice)(
             n_options=n_fidelities,
             float_precision=kwargs.get("float_precision", 32),
             device=kwargs.get("device", "cpu"),
@@ -206,6 +240,7 @@ class MultiFidelityGFlowNetEnvWrapperFidLast(
         self,
         env_base_maker: Callable[..., GFlowNetEnv],
         n_fidelities: int,
+        uniform_fidelity: bool = False,
         **kwargs,
     ) -> None:
         """Initializes a MultiFidelityGFlowNetEnvWrapperFidLast instance.
@@ -218,9 +253,12 @@ class MultiFidelityGFlowNetEnvWrapperFidLast(
             The number of possible fidelity choices. The underlying
             ``Choice(n_options=n_fidelities)`` env produces **1-based** states
             (``1..n_fidelities``); state ``0`` is the uncommitted source.
+        uniform_fidelity : bool
+            If True, the fidelity is sampled uniformly at random instead of
+            from the policy (see :class:`UniformChoice`).
         """
         self.env_base = env_base_maker()
-        self.env_fidelity = Choice(
+        self.env_fidelity = (UniformChoice if uniform_fidelity else Choice)(
             n_options=n_fidelities,
             float_precision=kwargs.get("float_precision", 32),
             device=kwargs.get("device", "cpu"),
