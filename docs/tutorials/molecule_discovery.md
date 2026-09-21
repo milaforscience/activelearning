@@ -72,7 +72,9 @@ S3-GFN uses the validated GPU configuration by default: BF16, compilation for
 training and final generation, the attention-mask adapter, the compiled frozen
 prior scorer, and equal training, replay, and final-generation batch sizes of
 64. `generation_batch_size: null` inherits `batch_size`, so the normal config
-does not need to repeat that value.
+does not need to repeat that value. See
+[S3-GFN Performance](../resources/s3gfn-performance.md) for the complete
+preset and batch-size reference.
 
 To opt out of compilation and use the eager FP32 path, add one line under the
 sampler:
@@ -381,6 +383,16 @@ The main molecule-specific fields are:
 | `surrogate.encoder.latent_dim` | Size of the representation passed to the GP after the encoder's projection or feature head. |
 | `surrogate.target_fidelity` | Fidelity level used when MF acquisitions project candidates to the target objective. |
 | `surrogate.num_inducing` | Number of inducing points for the sparse variational GP in `VariationalDKLSurrogate`. |
+| `sampler.performance_mode` | S3-GFN performance preset: `optimized` (default) or `eager`. |
+| `sampler.compile_strategy` | S3-GFN compilation scope: `none`, `training_only`, or `training_and_generation`. |
+| `sampler.torch_compile_mode` | TorchInductor mode used when S3-GFN compilation is enabled. |
+| `sampler.torch_compile_dynamic` | Dynamic-shape policy passed to `torch.compile`. |
+| `sampler.attention_mask_adapter` | Enables the GP-MoLFormer attention-mask adapter for the compiled S3-GFN path. |
+| `sampler.compile_prior_scorer` | Compiles frozen-prior sequence scoring as a separate no-gradient graph. |
+| `sampler.model_dtype` | S3-GFN model and loss dtype: `float32` or `bfloat16`. |
+| `sampler.batch_size` | Number of molecules generated during each S3-GFN training step. |
+| `sampler.replay_batch_size` | Maximum positive and negative trajectories sampled for a replay update. |
+| `sampler.generation_batch_size` | Number of molecules generated per final candidate-generation call; omitted values inherit `sampler.batch_size`. |
 | `sampler.candidate_pool_file` | SELFIES pool used by `PoolFileSampler`. |
 | `sampler.conf.env._target_` | GFlowNet environment class for generated SELFIES. |
 | `sampler.fidelities` | Fidelity levels available to the GFlowNet policy. `[1]` restricts the policy to fidelity 1 only (single-fidelity); `[1, 2, 3]` enables joint molecule-fidelity sampling (multi-fidelity). |
