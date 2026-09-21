@@ -87,7 +87,7 @@ Every experiment is defined by a single YAML file with these top-level sections:
 
 | Section | Description |
 |---------|-------------|
-| `runtime` | Device (`cpu`/`cuda`) and floating-point precision (`32`/`64`) |
+| `runtime` | Device (`cpu`/`cuda`) and floating-point precision (`32` or `64`) |
 | `dataset` | Dataset backend (e.g. `ListDataset`) |
 | `surrogate` | Probabilistic model (e.g. `BoTorchGPSurrogate`) |
 | `acquisition` | Acquisition function (e.g. `QMultiFidelityLowerBoundMaxValueEntropy`) |
@@ -98,6 +98,13 @@ Every experiment is defined by a single YAML file with these top-level sections:
 | `logger` | *(Optional)* Live telemetry backend |
 | `run_writer` | *(Optional)* Durable structured run-output sink |
 | `diagnostics` | *(Optional)* Diagnostic metric and figure controls |
+
+### S3-GFN performance controls
+
+S3-GFN supports BF16 model execution, compiled policy forwards, and independent
+training, replay, and final-generation batch sizes. See the
+[molecule discovery tutorial](docs/tutorials/molecule_discovery.md#s3-gfn-with-smiles)
+for configuration guidance and A100 benchmark results.
 
 ### Overriding Config Values
 

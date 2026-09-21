@@ -38,7 +38,7 @@ The repository includes several example molecule configs arranged as an incremen
 | `config/molecules/s3gfn_exact.yaml` | S3-GFN | Exact GP-MoLFormer SMILES DKL | UCB | fixed fidelity `1` | Canonical SMILES single-fidelity run |
 | `config/molecules/s3gfn_exact_multi_fidelity.yaml` | S3-GFN | Exact GP-MoLFormer SMILES DKL | MF-MES | learned fidelity `1 / 2 / 3` | Canonical SMILES multi-fidelity run |
 | `config/molecules/s3gfn_minimol_exact.yaml` | S3-GFN | Exact MiniMol SMILES DKL | UCB | fixed fidelity `1` | Canonical SMILES run with frozen graph fingerprints |
-| `config/molecules/s3gfn_minimol_variational_multi_fidelity.yaml` | S3-GFN | Variational MiniMol SMILES DKL | MF-MES | learned fidelity `1 / 2 / 3` | Canonical SMILES multi-fidelity run with a sparse GP head |
+| `config/molecules/s3gfn_minimol_variational_multi_fidelity.yaml` | S3-GFN | Variational MiniMol SMILES DKL | MF-MES | learned fidelity `1 / 2 / 3` | GPU-optimized multi-fidelity run with a sparse GP head |
 
 !!! note "Small defaults for fast checks"
     These examples are tuned to be runnable tutorial setups, not fully optimized molecule-discovery runs. The short command overrides below keep the active-learning budget small enough for a quick functional check, and the provided GFlowNet examples also use relatively short training schedules in the exact-surrogate stages so you can verify the full loop quickly. For better learning, increase both the oracle budget so the surrogate sees more observations and the GFlowNet optimization steps so the policy can better approximate reward-proportional sampling.
@@ -67,6 +67,29 @@ losses, log-Z, raw reward statistics, generation validity and duplicate rates,
 fidelity proportions, and training or generation durations. The corresponding
 trajectory figures are `sampler/s3gfn/training_losses`,
 `sampler/s3gfn/log_z`, and `sampler/s3gfn/reward/trajectory`.
+
+S3-GFN uses the validated GPU configuration by default: BF16, compilation for
+training and final generation, the attention-mask adapter, the compiled frozen
+prior scorer, and equal training, replay, and final-generation batch sizes of
+64. `generation_batch_size: null` inherits `batch_size`, so the normal config
+does not need to repeat that value. See
+[S3-GFN Performance](../resources/s3gfn-performance.md) for the complete
+preset and batch-size reference.
+
+To opt out of compilation and use the eager FP32 path, add one line under the
+sampler:
+
+```yaml
+sampler:
+  performance_mode: eager
+```
+
+Advanced users can still set `compile_strategy`, `torch_compile_mode`,
+`torch_compile_dynamic`, `attention_mask_adapter`, `compile_prior_scorer`, and
+`model_dtype` individually. Explicit low-level values take precedence over the
+selected preset. Keep `batch_size` and `replay_batch_size` aligned unless the
+workload has been measured on the target GPU; leave `generation_batch_size`
+omitted to retain the validated inheritance behavior.
 
 ### **Choosing an encoder for DKL**
 
@@ -360,6 +383,16 @@ The main molecule-specific fields are:
 | `surrogate.encoder.latent_dim` | Size of the representation passed to the GP after the encoder's projection or feature head. |
 | `surrogate.target_fidelity` | Fidelity level used when MF acquisitions project candidates to the target objective. |
 | `surrogate.num_inducing` | Number of inducing points for the sparse variational GP in `VariationalDKLSurrogate`. |
+| `sampler.performance_mode` | S3-GFN performance preset: `optimized` (default) or `eager`. |
+| `sampler.compile_strategy` | S3-GFN compilation scope: `none`, `training_only`, or `training_and_generation`. |
+| `sampler.torch_compile_mode` | TorchInductor mode used when S3-GFN compilation is enabled. |
+| `sampler.torch_compile_dynamic` | Dynamic-shape policy passed to `torch.compile`. |
+| `sampler.attention_mask_adapter` | Enables the GP-MoLFormer attention-mask adapter for the compiled S3-GFN path. |
+| `sampler.compile_prior_scorer` | Compiles frozen-prior sequence scoring as a separate no-gradient graph. |
+| `sampler.model_dtype` | S3-GFN model and loss dtype: `float32` or `bfloat16`. |
+| `sampler.batch_size` | Number of molecules generated during each S3-GFN training step. |
+| `sampler.replay_batch_size` | Maximum positive and negative trajectories sampled for a replay update. |
+| `sampler.generation_batch_size` | Number of molecules generated per final candidate-generation call; omitted values inherit `sampler.batch_size`. |
 | `sampler.candidate_pool_file` | SELFIES pool used by `PoolFileSampler`. |
 | `sampler.conf.env._target_` | GFlowNet environment class for generated SELFIES. |
 | `sampler.fidelities` | Fidelity levels available to the GFlowNet policy. `[1]` restricts the policy to fidelity 1 only (single-fidelity); `[1, 2, 3]` enables joint molecule-fidelity sampling (multi-fidelity). |
