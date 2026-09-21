@@ -8,6 +8,7 @@ from activelearning.budget.budget import Budget
 from activelearning.dataset.dataset import Dataset
 from activelearning.logger.logger import Logger
 from activelearning.monitoring.diagnostics_config import DiagnosticsConfig
+from activelearning.monitoring.diagnostics import PrequentialHistory
 from activelearning.monitoring.orchestration import (
     collect_round_diagnostics,
     record_completed_round,
@@ -22,7 +23,6 @@ from activelearning.runtime import (
 )
 from activelearning.sampler.sampler import Sampler
 from activelearning.selector.selector import Selector
-from activelearning.surrogate.plotting import PredictionPanel
 from activelearning.surrogate.surrogate import MultiFidelitySurrogate, Surrogate
 from activelearning.utils.types import (
     Candidate,
@@ -129,7 +129,7 @@ def active_learning(
 
     initial_budget = budget.available_budget
     num_rounds = 0
-    surrogate_prequential_history: tuple[PredictionPanel, ...] = ()
+    surrogate_prequential_history = PrequentialHistory()
 
     run_started = time.perf_counter()
 
@@ -290,7 +290,6 @@ def active_learning(
                 budget=budget,
                 enabled=diagnostics_enabled,
                 include_figures=(num_rounds % diagnostics_config.figure_interval == 0),
-                max_points=diagnostics_config.max_points,
                 prequential_history=surrogate_prequential_history,
             )
         profiling["profiling/round/total_s"] = time.perf_counter() - round_started

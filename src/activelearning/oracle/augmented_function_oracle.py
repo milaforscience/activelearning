@@ -155,10 +155,8 @@ class BraninOracle(AugmentedFunctionOracle):
         self,
         *,
         include_figures: bool,
-        max_points: int,
     ) -> tuple[dict[str, float | int], dict[str, Any]]:
         """Return an optional query landscape for the most recent AL round."""
-        _ = max_points
         candidates = self._pending_landscape_candidates
         self._pending_landscape_candidates = None
         if candidates is None or not include_figures:

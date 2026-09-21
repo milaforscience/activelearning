@@ -106,7 +106,6 @@ def test_branin_benchmark_configs_parse(
     assert config.budget.max_rounds == 300
     assert config.diagnostics.enabled is True
     assert config.diagnostics.figure_interval == 1
-    assert config.diagnostics.max_points == 1000
     assert config.run_writer is not None
     assert config.run_writer.output_dir == Path(
         f"outputs/branin_benchmark/{overlay_name}/seed_42"

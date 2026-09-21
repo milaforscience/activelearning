@@ -59,10 +59,11 @@ Surrogate diagnostics use sequential, or prequential, evaluation. The model
 fitted using data from earlier rounds predicts the candidates selected in the
 current round. Those predictions are compared with oracle results only after
 the results arrive, avoiding look-ahead bias. Current-round metrics cover all
-finite scalar targets. Predictions are evaluated in batches of at most
-`diagnostics.max_points`, and the same setting bounds retained prediction
-history and rendered points. A current-round score can still be noisy when only
-a few candidates are selected.
+finite scalar targets. Predictions and retained prediction history include the
+complete current round. Rendered surrogate plots aggregate every finite pair
+into bounded count grids, so plot size does not grow with the number of points
+while rare occupied cells remain represented. A current-round score can still
+be noisy when only a few candidates are selected.
 
 Built-in score-based selectors also report the values used during selection. The
 standard score metrics are:
@@ -76,8 +77,8 @@ standard score metrics are:
 
 When figures are enabled, the sampled-versus-selected raw and ranking
 distributions are emitted as
-`acquisition/general/score_distribution`. Histogram inputs are bounded by
-`diagnostics.max_points`; scalar summaries use every finite score. `nan`,
+`acquisition/general/score_distribution`. Histograms and scalar summaries use
+every finite score. `nan`,
 positive infinity, and negative infinity are omitted from summaries and plots.
 An infinite cost-aware ratio can still determine selection, but is not reported
 as a diagnostic value.
@@ -148,15 +149,11 @@ Diagnostics are configured at the experiment level:
 diagnostics:
   enabled: true
   figure_interval: 1
-  max_points: 1000
 ```
 
 - `diagnostics.enabled` enables general and implementation-specific diagnostics
   when a logger or run writer is configured.
 - `diagnostics.figure_interval` renders figures every $N$ completed rounds.
-- `diagnostics.max_points` bounds surrogate prediction batch size, retained
-  rolling prediction rows, and rendered points. It does not reduce the number
-  of current-round rows used for scalar metrics.
 
 Set `diagnostics.enabled: false` to skip general diagnostics.
 Implementation-specific pending data is still drained and discarded at the
@@ -177,7 +174,6 @@ def drain_round_diagnostics(
     self,
     *,
     include_figures: bool,
-    max_points: int,
 ) -> tuple[dict[str, int | float], dict[str, Figure]]:
     """Return and clear diagnostics for the completed active-learning round."""
 ```

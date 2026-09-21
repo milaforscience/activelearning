@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 import math
 from typing import TYPE_CHECKING, Any
 
@@ -25,30 +26,44 @@ if TYPE_CHECKING:
     from activelearning.monitoring.run_writer import RoundRecord
 
 
+_PREDICTION_BATCH_SIZE = 4096
+
+
+@dataclass(frozen=True)
+class PrequentialHistory:
+    """Round-level prediction chunks and exact rolling metric accumulators."""
+
+    panels: tuple[PredictionPanel, ...] = ()
+    count: int = 0
+    squared_error_sum: float = 0.0
+    absolute_error_sum: float = 0.0
+    residual_sum: float = 0.0
+    target_mean: float = 0.0
+    target_m2: float = 0.0
+    standard_deviation_sum: float | None = 0.0
+    coverage_count: int | None = 0
+
+
 def surrogate_diagnostics(
     surrogate: Surrogate,
     record: "RoundRecord",
     *,
-    max_points: int,
     include_figures: bool,
-    prequential_history: Sequence[PredictionPanel] = (),
-) -> tuple[dict[str, int | float], dict[str, Figure], PredictionPanel | None]:
+    prequential_history: PrequentialHistory = PrequentialHistory(),
+) -> tuple[dict[str, int | float], dict[str, Figure], PrequentialHistory]:
     """Compute leakage-free current-round and rolling surrogate quality.
 
     The current round is predicted before its oracle observations are added to
-    the next model update. Predictions for scalar targets are evaluated in
-    bounded batches, while the returned metrics cover every finite target in
-    the round. The supplied history is never modified.
+    the next model update. Metrics and rendered panels cover every finite target
+    in the round. Historical values remain in round-level chunks while rolling
+    metrics use sufficient statistics instead of cumulative value tuples.
     """
-    if max_points < 1:
-        raise ValueError("max_points must be at least 1.")
     if not surrogate.is_fitted():
-        return {}, {}, None
+        return {}, {}, prequential_history
 
     current_panel = _prospective_prediction_panel(
         surrogate,
         record,
-        max_points=max_points,
     )
     metrics: dict[str, int | float] = {}
     if current_panel is not None:
@@ -58,17 +73,15 @@ def surrogate_diagnostics(
             current_panel,
         )
 
-    updated_history = append_prequential_panel(
+    updated_history = _append_prequential_panel(
         prequential_history,
         current_panel,
-        max_points=max_points,
     )
-    rolling_panel = updated_history[0] if updated_history else None
-    if rolling_panel is not None:
-        _add_prediction_metrics(
+    if updated_history.count:
+        _add_rolling_prediction_metrics(
             metrics,
             "surrogate/general/held_out/rolling",
-            rolling_panel,
+            updated_history,
         )
 
     figures: dict[str, Figure] = {}
@@ -76,24 +89,20 @@ def surrogate_diagnostics(
         figure_panels: list[PredictionPanel] = []
         if current_panel is not None:
             figure_panels.append(current_panel)
-        if rolling_panel is not None and prequential_history:
-            figure_panels.append(rolling_panel)
+        if prequential_history.panels:
+            figure_panels.extend(updated_history.panels)
         figure = build_predicted_vs_observed_figure(
             figure_panels,
-            max_points=max_points,
         )
         if figure is not None:
             figures["surrogate/general/predicted_vs_observed"] = figure
-    return metrics, figures, current_panel
+    return metrics, figures, updated_history
 
 
 def sampler_diagnostics(
     record: "RoundRecord",
-    *,
-    max_points: int,
 ) -> tuple[dict[str, int | float], dict[str, Figure]]:
     """Summarize candidate duplication, overlap, and fidelity proportions."""
-    _ = max_points
     candidates = record.sampled_candidates
     metrics: dict[str, int | float] = {}
     candidate_keys = [candidate_identity(candidate) for candidate in candidates]
@@ -171,8 +180,10 @@ def dataset_diagnostics(
         )
         targets = [
             target
-            for observation in fidelity_observations
-            if (target := _finite_scalar(observation.y)) is not None
+            for target in _finite_scalar_values(
+                [observation.y for observation in fidelity_observations]
+            )
+            if target is not None
         ]
         if targets:
             metrics[f"dataset/general/fidelity_{fidelity}/target_best"] = max(targets)
@@ -198,7 +209,6 @@ def selection_score_diagnostics(
     scores: SelectionScores | None,
     *,
     include_figures: bool,
-    max_points: int,
 ) -> tuple[dict[str, int | float], dict[str, Figure]]:
     """Summarize the scores used by a completed built-in selection.
 
@@ -207,8 +217,6 @@ def selection_score_diagnostics(
     Non-finite values are excluded from summaries and figures, while selection
     itself may still have used them (for example, an infinite zero-cost ratio).
     """
-    if max_points < 1:
-        raise ValueError("max_points must be at least 1.")
     if scores is None:
         return {}, {}
     if len(scores.acquisition_scores) != len(scores.ranking_scores):
@@ -278,68 +286,84 @@ def selection_score_diagnostics(
             )
         figure = _score_distribution_figure(
             distributions,
-            max_points=max_points,
         )
         if figure is not None:
             figures["acquisition/general/score_distribution"] = figure
     return metrics, figures
 
 
-def append_prequential_panel(
-    history: Sequence[PredictionPanel],
+def _append_prequential_panel(
+    history: PrequentialHistory,
     panel: PredictionPanel | None,
-    *,
-    max_points: int,
-) -> tuple[PredictionPanel, ...]:
-    """Append a panel and retain at most ``max_points`` newest rows."""
-    if max_points < 1:
-        raise ValueError("max_points must be at least 1.")
-    panels = [*history]
-    if panel is not None:
-        panels.append(panel)
-    combined = _combine_prediction_panels(panels)
-    if combined is None:
-        return ()
-    bounded_rows = list(
-        zip(
-            combined.targets,
-            combined.means,
-            combined.standard_deviations or [None] * len(combined.targets),
-            combined.fidelities,
+) -> PrequentialHistory:
+    """Append one round chunk and update rolling sufficient statistics."""
+    if panel is None or not panel.targets:
+        return history
+
+    targets = torch.as_tensor(panel.targets, dtype=torch.float64)
+    means = torch.as_tensor(panel.means, dtype=torch.float64)
+    residuals = means - targets
+    panel_count = len(panel.targets)
+    panel_target_mean = float(targets.mean().item())
+    panel_target_m2 = float((targets - panel_target_mean).square().sum().item())
+    if history.count:
+        mean_delta = panel_target_mean - history.target_mean
+        total_count = history.count + panel_count
+        target_mean = history.target_mean + mean_delta * panel_count / total_count
+        target_m2 = (
+            history.target_m2
+            + panel_target_m2
+            + mean_delta**2 * history.count * panel_count / total_count
         )
-    )[-max_points:]
-    standard_deviations = (
-        None
-        if combined.standard_deviations is None
-        else tuple(row[2] for row in bounded_rows if row[2] is not None)
-    )
-    if standard_deviations is not None and len(standard_deviations) != len(
-        bounded_rows
-    ):
-        standard_deviations = None
-    return (
-        PredictionPanel(
-            title="Held-out rolling",
-            targets=tuple(row[0] for row in bounded_rows),
-            means=tuple(row[1] for row in bounded_rows),
-            standard_deviations=standard_deviations,
-            fidelities=tuple(row[3] for row in bounded_rows),
-        ),
+    else:
+        total_count = panel_count
+        target_mean = panel_target_mean
+        target_m2 = panel_target_m2
+
+    if history.standard_deviation_sum is None or panel.standard_deviations is None:
+        standard_deviation_sum = None
+        coverage_count = None
+    else:
+        standard_deviations = torch.as_tensor(
+            panel.standard_deviations,
+            dtype=torch.float64,
+        )
+        if history.coverage_count is None:
+            raise ValueError("Coverage count is missing for a finite deviation sum.")
+        standard_deviation_sum = history.standard_deviation_sum + float(
+            standard_deviations.sum().item()
+        )
+        coverage_count = history.coverage_count + int(
+            (residuals.abs() <= 1.96 * standard_deviations).sum().item()
+        )
+
+    rolling_panel = replace(panel, title="Held-out rolling")
+    return PrequentialHistory(
+        panels=(*history.panels, rolling_panel),
+        count=total_count,
+        squared_error_sum=history.squared_error_sum
+        + float(residuals.square().sum().item()),
+        absolute_error_sum=history.absolute_error_sum
+        + float(residuals.abs().sum().item()),
+        residual_sum=history.residual_sum + float(residuals.sum().item()),
+        target_mean=target_mean,
+        target_m2=target_m2,
+        standard_deviation_sum=standard_deviation_sum,
+        coverage_count=coverage_count,
     )
 
 
 def _prospective_prediction_panel(
     surrogate: Surrogate,
     record: "RoundRecord",
-    *,
-    max_points: int,
 ) -> PredictionPanel | None:
     """Predict selected candidates against their newly queried targets."""
     if len(record.selected_candidates) != len(record.queried_observations):
         raise ValueError(
             "Selected candidates and observations must have matching lengths."
         )
-    pairs: list[tuple[Candidate, float]] = []
+    candidates: list[Candidate] = []
+    target_values: list[Any] = []
     for candidate, observation in zip(
         record.selected_candidates,
         record.queried_observations,
@@ -350,25 +374,21 @@ def _prospective_prediction_panel(
             raise ValueError(
                 "Oracle observations must preserve candidate input identity."
             )
-        target = _finite_scalar(observation.y)
-        if target is not None:
-            pairs.append((candidate, target))
+        candidates.append(candidate)
+        target_values.append(observation.y)
+    finite_targets = _finite_scalar_values(target_values)
+    pairs: list[tuple[Candidate, float]] = [
+        (candidate, target)
+        for candidate, target in zip(candidates, finite_targets)
+        if target is not None
+    ]
     if not pairs:
         return None
 
-    means: list[float] = []
-    standard_deviations: list[float] | None = []
-    for start in range(0, len(pairs), max_points):
-        batch = pairs[start : start + max_points]
-        prediction = _predict(surrogate, [candidate for candidate, _ in batch])
-        if prediction is None:
-            return None
-        batch_means, batch_standard_deviations = prediction
-        means.extend(batch_means)
-        if batch_standard_deviations is None:
-            standard_deviations = None
-        elif standard_deviations is not None:
-            standard_deviations.extend(batch_standard_deviations)
+    prediction = _predict(surrogate, [candidate for candidate, _ in pairs])
+    if prediction is None:
+        return None
+    means, standard_deviations = prediction
     return PredictionPanel(
         title="Held-out current round",
         targets=tuple(target for _, target in pairs),
@@ -384,21 +404,32 @@ def _predict(
     surrogate: Surrogate,
     candidates: Sequence[Candidate],
 ) -> tuple[list[float], list[float] | None] | None:
-    """Return aligned, finite mean and optional standard-deviation predictions."""
-    try:
-        prediction = surrogate.predict(candidates)
-    except (NotImplementedError, TypeError, ValueError, RuntimeError):
-        return None
-    if not isinstance(prediction, Mapping):
-        return None
-    means = _prediction_values(prediction.get("mean"), len(candidates))
-    if means is None:
-        return None
-    standard_deviations = _prediction_values(prediction.get("std"), len(candidates))
-    if standard_deviations is not None and any(
-        value < 0 for value in standard_deviations
-    ):
-        standard_deviations = None
+    """Return aligned predictions while bounding one model call's batch size."""
+    means: list[float] = []
+    standard_deviations: list[float] | None = []
+    for start in range(0, len(candidates), _PREDICTION_BATCH_SIZE):
+        batch = candidates[start : start + _PREDICTION_BATCH_SIZE]
+        try:
+            prediction = surrogate.predict(batch)
+        except (NotImplementedError, TypeError, ValueError, RuntimeError):
+            return None
+        if not isinstance(prediction, Mapping):
+            return None
+        batch_means = _prediction_values(prediction.get("mean"), len(batch))
+        if batch_means is None:
+            return None
+        means.extend(batch_means)
+        batch_standard_deviations = _prediction_values(
+            prediction.get("std"),
+            len(batch),
+        )
+        if (
+            batch_standard_deviations is None
+            or any(value < 0 for value in batch_standard_deviations)
+        ):
+            standard_deviations = None
+        elif standard_deviations is not None:
+            standard_deviations.extend(batch_standard_deviations)
     return means, standard_deviations
 
 
@@ -429,28 +460,53 @@ def _add_prediction_metrics(
     panel: PredictionPanel,
 ) -> None:
     """Add aligned prediction quality metrics for one diagnostics panel."""
-    residuals = [mean - target for mean, target in zip(panel.means, panel.targets)]
+    target_values = torch.as_tensor(panel.targets, dtype=torch.float64)
+    mean_values = torch.as_tensor(panel.means, dtype=torch.float64)
+    residuals = mean_values - target_values
     metrics[f"{prefix}/count"] = len(panel.targets)
     metrics[f"{prefix}/rmse"] = (
-        _mean([residual * residual for residual in residuals]) ** 0.5
+        float(torch.mean(residuals.square()).sqrt().item())
     )
-    metrics[f"{prefix}/mae"] = _mean([abs(residual) for residual in residuals])
-    metrics[f"{prefix}/bias"] = _mean(residuals)
-    target_mean = _mean(panel.targets)
-    total_sum_squares = sum((target - target_mean) ** 2 for target in panel.targets)
+    metrics[f"{prefix}/mae"] = float(residuals.abs().mean().item())
+    metrics[f"{prefix}/bias"] = float(residuals.mean().item())
+    target_mean = float(target_values.mean().item())
+    total_sum_squares = float((target_values - target_mean).square().sum().item())
     if len(panel.targets) > 1 and total_sum_squares > 0:
         metrics[f"{prefix}/r2"] = (
-            1.0 - sum(residual * residual for residual in residuals) / total_sum_squares
+            1.0 - float(residuals.square().sum().item()) / total_sum_squares
         )
     if panel.standard_deviations is not None:
-        metrics[f"{prefix}/std_mean"] = _mean(panel.standard_deviations)
-        metrics[f"{prefix}/coverage_95"] = sum(
-            abs(residual) <= 1.96 * standard_deviation
-            for residual, standard_deviation in zip(
-                residuals,
-                panel.standard_deviations,
-            )
-        ) / len(residuals)
+        standard_deviations = torch.as_tensor(
+            panel.standard_deviations,
+            dtype=torch.float64,
+        )
+        metrics[f"{prefix}/std_mean"] = float(standard_deviations.mean().item())
+        metrics[f"{prefix}/coverage_95"] = float(
+            (residuals.abs() <= 1.96 * standard_deviations)
+            .to(torch.float64)
+            .mean()
+            .item()
+        )
+
+
+def _add_rolling_prediction_metrics(
+    metrics: dict[str, int | float],
+    prefix: str,
+    history: PrequentialHistory,
+) -> None:
+    """Add rolling prediction metrics from exact accumulated statistics."""
+    count = history.count
+    metrics[f"{prefix}/count"] = count
+    metrics[f"{prefix}/rmse"] = math.sqrt(history.squared_error_sum / count)
+    metrics[f"{prefix}/mae"] = history.absolute_error_sum / count
+    metrics[f"{prefix}/bias"] = history.residual_sum / count
+    if count > 1 and history.target_m2 > 0:
+        metrics[f"{prefix}/r2"] = (
+            1.0 - history.squared_error_sum / history.target_m2
+        )
+    if history.standard_deviation_sum is not None:
+        metrics[f"{prefix}/std_mean"] = history.standard_deviation_sum / count
+        metrics[f"{prefix}/coverage_95"] = history.coverage_count / count
 
 
 def _finite_scalar(value: Any) -> float | None:
@@ -466,11 +522,43 @@ def _finite_scalar(value: Any) -> float | None:
 
 def _finite_values(values: Sequence[Any]) -> list[float]:
     """Return finite scalar values, omitting unavailable values."""
+    tensor = _scalar_tensor(values)
+    if tensor is not None:
+        return [float(value) for value in tensor[torch.isfinite(tensor)].tolist()]
     return [
         finite_value
         for value in values
         if (finite_value := _finite_scalar(value)) is not None
     ]
+
+
+def _finite_scalar_values(values: Sequence[Any]) -> list[float | None]:
+    """Return aligned finite scalar conversions, preserving invalid entries."""
+    tensor = _scalar_tensor(values)
+    if tensor is not None:
+        scalar_values = tensor.tolist()
+        finite_mask = torch.isfinite(tensor).tolist()
+        return [
+            float(value) if is_finite else None
+            for value, is_finite in zip(scalar_values, finite_mask)
+        ]
+    return [_finite_scalar(value) for value in values]
+
+
+def _scalar_tensor(values: Sequence[Any]) -> torch.Tensor | None:
+    """Convert a sequence of scalar-like values in one operation when possible."""
+    try:
+        tensor = torch.as_tensor(values, dtype=torch.float64)
+    except (TypeError, ValueError, RuntimeError):
+        return None
+    if tensor.numel() != len(values):
+        return None
+    return tensor.reshape(-1)
+
+
+def _mean(values: Sequence[float]) -> float:
+    """Return the arithmetic mean of a non-empty numeric sequence."""
+    return float(sum(values) / len(values))
 
 
 def _summary(
@@ -517,8 +605,6 @@ def _histogram_bin_edges(
 
 def _score_distribution_figure(
     distributions: Sequence[tuple[str, Sequence[float], Sequence[float]]],
-    *,
-    max_points: int,
 ) -> Figure | None:
     """Build shared-bin sampled-versus-selected score histograms."""
     if not distributions:
@@ -526,15 +612,16 @@ def _score_distribution_figure(
     figure = Figure(figsize=(7.0 * len(distributions), 4.5))
     for axis_index, (title, sampled, selected) in enumerate(distributions, start=1):
         axis = figure.add_subplot(1, len(distributions), axis_index)
+        bins = _histogram_bin_edges(sampled, selected)
         axis.hist(
-            _bounded_values(sampled, max_points),
-            bins=_histogram_bin_edges(sampled, selected),
+            sampled,
+            bins=bins,
             alpha=0.65,
             label="sampled",
         )
         axis.hist(
-            _bounded_values(selected, max_points),
-            bins=_histogram_bin_edges(sampled, selected),
+            selected,
+            bins=bins,
             alpha=0.65,
             label="selected",
         )
@@ -549,18 +636,6 @@ def _score_distribution_figure(
     return figure
 
 
-def _bounded_values(values: Sequence[float], max_points: int) -> list[float]:
-    """Return a deterministic subset of values for plotting."""
-    if len(values) <= max_points:
-        return list(values)
-    if max_points == 1:
-        return [values[0]]
-    indices = [
-        index * (len(values) - 1) // (max_points - 1) for index in range(max_points)
-    ]
-    return [values[index] for index in indices]
-
-
 def _merge_diagnostic_metrics(
     target: dict[str, int | float],
     incoming: Mapping[str, int | float],
@@ -570,31 +645,3 @@ def _merge_diagnostic_metrics(
     if duplicates:
         raise ValueError(f"Duplicate diagnostic keys: {sorted(duplicates)}")
     target.update(incoming)
-
-
-def _mean(values: Sequence[float]) -> float:
-    """Return the arithmetic mean of a non-empty numeric sequence."""
-    return float(sum(values) / len(values))
-
-
-def _combine_prediction_panels(
-    panels: Sequence[PredictionPanel],
-) -> PredictionPanel | None:
-    """Combine prequential prediction panels for rolling error metrics."""
-    if not panels:
-        return None
-    standard_deviations: list[float] | None = []
-    for panel in panels:
-        if panel.standard_deviations is None:
-            standard_deviations = None
-            break
-        standard_deviations.extend(panel.standard_deviations)
-    return PredictionPanel(
-        title="Held-out rolling",
-        targets=tuple(target for panel in panels for target in panel.targets),
-        means=tuple(mean for panel in panels for mean in panel.means),
-        standard_deviations=(
-            None if standard_deviations is None else tuple(standard_deviations)
-        ),
-        fidelities=tuple(fidelity for panel in panels for fidelity in panel.fidelities),
-    )

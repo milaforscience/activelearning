@@ -21,18 +21,12 @@ class DiagnosticsConfig:
     figure_interval : int, default=1
         Render diagnostic figures every this many completed rounds. Scalar
         diagnostic metrics are still collected for every completed round.
-    max_points : int, default=1000
-        Bound diagnostic prediction batches, retained rolling history, and
-        rendered or histogram points. Scalar summaries use all finite values.
     """
 
     enabled: bool = True
     figure_interval: int = 1
-    max_points: int = 1000
 
     def __post_init__(self) -> None:
-        """Validate diagnostic rendering limits."""
+        """Validate diagnostic rendering settings."""
         if self.figure_interval < 1:
             raise ValueError("figure_interval must be at least 1.")
-        if self.max_points < 1:
-            raise ValueError("max_points must be at least 1.")

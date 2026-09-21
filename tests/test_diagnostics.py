@@ -1,12 +1,14 @@
 """Tests for reusable completed-round diagnostics."""
 
+from collections.abc import Sequence
 from dataclasses import replace
 
+import numpy as np
 from matplotlib import pyplot as plt
 import pytest
 
 from activelearning.monitoring.diagnostics import (
-    append_prequential_panel,
+    PrequentialHistory,
     budget_diagnostics,
     dataset_diagnostics,
     oracle_diagnostics,
@@ -18,7 +20,6 @@ from activelearning.monitoring.diagnostics_config import DiagnosticsConfig
 from activelearning.monitoring.run_writer import RoundRecord
 from activelearning.selector.selector import SelectionScores
 from activelearning.surrogate.dummy_mean_surrogate import DummyMeanSurrogate
-from activelearning.surrogate.plotting import PredictionPanel
 from activelearning.utils.types import Candidate, Observation
 
 
@@ -56,11 +57,12 @@ def _record() -> RoundRecord:
     "values",
     [
         {"figure_interval": 0},
-        {"max_points": 0},
     ],
 )
-def test_diagnostics_config_rejects_invalid_limits(values: dict[str, int]) -> None:
-    """Diagnostic rendering bounds must remain strictly positive."""
+def test_diagnostics_config_rejects_invalid_figure_interval(
+    values: dict[str, int],
+) -> None:
+    """Diagnostic figure intervals must remain strictly positive."""
     with pytest.raises(ValueError, match="must be at least 1"):
         DiagnosticsConfig(**values)
 
@@ -71,14 +73,13 @@ def test_general_diagnostics_report_expected_round_statistics() -> None:
     surrogate = DummyMeanSurrogate()
     surrogate.fit(record.observations_before)
 
-    surrogate_metrics, figures, current_panel = surrogate_diagnostics(
+    surrogate_metrics, figures, history = surrogate_diagnostics(
         surrogate,
         record,
-        max_points=1000,
         include_figures=True,
-        prequential_history=[],
+        prequential_history=PrequentialHistory(),
     )
-    sampler_metrics, _ = sampler_diagnostics(record, max_points=1000)
+    sampler_metrics, _ = sampler_diagnostics(record)
     oracle_metrics, _ = oracle_diagnostics(record)
     dataset_metrics, _ = dataset_diagnostics(record)
     budget_metrics, _ = budget_diagnostics(record)
@@ -89,7 +90,8 @@ def test_general_diagnostics_report_expected_round_statistics() -> None:
     )
     assert surrogate_metrics["surrogate/general/held_out/rolling/count"] == 1
     assert surrogate_metrics["surrogate/general/held_out/rolling/rmse"] == 2.5
-    assert current_panel is not None
+    assert history.count == 1
+    assert history.panels[-1].title == "Held-out rolling"
     assert set(figures) == {"surrogate/general/predicted_vs_observed"}
     assert sampler_metrics[
         "sampler/general/observed_overlap_fraction"
@@ -108,18 +110,16 @@ def test_surrogate_diagnostics_accumulate_prequential_holdout_metrics() -> None:
     first_record = _record()
     surrogate = DummyMeanSurrogate()
     surrogate.fit(first_record.observations_before)
-    history = ()
+    history = PrequentialHistory()
 
-    first_metrics, _, first_panel = surrogate_diagnostics(
+    first_metrics, _, history = surrogate_diagnostics(
         surrogate,
         first_record,
-        max_points=1000,
         include_figures=False,
         prequential_history=history,
     )
 
     second_observation = Observation(x=(4.0, 0.0), y=4.0, fidelity=1)
-    history = append_prequential_panel(history, first_panel, max_points=1000)
     second_record = replace(
         first_record,
         round_index=2,
@@ -131,10 +131,9 @@ def test_surrogate_diagnostics_accumulate_prequential_holdout_metrics() -> None:
         valid_observations=[second_observation],
     )
     surrogate.fit(second_record.observations_before)
-    second_metrics, _, second_panel = surrogate_diagnostics(
+    second_metrics, _, history = surrogate_diagnostics(
         surrogate,
         second_record,
-        max_points=1000,
         include_figures=False,
         prequential_history=history,
     )
@@ -145,7 +144,8 @@ def test_surrogate_diagnostics_accumulate_prequential_holdout_metrics() -> None:
     assert second_metrics["surrogate/general/held_out/rolling/rmse"] == pytest.approx(
         ((2.5**2 + (8.0 / 3.0) ** 2) / 2.0) ** 0.5
     )
-    assert second_panel is not None
+    assert history.count == 2
+    assert len(history.panels) == 2
 
 
 def test_surrogate_diagnostics_skip_unsupported_predictions() -> None:
@@ -162,20 +162,19 @@ def test_surrogate_diagnostics_skip_unsupported_predictions() -> None:
     record = _record()
     surrogate.fit(record.observations_before)
 
-    metrics, figures, panel = surrogate_diagnostics(
+    metrics, figures, history = surrogate_diagnostics(
         surrogate,
         record,
-        max_points=1,
         include_figures=True,
     )
 
     assert metrics == {}
     assert figures == {}
-    assert panel is None
+    assert history == PrequentialHistory()
 
 
-def test_surrogate_metrics_batch_all_targets_and_bound_rolling_history() -> None:
-    """Prediction batches stay bounded without sampling current-round metrics."""
+def test_surrogate_metrics_predict_and_retain_all_targets() -> None:
+    """Predictions and rolling history retain every current-round target."""
 
     class RecordingSurrogate(DummyMeanSurrogate):
         """Record prediction batch sizes while using the dummy mean model."""
@@ -206,29 +205,75 @@ def test_surrogate_metrics_batch_all_targets_and_bound_rolling_history() -> None
     surrogate = RecordingSurrogate()
     surrogate.fit(record.observations_before)
 
-    metrics, _, panel = surrogate_diagnostics(
+    metrics, _, current_history = surrogate_diagnostics(
         surrogate,
         record,
-        max_points=2,
         include_figures=False,
     )
 
     assert metrics["surrogate/general/held_out/current_round/count"] == 3
-    assert surrogate.batch_sizes == [2, 1]
-    history = append_prequential_panel(
-        (
-            PredictionPanel(
-                title="previous",
-                targets=(-2.0, -1.0),
-                means=(-2.0, -1.0),
-                standard_deviations=None,
-                fidelities=(0, 0),
-            ),
-        ),
-        panel,
-        max_points=2,
+    assert surrogate.batch_sizes == [3]
+    assert current_history.count == 3
+    assert current_history.panels[-1].targets == (0.0, 1.0, 2.0)
+
+
+def test_surrogate_diagnostics_handles_large_prediction_inputs() -> None:
+    """Large prediction rounds should batch model calls but retain every point."""
+
+    class BatchRecordingSurrogate(DummyMeanSurrogate):
+        """Return cheap predictions while recording diagnostic batch sizes."""
+
+        def __init__(self) -> None:
+            super().__init__()
+            self.batch_sizes: list[int] = []
+
+        def predict(
+            self,
+            candidates: Sequence[Candidate],
+        ) -> dict[str, list[float]]:
+            """Return finite constant predictions for one candidate batch."""
+            self.batch_sizes.append(len(candidates))
+            return {"mean": [0.0] * len(candidates)}
+
+    point_count = 100_000
+    candidates = [
+        Candidate(x=(float(index), 0.0), fidelity=1)
+        for index in range(point_count)
+    ]
+    observations = [
+        Observation(x=candidate.x, y=float(index), fidelity=1)
+        for index, candidate in enumerate(candidates)
+    ]
+    record = replace(
+        _record(),
+        selected_candidates=candidates,
+        selected_costs=[1.0] * point_count,
+        queried_observations=observations,
+        valid_observations=observations,
     )
-    assert history[0].targets == (1.0, 2.0)
+    surrogate = BatchRecordingSurrogate()
+    surrogate.fit(record.observations_before)
+
+    metrics, figures, history = surrogate_diagnostics(
+        surrogate,
+        record,
+        include_figures=True,
+    )
+
+    assert history.count == point_count
+    assert len(history.panels[-1].targets) == point_count
+    assert metrics["surrogate/general/held_out/current_round/count"] == point_count
+    assert len(surrogate.batch_sizes) > 1
+    assert sum(surrogate.batch_sizes) == point_count
+    figure = figures["surrogate/general/predicted_vs_observed"]
+    assert all(
+        len(collection.get_array()) <= 64 * 64
+        for collection in figure.axes[0].collections
+    )
+    assert sum(
+        np.ma.sum(collection.get_array()) for collection in figure.axes[0].collections
+    ) == point_count
+    plt.close(figure)
 
 
 def test_diagnostics_skip_non_scalar_and_empty_inputs() -> None:
@@ -251,7 +296,7 @@ def test_diagnostics_skip_non_scalar_and_empty_inputs() -> None:
         diagnostics={},
     )
 
-    sampler_metrics, _ = sampler_diagnostics(record, max_points=1)
+    sampler_metrics, _ = sampler_diagnostics(record)
     dataset_metrics, _ = dataset_diagnostics(record)
     budget_metrics, _ = budget_diagnostics(record)
 
@@ -277,7 +322,6 @@ def test_selection_score_diagnostics_uses_indices_and_finite_values() -> None:
     metrics, figures = selection_score_diagnostics(
         scores,
         include_figures=False,
-        max_points=2,
     )
 
     assert metrics["acquisition/general/sampled/count"] == 3
@@ -306,10 +350,30 @@ def test_selection_score_diagnostics_creates_two_panel_figure() -> None:
     metrics, figures = selection_score_diagnostics(
         scores,
         include_figures=True,
-        max_points=2,
     )
 
     assert metrics["acquisition/general/sampled/count"] == 4
+    figure = figures["acquisition/general/score_distribution"]
+    assert len(figure.axes) == 2
+    plt.close(figure)
+
+
+def test_selection_score_diagnostics_handles_large_score_pools() -> None:
+    """Large score pools should retain complete metric and histogram inputs."""
+    point_count = 100_000
+    scores = SelectionScores(
+        acquisition_scores=tuple(float(index % 1000) for index in range(point_count)),
+        ranking_scores=tuple(
+            float((point_count - index) % 1000) for index in range(point_count)
+        ),
+        selected_indices=tuple(range(0, point_count, 10)),
+    )
+
+    metrics, figures = selection_score_diagnostics(scores, include_figures=True)
+
+    assert metrics["acquisition/general/sampled/count"] == point_count
+    assert metrics["acquisition/general/selected/count"] == point_count // 10
+    assert metrics["selector/general/ranking/mean"] == pytest.approx(499.5)
     figure = figures["acquisition/general/score_distribution"]
     assert len(figure.axes) == 2
     plt.close(figure)
@@ -326,7 +390,6 @@ def test_selection_score_diagnostics_skips_figure_without_complete_data() -> Non
     metrics, figures = selection_score_diagnostics(
         scores,
         include_figures=True,
-        max_points=2,
     )
 
     assert metrics == {}

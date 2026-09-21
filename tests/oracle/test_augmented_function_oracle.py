@@ -1,10 +1,14 @@
+import numpy as np
 import pytest
+import torch
+from matplotlib.collections import QuadMesh
 from unittest.mock import Mock, patch
 
 from activelearning.oracle.augmented_function_oracle import (
     BraninOracle,
     Hartmann6DOracle,
 )
+from activelearning.oracle.plotting import build_augmented_2d_landscape_figure
 from activelearning.runtime import RuntimeContext
 from activelearning.utils.types import Candidate
 
@@ -139,12 +143,45 @@ class TestBraninOracleQuery:
             oracle.query([Candidate(x=[0.5, 7.5], fidelity=3)])
             metrics, figures = oracle.drain_round_diagnostics(
                 include_figures=True,
-                max_points=1000,
             )
 
         build_figure.assert_called_once()
         assert metrics == {}
         assert figures == {"oracle/branin/query_landscape": figure}
+
+
+def test_landscape_candidate_grids_conserve_coordinates_by_fidelity() -> None:
+    """Each bounded fidelity grid contains every in-bounds candidate point."""
+    candidates = [
+        Candidate(x=[0.1, 0.2], fidelity=1),
+        Candidate(x=[0.1, 0.2], fidelity=1),
+        Candidate(x=[0.7, 0.8], fidelity=2),
+        Candidate(x=[0.9, 0.1], fidelity=3),
+    ]
+
+    figure = build_augmented_2d_landscape_figure(
+        evaluator=lambda inputs: torch.sum(inputs[:, :2] ** 2, dim=1),
+        candidates=candidates,
+        bounds=((0.0, 1.0), (0.0, 1.0)),
+        fidelity_confidences={1: 0.2, 2: 0.5, 3: 1.0},
+        supported_fidelities=(1, 2, 3),
+        dtype=torch.float64,
+        device=torch.device("cpu"),
+        title="test landscape",
+        grid_size=8,
+        filled_levels=4,
+        line_levels=3,
+    )
+
+    try:
+        grids = [collection for collection in figure.axes[0].collections if isinstance(collection, QuadMesh)]
+        assert len(grids) == 3
+        assert all(grid.get_array().size <= 64 * 64 for grid in grids)
+        assert sum(np.ma.sum(grid.get_array()) for grid in grids) == len(candidates)
+    finally:
+        import matplotlib.pyplot as plt
+
+        plt.close(figure)
 
 
 class TestHartmann6DOracleQuery:

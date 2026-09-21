@@ -1,3 +1,4 @@
+import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 
@@ -38,28 +39,24 @@ def test_build_predicted_vs_observed_figure_returns_none_for_empty_data() -> Non
     assert build_predicted_vs_observed_figure([panel]) is None
 
 
-def test_build_predicted_vs_observed_figure_caps_large_panels() -> None:
-    """The same scatter plot should stay bounded for large observation sets."""
-    targets = tuple(float(index) for index in range(100))
+def test_build_predicted_vs_observed_figure_retains_large_panels() -> None:
+    """The count grids retain every observation with bounded artist sizes."""
+    targets = tuple(float(index % 1000) for index in range(100_000))
     panel = PredictionPanel(
         title="large panel",
         targets=targets,
         means=tuple(target + 0.1 for target in targets),
         standard_deviations=None,
-        fidelities=tuple(index % 2 for index in range(100)),
+        fidelities=tuple(index % 2 for index in range(100_000)),
     )
 
-    figure = build_predicted_vs_observed_figure([panel], max_points=7)
+    figure = build_predicted_vs_observed_figure([panel])
 
     assert figure is not None
-    assert (
-        sum(
-            len(collection.get_offsets())
-            for collection in figure.axes[0].collections
-            if hasattr(collection, "get_offsets")
-        )
-        == 7
-    )
+    grids = figure.axes[0].collections
+    assert len(grids) == 2
+    assert all(len(grid.get_array()) <= 64 * 64 for grid in grids)
+    assert sum(np.ma.sum(grid.get_array()) for grid in grids) == 100_000
     plt.close(figure)
 
 
@@ -82,7 +79,6 @@ def test_build_predicted_vs_observed_figure_shares_compatible_axes() -> None:
                 fidelities=(1, 1),
             ),
         ],
-        max_points=100,
     )
 
     assert figure is not None

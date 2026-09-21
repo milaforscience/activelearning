@@ -3,9 +3,14 @@ from collections.abc import Callable, Mapping, Sequence
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from matplotlib.colors import LinearSegmentedColormap, LogNorm
 from matplotlib.figure import Figure
+from matplotlib.patches import Patch
 
 from activelearning.utils.types import Candidate
+
+
+_CANDIDATE_GRID_SIZE = 64
 
 
 def build_augmented_2d_landscape_figure(
@@ -83,7 +88,10 @@ def build_augmented_2d_landscape_figure(
     )
     figure.colorbar(contour, ax=axis, label=colorbar_label)
 
-    fidelity_colors = plt.get_cmap("tab10", max(len(supported_fidelities), 1))
+    candidate_x_edges = np.linspace(x1_min, x1_max, _CANDIDATE_GRID_SIZE + 1)
+    candidate_y_edges = np.linspace(x2_min, x2_max, _CANDIDATE_GRID_SIZE + 1)
+    legend_handles = []
+    fidelity_colors = plt.get_cmap("tab10")
     for index, fidelity in enumerate(supported_fidelities):
         fidelity_points = [
             _extract_candidate_coordinates(candidate)
@@ -92,15 +100,32 @@ def build_augmented_2d_landscape_figure(
         ]
         if not fidelity_points:
             continue
-        xs, ys = zip(*fidelity_points)
-        axis.scatter(
+        xs, ys = np.asarray(fidelity_points, dtype=float).T
+        counts, _, _ = np.histogram2d(
             xs,
             ys,
-            s=80,
-            color=fidelity_colors(index),
-            edgecolors="white",
-            linewidths=0.8,
-            label=f"Fidelity {fidelity}",
+            bins=(candidate_x_edges, candidate_y_edges),
+        )
+        color = fidelity_colors(index % fidelity_colors.N)
+        colormap = LinearSegmentedColormap.from_list(
+            f"candidate_fidelity_{index}",
+            ("white", color),
+        )
+        axis.pcolormesh(
+            candidate_x_edges,
+            candidate_y_edges,
+            np.ma.masked_equal(counts.T, 0),
+            shading="auto",
+            cmap=colormap,
+            norm=LogNorm(vmin=1, vmax=max(2, int(counts.max()))),
+            alpha=0.8,
+        )
+        legend_handles.append(
+            Patch(
+                facecolor=color,
+                alpha=0.8,
+                label=f"Fidelity {fidelity}",
+            )
         )
 
     axis.set_xlim(x1_min, x1_max)
@@ -110,7 +135,7 @@ def build_augmented_2d_landscape_figure(
     axis.set_title(title)
     if minima:
         min_xs, min_ys = zip(*minima)
-        axis.scatter(
+        minima_artist = axis.scatter(
             min_xs,
             min_ys,
             s=120,
@@ -120,8 +145,9 @@ def build_augmented_2d_landscape_figure(
             zorder=5,
             label="Minima",
         )
-    if candidates or minima:
-        axis.legend(loc="upper right")
+        legend_handles.append(minima_artist)
+    if legend_handles:
+        axis.legend(handles=legend_handles, loc="upper right")
     figure.tight_layout()
     return figure
 

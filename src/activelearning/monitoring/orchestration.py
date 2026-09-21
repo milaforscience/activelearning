@@ -12,7 +12,7 @@ from activelearning.acquisition.acquisition import Acquisition
 from activelearning.budget.budget import Budget
 from activelearning.dataset.dataset import Dataset
 from activelearning.monitoring.diagnostics import (
-    append_prequential_panel,
+    PrequentialHistory,
     budget_diagnostics,
     dataset_diagnostics,
     oracle_diagnostics,
@@ -26,7 +26,6 @@ from activelearning.monitoring.run_writer import RoundRecord, RunWriter
 from activelearning.oracle.oracle import Oracle
 from activelearning.sampler.sampler import Sampler
 from activelearning.selector.selector import Selector
-from activelearning.surrogate.plotting import PredictionPanel
 from activelearning.surrogate.surrogate import Surrogate
 
 _logger = logging.getLogger(__name__)
@@ -44,9 +43,8 @@ def collect_round_diagnostics(
     budget: Budget,
     enabled: bool,
     include_figures: bool,
-    max_points: int,
-    prequential_history: Sequence[PredictionPanel],
-) -> tuple[dict[str, int | float], dict[str, Figure], tuple[PredictionPanel, ...]]:
+    prequential_history: PrequentialHistory,
+) -> tuple[dict[str, int | float], dict[str, Figure], PrequentialHistory]:
     """Collect optional reusable and component diagnostics for one completed round.
 
     This function reads without modifying the completed round data. It does not
@@ -56,13 +54,12 @@ def collect_round_diagnostics(
     """
     metrics: dict[str, int | float] = {}
     figures: dict[str, Figure] = {}
-    updated_prequential_history = tuple(prequential_history)
+    updated_prequential_history = prequential_history
     if enabled:
         try:
-            surrogate_metrics, surrogate_figures, current_panel = surrogate_diagnostics(
+            surrogate_metrics, surrogate_figures, updated_prequential_history = surrogate_diagnostics(
                 surrogate,
                 record,
-                max_points=max_points,
                 include_figures=include_figures,
                 prequential_history=prequential_history,
             )
@@ -78,14 +75,9 @@ def collect_round_diagnostics(
             _validate_component_namespace("surrogate", surrogate_figures)
             _merge_unique(metrics, surrogate_metrics)
             _merge_unique(figures, surrogate_figures)
-            updated_prequential_history = append_prequential_panel(
-                prequential_history,
-                current_panel,
-                max_points=max_points,
-            )
 
         diagnostic_calls = (
-            ("sampler", lambda: sampler_diagnostics(record, max_points=max_points)),
+            ("sampler", lambda: sampler_diagnostics(record)),
             ("oracle", lambda: oracle_diagnostics(record)),
             ("dataset", lambda: dataset_diagnostics(record)),
             ("budget", lambda: budget_diagnostics(record)),
@@ -115,7 +107,6 @@ def collect_round_diagnostics(
                 score_metrics, score_figures = selection_score_diagnostics(
                     selection_scores,
                     include_figures=include_figures,
-                    max_points=max_points,
                 )
             else:
                 score_metrics, score_figures = {}, {}
@@ -155,7 +146,6 @@ def collect_round_diagnostics(
         try:
             component_metrics, component_figures = drain(
                 include_figures=enabled and include_figures,
-                max_points=max_points,
             )
         except Exception:
             _logger.warning(

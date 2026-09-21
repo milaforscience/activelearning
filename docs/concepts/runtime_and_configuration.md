@@ -79,7 +79,6 @@ run_writer:
 diagnostics:
   enabled: true
   figure_interval: 1
-  max_points: 1000
 ```
 
 The top-level sections describe both the active-learning method and its

@@ -197,10 +197,8 @@ class RuntimeGFlowNetLoggerWrapper(GFlowNetLogger):
         self,
         *,
         include_figures: bool,
-        max_points: int,
     ) -> tuple[dict[str, int | float], dict[str, Figure]]:
         """Return and clear metrics and figures collected during one AL round."""
-        _ = max_points
         metrics = self._pending_metrics
         figures = self._pending_figures if include_figures else {}
         if not include_figures:

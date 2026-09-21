@@ -309,7 +309,6 @@ class TestGFlowNetSamplerRuntimeLogger:
         sampler.sample(acquisition=_ConstantAcquisition())
         metrics, figures = sampler.drain_round_diagnostics(
             include_figures=False,
-            max_points=1000,
         )
 
         assert metrics
@@ -362,7 +361,6 @@ class TestGFlowNetSamplerRuntimeLogger:
 
         wrapper.drain_round_diagnostics.assert_called_once_with(
             include_figures=False,
-            max_points=1,
         )
         wrapper.end.assert_called_once_with()
         assert sampler._round_logger_wrapper is None

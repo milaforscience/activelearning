@@ -114,7 +114,6 @@ run_writer:
 diagnostics:
   enabled: true
   figure_interval: 1
-  max_points: 1000
 ```
 
 `logger` submits live scalar metrics and figures to the console or a tracker.

@@ -54,13 +54,11 @@ def test_log_metrics_buffer_normalized_values_without_advancing_round_step() -> 
     assert wrapper._last_step == 7
     metrics, figures = wrapper.drain_round_diagnostics(
         include_figures=False,
-        max_points=1000,
     )
     assert metrics == {"sampler/gflownet/validation/gflownet_loss": 0.5}
     assert figures == {}
     assert wrapper.drain_round_diagnostics(
         include_figures=False,
-        max_points=1000,
     ) == ({}, {})
 
 
@@ -76,7 +74,6 @@ def test_log_time_uses_timing_namespace() -> None:
 
     metrics, _ = wrapper.drain_round_diagnostics(
         include_figures=False,
-        max_points=1000,
     )
     assert metrics == {"sampler/gflownet/validation/timing/train": 1.25}
 
@@ -98,7 +95,6 @@ def test_log_plots_retains_component_first_figure_names() -> None:
     )
     _, figures = wrapper.drain_round_diagnostics(
         include_figures=True,
-        max_points=1000,
     )
     assert figures == {"sampler/gflownet/validation/gflownet_loss": figure}
 
@@ -135,6 +131,5 @@ def test_log_summary_uses_sampler_namespace_without_context() -> None:
     )
     metrics, _ = wrapper.drain_round_diagnostics(
         include_figures=False,
-        max_points=1000,
     )
     assert metrics == {"sampler/gflownet/summary/gflownet_loss": 0.5}

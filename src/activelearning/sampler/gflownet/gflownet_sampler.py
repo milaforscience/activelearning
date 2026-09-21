@@ -165,7 +165,6 @@ class GFlowNetSampler(Sampler):
         try:
             wrapper.drain_round_diagnostics(
                 include_figures=False,
-                max_points=1,
             )
         finally:
             wrapper.end()
@@ -292,7 +291,6 @@ class GFlowNetSampler(Sampler):
         self,
         *,
         include_figures: bool,
-        max_points: int,
     ) -> tuple[dict[str, int | float], dict[str, Any]]:
         """Return and clear diagnostics collected by the current GFlowNet logger."""
         wrapper = self._round_logger_wrapper
@@ -302,7 +300,6 @@ class GFlowNetSampler(Sampler):
         try:
             return wrapper.drain_round_diagnostics(
                 include_figures=include_figures,
-                max_points=max_points,
             )
         finally:
             wrapper.end()

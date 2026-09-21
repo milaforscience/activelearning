@@ -87,10 +87,8 @@ class DiagnosticPoolSampler(PoolScoreSampler):
         self,
         *,
         include_figures: bool,
-        max_points: int,
     ) -> tuple[dict[str, int | float], dict[str, Figure]]:
         """Return the pending sampler-specific metric and optional figure."""
-        _ = max_points
         figure = self._figure
         self._figure = None
         return (
