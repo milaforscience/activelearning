@@ -209,6 +209,8 @@ class GFlowNetSamplerConfig(BuildableConfig):
         validator fills this from the oracle's fidelity set.
     fidelity_policy : {"learned", "uniform"}
         Whether the multi-fidelity action is learned or sampled uniformly.
+    device : str or None
+        Device for the GFlowNet agent, overriding the runtime device when set.
     log_dir : str or None
         Root directory for GFlowNet logs. A temporary directory is created
         automatically when ``None``.
@@ -223,6 +225,7 @@ class GFlowNetSamplerConfig(BuildableConfig):
     fidelities: _FidelityLevels | None = None
     fidelity_action: _FidelityAction = "any"
     fidelity_policy: Literal["learned", "uniform"] = "learned"
+    device: str | None = None
     log_dir: str | None = None
     conf: dict[str, Any] | None = None
 
@@ -240,6 +243,7 @@ class GFlowNetSamplerConfig(BuildableConfig):
             fidelities=_resolve_fidelities(self.fidelities),
             fidelity_action=self.fidelity_action,
             fidelity_policy=self.fidelity_policy,
+            device=self.device,
         )
 
 
@@ -267,6 +271,7 @@ class GFlowNetGridSamplerConfig(GFlowNetSamplerConfig):
             fidelities=_resolve_fidelities(self.fidelities),
             fidelity_action=self.fidelity_action,
             domain_bounds=self.domain_bounds,
+            device=self.device,
         )
 
 

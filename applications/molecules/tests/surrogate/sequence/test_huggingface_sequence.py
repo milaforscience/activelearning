@@ -539,6 +539,63 @@ def test_gpmolformer_encoder_works_with_variational_dkl_without_mlm(
     )
 
 
+def test_gpmolformer_fixed_encoder_trims_trailing_padding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Trimming all-padding columns narrows the forward pass but not the features."""
+    _patch_transformers(monkeypatch)
+    strings = ["C", "CC", "CO"]
+
+    def build() -> GPMoLFormerSmilesFixedEncoder:
+        return GPMoLFormerSmilesFixedEncoder(
+            model_name_or_path="model",
+            tokenizer_name_or_path="tokenizer",
+            max_mol_tokens=64,
+            cache_size=0,
+        )
+
+    trimmed = build()
+    untrimmed = build()
+    untrimmed._trim_trailing_padding = lambda token_batch, mask: (token_batch, mask)
+
+    device = torch.device("cpu")
+    torch.testing.assert_close(
+        trimmed.encode(strings, device=device),
+        untrimmed.encode(strings, device=device),
+        rtol=0,
+        atol=0,
+    )
+
+    # The trimmed encoder really did run a narrower forward pass.
+    token_batch = trimmed._encoder.prepare_inputs(strings, device=device)
+    mask = trimmed._encoder.tokenizer.attention_mask_from_batch(token_batch)
+    kept, kept_mask = trimmed._trim_trailing_padding(token_batch, mask)
+    assert kept.shape[1] < token_batch.shape[1]
+    assert kept.shape[1] % 16 == 0
+    assert kept.shape[1] >= int(mask.sum(dim=1).max())
+    # Nothing that was dropped carried an attention mask.
+    assert int(mask.sum()) == int(kept_mask.sum())
+
+
+def test_gpmolformer_fixed_encoder_keeps_full_width_when_batch_is_long(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A batch that fills the token budget is passed through untrimmed."""
+    _patch_transformers(monkeypatch)
+    encoder = GPMoLFormerSmilesFixedEncoder(
+        model_name_or_path="model",
+        tokenizer_name_or_path="tokenizer",
+        max_mol_tokens=8,
+        cache_size=0,
+    )
+    device = torch.device("cpu")
+    token_batch = encoder._encoder.prepare_inputs(["CCCCCCCCCCCC"], device=device)
+    mask = encoder._encoder.tokenizer.attention_mask_from_batch(token_batch)
+    kept, kept_mask = encoder._trim_trailing_padding(token_batch, mask)
+    assert kept.shape == token_batch.shape
+    assert kept_mask.shape == mask.shape
+
+
 def test_gpmolformer_fixed_encoder_encodes_in_chunks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

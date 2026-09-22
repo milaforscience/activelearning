@@ -60,6 +60,9 @@ class GFlowNetGridSampler(GFlowNetSampler):
         Per-dimension coordinate bounds, one ``[lo, hi]`` pair per dimension.
         Length must equal ``conf.env.n_dim`` and each pair must satisfy
         ``lo < hi``.
+    device : str or None
+        See
+        :class:`~activelearning.sampler.gflownet.gflownet_sampler.GFlowNetSampler`.
 
     Raises
     ------
@@ -78,12 +81,14 @@ class GFlowNetGridSampler(GFlowNetSampler):
         fidelities: Sequence[int] = (DEFAULT_FIDELITY,),
         fidelity_action: Literal["any", "first", "last"] = "any",
         domain_bounds: Optional[List[List[float]]] = None,
+        device: Optional[str] = None,
     ) -> None:
         super().__init__(
             n_samples=n_samples,
             conf=conf,
             fidelities=fidelities,
             fidelity_action=fidelity_action,
+            device=device,
         )
         self._validate_grid_env(conf)
         if domain_bounds is not None:

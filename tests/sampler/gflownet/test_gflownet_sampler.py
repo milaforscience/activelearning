@@ -50,6 +50,30 @@ class TestGFlowNetSamplerInstantiation:
         sampler = GFlowNetSampler(n_samples=7, conf=conf)
         assert sampler.n_samples == 7
 
+    def test_device_defaults_to_runtime_device(self, gflownet_conf_2d):
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=4, conf=conf)
+        sampler.bind_runtime_context(RuntimeContext(device=torch.device("cpu")))
+        assert sampler.device_override is None
+        assert sampler._device_str() == "cpu"
+
+    def test_device_override_wins_over_runtime_device(self, gflownet_conf_2d):
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=4, conf=conf, device="cpu")
+        sampler.bind_runtime_context(RuntimeContext(device=torch.device("cuda")))
+        assert sampler._device_str() == "cpu"
+
+    def test_device_override_reaches_the_built_agent(self, gflownet_conf_2d):
+        """The agent, its env and its proxy all land on the overridden device."""
+        conf, _ = gflownet_conf_2d
+        sampler = GFlowNetSampler(n_samples=4, conf=conf, device="cpu")
+        sampler.bind_runtime_context(RuntimeContext(device=torch.device("cpu")))
+        agent = sampler._build_agent(_ConstantAcquisition())
+
+        assert agent.device == torch.device("cpu")
+        assert agent.env.device == torch.device("cpu")
+        assert agent.proxy.device == torch.device("cpu")
+
     def test_instantiation_stores_fidelities(self, gflownet_conf_2d):
         conf, _ = gflownet_conf_2d
         sampler = GFlowNetSampler(n_samples=3, conf=conf, fidelities=[1, 2])

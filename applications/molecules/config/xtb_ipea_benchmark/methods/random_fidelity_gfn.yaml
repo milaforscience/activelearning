@@ -1,6 +1,8 @@
 sampler:
   type: GFlowNetSampler
   n_samples: 640
+  # Sampling is sync-bound on CUDA; running the agent on CPU is ~2x faster.
+  device: cpu
   fidelity_action: first
   fidelity_policy: uniform
   conf:

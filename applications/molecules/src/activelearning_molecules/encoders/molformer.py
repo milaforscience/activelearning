@@ -226,6 +226,10 @@ class GPMoLFormerSmilesEncoder(_PretrainedSmilesEncoder):
         )
 
 
+#: Trimmed widths are rounded up to this multiple to limit distinct input shapes.
+_TRIM_MULTIPLE = 16
+
+
 class GPMoLFormerSmilesFixedEncoder(FixedEncoder):
     """Encode SMILES as frozen pooled GP-MoLFormer backbone features."""
 
@@ -315,10 +319,42 @@ class GPMoLFormerSmilesFixedEncoder(FixedEncoder):
                 attention_mask = self._encoder.tokenizer.attention_mask_from_batch(
                     token_batch
                 )
+                token_batch, attention_mask = self._trim_trailing_padding(
+                    token_batch, attention_mask
+                )
                 features.append(
                     self._encoder._backbone_features(token_batch, attention_mask)
                 )
         return torch.cat(features).to(device=device)
+
+    @staticmethod
+    def _trim_trailing_padding(
+        token_batch: Tensor,
+        attention_mask: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        """Drop trailing columns that are padding for every row in the batch.
+
+        This leaves the features unchanged: inputs are right-padded, the
+        backbone is causal, and pooling is masked, so trailing padding never
+        contributes. The kept width is rounded up to ``_TRIM_MULTIPLE``.
+
+        Parameters
+        ----------
+        token_batch : Tensor
+            Two-dimensional token-ID tensor, right-padded.
+        attention_mask : Tensor
+            Attention mask with the same shape as ``token_batch``.
+
+        Returns
+        -------
+        tuple of Tensor
+            ``token_batch`` and ``attention_mask`` sliced to the kept width.
+        """
+        if token_batch.shape[0] == 0:
+            return token_batch, attention_mask
+        used = max(int(attention_mask.sum(dim=1).max()), 1)
+        keep = -(-used // _TRIM_MULTIPLE) * _TRIM_MULTIPLE
+        return token_batch[:, :keep], attention_mask[:, :keep]
 
 
 class MoLFormerSmilesEncoder(_PretrainedSmilesEncoder):

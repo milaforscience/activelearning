@@ -50,6 +50,12 @@ class GFlowNetSampler(Sampler):
     fidelity_policy : {"learned", "uniform"}
         Whether the fidelity action is learned by the policy or sampled
         uniformly at random. Only relevant in multi-fidelity mode.
+    device : str or None
+        Device for the GFlowNet agent (env, policy and batch), overriding the
+        runtime device when set. The acquisition function stays on the runtime
+        device. Trajectory sampling is dominated by per-state device syncs, so
+        ``"cpu"`` is often faster than CUDA. CPU and CUDA RNG streams differ,
+        so changing this changes the sampled trajectories for a given seed.
     """
 
     def __init__(
@@ -59,9 +65,11 @@ class GFlowNetSampler(Sampler):
         fidelities: Sequence[int] = (DEFAULT_FIDELITY,),
         fidelity_action: Literal["any", "first", "last"] = "any",
         fidelity_policy: Literal["learned", "uniform"] = "learned",
+        device: Optional[str] = None,
     ) -> None:
         self.n_samples = n_samples
         self.conf = conf
+        self.device_override = device
         self.fidelities = list(fidelities)
         self._n_fidelities = len(self.fidelities)
         self.fidelity_action = fidelity_action
@@ -81,13 +89,15 @@ class GFlowNetSampler(Sampler):
     # ------------------------------------------------------------------
 
     def _device_str(self) -> str:
-        """Return the device as a plain string (e.g. ``'cpu'``).
+        """Return the GFlowNet agent's device as a plain string.
 
         Returns
         -------
         str
-            String representation of the runtime device.
+            ``device_override`` if set, else the runtime device.
         """
+        if self.device_override is not None:
+            return self.device_override
         return str(self.device)
 
     def _float_precision(self) -> int:
