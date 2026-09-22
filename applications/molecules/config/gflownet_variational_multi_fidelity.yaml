@@ -7,9 +7,10 @@
 # - VariationalDKLSurrogate replaces the exact GP with an inducing-point
 #   variational GP, which scales to larger datasets at the cost of more training epochs.
 # - QMultiFidelityLowerBoundMaxValueEntropy (MF-MES) scores each (molecule, fidelity)
-#   pair by expected information gain about the target-fidelity optimum. This score is
-#   used as the GFlowNet reward, so the policy trades off information gain against
-#   cost when deciding which (molecule, fidelity) pairs to propose.
+#   pair by expected information gain about the target-fidelity optimum. This score,
+#   divided by the oracle cost, is the GFlowNet reward, so the policy trades off
+#   information gain against cost when deciding which (molecule, fidelity) pairs to
+#   propose. CostAwareSelector then picks proposals by information gain per unit cost.
 # - xTB fidelities use costs 1.0 / 3.5 / 7.0 and conformer counts 1 / 2 / 4.
 # - Acquisition batch size B=128, GFlowNet sample count N=5*B=640.
 
@@ -90,8 +91,7 @@ sampler:
           forward: 128
 
 selector:
-  type: TopKAcquisitionSelector
-  num_samples: 128
+  type: CostAwareSelector
 
 oracle:
   type: XTBIPEAOracle

@@ -57,8 +57,7 @@ sampler:
   sa_threshold: 4.0
 
 selector:
-  type: TopKAcquisitionSelector
-  num_samples: 8
+  type: CostAwareSelector
 
 oracle:
   type: XTBIPEAOracle

@@ -346,12 +346,11 @@ There are two multi-fidelity GFlowNet configs. The first uses an exact GP surrog
 uv run activelearning-molecules applications/molecules/config/gflownet_exact_multi_fidelity.yaml
 ```
 
-For a shorter sanity check, reduce the GFlowNet training steps and selected batch size:
+For a shorter sanity check, reduce the GFlowNet training steps and the query budget:
 
 ```sh
 uv run activelearning-molecules applications/molecules/config/gflownet_exact_multi_fidelity.yaml \
   sampler.conf.gflownet.optimizer.n_train_steps=25 \
-  selector.num_samples=4 \
   budget.available_budget=28.0 \
   budget.schedule.value=28.0
 ```
@@ -399,9 +398,8 @@ The main molecule-specific fields are:
 | `sampler.fidelities` | Fidelity levels available to the GFlowNet policy. `[1]` restricts the policy to fidelity 1 only (single-fidelity); `[1, 2, 3]` enables joint molecule-fidelity sampling (multi-fidelity). |
 | `sampler.fidelity_action` | Where the fidelity choice appears in the trajectory; `"any"` lets the policy interleave fidelity selection with token actions. |
 | `acquisition.type` | `UpperConfidenceBound` in stages 1 and 3, or `QMultiFidelityLowerBoundMaxValueEntropy` in stages 2, 4, and 5. |
-| `acquisition.cost_aware_utility` | Cost model baked into the BoTorch multi-fidelity acquisition during `acquisition.update(...)`. In the GFlowNet multi-fidelity configs this makes the sampler reward proxy cost-aware before top-k selection. |
 | `oracle.task` | `ea` for electron affinity or `ip` for ionisation potential. The active-learning loop maximises the objective, so IP runs should negate the physical value — set `oracle.task: ip` and the oracle returns `-IP`, which MES then maximises. |
-| `oracle.fidelity_costs` | Query costs used by the budget and the cost-aware utility. |
+| `oracle.fidelity_costs` | Query costs used by the budget, the cost-aware selector, and cost-weighted sampler rewards. |
 | `oracle.num_conformers` | Global default for the number of RDKit conformers generated before the xTB geometry step. More conformers improve starting-geometry quality at the cost of additional RDKit time. |
 | `oracle.per_fidelity_num_conformers` | Per-fidelity override for `oracle.num_conformers`. Useful when higher fidelities warrant a more thorough conformer search. Does not change the definition of the xTB fidelity itself. |
 | `oracle.log_molecule_visualizations` | Whether to log RDKit grids of queried molecules. |

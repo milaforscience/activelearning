@@ -11,6 +11,7 @@ from typing import Any, Callable, ClassVar, Iterable, Optional
 
 import torch
 from botorch.acquisition.acquisition import AcquisitionFunction
+from botorch.acquisition.cost_aware import GenericCostAwareUtility
 from botorch.acquisition.knowledge_gradient import (
     qMultiFidelityKnowledgeGradient as _qMFKG,
 )
@@ -37,6 +38,8 @@ class _QMultiFidelityEntropyBase(QBatchBoTorchAcquisition):
     :class:`QMultiFidelityMaxValueEntropy` and
     :class:`QMultiFidelityLowerBoundMaxValueEntropy`. Subclasses set
     ``_botorch_acqf_class`` to select the underlying BoTorch implementation.
+    Scores are raw information gain: BoTorch's default inverse-cost utility is
+    disabled so labeling cost is applied once, by the selector or sampler.
     Information gain is theoretically non-negative. Scores are clamped to zero
     because finite-sample and floating-point error can produce negative
     estimates, and downstream weighted samplers require non-negative weights.
@@ -134,6 +137,8 @@ class _QMultiFidelityEntropyBase(QBatchBoTorchAcquisition):
             "num_mv_samples": self._num_mv_samples,
             "num_y_samples": self._num_y_samples,
             "maximize": self.maximize,
+            # Identity utility: cost is applied downstream, not inside BoTorch.
+            "cost_aware_utility": GenericCostAwareUtility(lambda X, deltas: deltas),
         }
 
         if self._resolved_project_to_target_fidelity_fn is not None:

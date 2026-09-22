@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from typing import Any, Literal
 
@@ -49,6 +50,16 @@ def _load_smiles_tokenizer(
         cache_dir=cache_dir,
     )
     return HuggingFaceTokenizer(tokenizer=tokenizer)
+
+
+def _drop_fast_transformers_fallback_warning(record: logging.LogRecord) -> bool:
+    """Drop GP-MoLFormer's per-layer notice that it uses PyTorch attention.
+
+    GP-MoLFormer's causal attention tries the optional ``fast_transformers``
+    CUDA kernel on every call and logs a warning before using an equivalent
+    PyTorch implementation.
+    """
+    return "Falling back to (slow) pytorch implementation" not in record.getMessage()
 
 
 class _PretrainedSmilesEncoder(HuggingFaceSequenceEncoder):
@@ -183,6 +194,9 @@ class GPMoLFormerSmilesEncoder(_PretrainedSmilesEncoder):
             cache_dir=cache_dir,
             cache_size=cache_size,
             use_causal_lm=True,
+        )
+        logging.getLogger(type(self.backbone).__module__).addFilter(
+            _drop_fast_transformers_fallback_warning
         )
 
     def _base_model(self) -> nn.Module:

@@ -128,16 +128,14 @@ def sample(self, acquisition=None, observations=None):
 Always guard with `acquisition is not None` — the sampler may be called before
 the surrogate has been fitted.
 
-**Cost weighting in multi-fidelity acquisitions.** Some acquisition classes
-(notably BoTorch multi-fidelity acquisitions) accept a `cost_aware_utility`
-that is wired into the acquisition object at `update()` time. When this is
-configured, the scores returned by `acquisition.score()` already incorporate
-labeling-cost penalties — meaning the sampler's score-guided proposals will
-implicitly favour cheaper candidates. This is not something the sampler
-controls; it is a consequence of calling `score()` on a cost-weighted
-acquisition instance. See the
-[Acquisition guide](acquisition.md#common-pitfalls) for a full explanation of
-how this interacts with selector-side cost weighting.
+**Cost weighting in multi-fidelity acquisitions.** The built-in
+multi-fidelity acquisitions return scores without labeling cost. Samplers that
+turn scores into rewards or sampling weights should apply cost through the
+`cost_fn` they receive, for example
+`acquisition.score(candidates, cost_weighting=cost_weighting_from_cost_fn(cost_fn))`,
+as the GFlowNet reward proxy and `ExactGridSampler` do. See the
+[Acquisition guide](acquisition.md#common-pitfalls) for how this relates to
+selector-side cost weighting.
 
 ## **Common pitfalls**
 

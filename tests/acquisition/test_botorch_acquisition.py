@@ -1039,6 +1039,34 @@ class TestMultiFidelityAcquisitionIntegration:
         assert acq._resolved_project_to_target_fidelity_fn is None
         self._scores_valid(acq.score(candidates))
 
+    @pytest.mark.parametrize(
+        "class_name",
+        ["QMultiFidelityMaxValueEntropy", "QMultiFidelityLowerBoundMaxValueEntropy"],
+    )
+    def test_mf_entropy_disables_botorch_default_cost(
+        self,
+        class_name: str,
+        mf_surrogate: BoTorchGPSurrogate,
+        mf_obs: list[Observation],
+        train_data_spec: TrainDataCandidateSetSpec,
+    ) -> None:
+        """Information gain is not divided by BoTorch's default fidelity cost."""
+        from activelearning.acquisition.botorch import botorch_multifidelity
+
+        acq = getattr(botorch_multifidelity, class_name)(
+            candidate_set_spec=train_data_spec,
+            num_fantasies=2,
+            num_mv_samples=5,
+            num_y_samples=16,
+        )
+        acq.update(mf_surrogate, mf_obs)
+        X = torch.tensor([[[1.0, 2.0, 0.5]], [[3.0, 4.0, 1.0]]], dtype=torch.float64)
+        deltas = torch.tensor([[0.2, 0.4]], dtype=torch.float64)
+
+        utility = acq._botorch_acqf.cost_aware_utility
+
+        assert torch.equal(utility(X=X, deltas=deltas), deltas)
+
     def test_qmfkg_scores(
         self,
         mf_surrogate: BoTorchGPSurrogate,

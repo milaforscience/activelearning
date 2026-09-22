@@ -10,9 +10,11 @@
 # - ExactDKLSurrogate fits an exact GP that conditions on both molecule features
 #   and a fidelity confidence embedding at target fidelity 3.
 # - QMultiFidelityLowerBoundMaxValueEntropy (MF-MES) scores each (molecule, fidelity)
-#   pair by expected information gain about the optimum at target fidelity 3. This score
-#   is used directly as the GFlowNet reward, so the policy trades off information gain
-#   against cost when deciding which (molecule, fidelity) pairs to propose.
+#   pair by expected information gain about the optimum at target fidelity 3. This score,
+#   divided by the oracle cost, is the GFlowNet reward, so the policy trades off
+#   information gain against cost when deciding which (molecule, fidelity) pairs to propose.
+# - CostAwareSelector picks proposals by information gain per unit cost within the
+#   round budget.
 
 runtime:
   device: cpu
@@ -70,8 +72,7 @@ sampler:
           forward: 32
 
 selector:
-  type: TopKAcquisitionSelector
-  num_samples: 8
+  type: CostAwareSelector
 
 oracle:
   type: XTBIPEAOracle
