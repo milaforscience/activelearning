@@ -71,6 +71,7 @@ def test_all_public_benchmark_compositions_parse(task: str, method: str) -> None
         assert config.sampler.fidelities == [1, 2, 3]
         assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
         assert config.sampler.fidelity_policy == "learned"
+        assert config.sampler.fidelity_action == "last"
         assert config.surrogate.is_multi_fidelity is True
     elif method == "random_fidelity_gfn":
         assert config.sampler.fidelity_policy == "uniform"

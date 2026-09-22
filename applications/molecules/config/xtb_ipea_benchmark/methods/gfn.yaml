@@ -3,6 +3,10 @@ sampler:
   n_samples: 640
   # Sampling is sync-bound on CUDA; running the agent on CPU is ~2x faster.
   device: cpu
+  # Stack (fidelity after the molecule) instead of SetFix ("any"): SetFix adds
+  # two toggle steps per token, making trajectories ~3x longer. No effect for
+  # single-fidelity runs.
+  fidelity_action: last
   conf:
     env:
       _target_: activelearning_molecules.samplers.gflownet_envs.SelfiesSmiles
@@ -15,4 +19,4 @@ sampler:
         lr_z_mult: 20
         n_train_steps: 5000
         batch_size:
-          forward: 128
+          forward: 64

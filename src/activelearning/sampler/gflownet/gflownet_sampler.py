@@ -7,6 +7,7 @@ from typing import Any, Callable, Iterable, Literal, Optional, Sequence
 from omegaconf import DictConfig, OmegaConf
 from gflownet.gflownet import GFlowNetAgent
 from gflownet.utils.common import gflownet_from_config
+from activelearning.sampler.gflownet.fast_copy import install_fast_batch_copy
 from activelearning.sampler.gflownet.logger_wrapper import RuntimeGFlowNetLoggerWrapper
 from activelearning.sampler.gflownet.multi_fidelity_env_wrapper import (
     MultiFidelityGFlowNetEnvWrapperBase,
@@ -18,6 +19,8 @@ from activelearning.sampler.sampler import Sampler
 from activelearning.utils.types import Candidate, DEFAULT_FIDELITY, Observation
 
 logger = logging.getLogger(__name__)
+
+install_fast_batch_copy()
 
 
 class GFlowNetSampler(Sampler):
