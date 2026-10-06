@@ -25,7 +25,7 @@ import math
 import textwrap
 from collections.abc import Sequence
 from dataclasses import dataclass
-from types import MethodType
+from types import FunctionType, MethodType
 from typing import Any
 
 import torch
@@ -1128,9 +1128,12 @@ def _install_gp_molformer_attention_mask_adapter(policy: nn.Module) -> int:
             ),
             adapted_namespace,
         )
-        adapted_forward = adapted_namespace[original_forward.__name__]
-        original_forward.__code__ = adapted_forward.__code__
-        original_forward._s3gfn_attention_mask_adapter = True
+        _bind_adapted_forward(
+            attention,
+            original_forward,
+            adapted_namespace[original_forward.__name__],
+            marker="_s3gfn_attention_mask_adapter",
+        )
         attention._s3gfn_attention_mask_adapter = True
 
     policy_forward = getattr(policy.forward, "__func__", policy.forward)
@@ -1161,11 +1164,42 @@ def _install_gp_molformer_attention_mask_adapter(policy: nn.Module) -> int:
             compile(policy_tree, policy_forward.__code__.co_filename, "exec"),
             policy_namespace,
         )
-        adapted_policy_forward = policy_namespace[policy_forward.__name__]
-        policy_forward.__code__ = adapted_policy_forward.__code__
-        policy_forward._s3gfn_attention_mask_validator = True
+        _bind_adapted_forward(
+            policy,
+            policy_forward,
+            policy_namespace[policy_forward.__name__],
+            marker="_s3gfn_attention_mask_validator",
+        )
     policy._s3gfn_attention_mask_adapter_count = len(attention_modules)
     return len(attention_modules)
+
+
+def _bind_adapted_forward(
+    module: nn.Module,
+    original_forward: Any,
+    adapted_forward: Any,
+    *,
+    marker: str,
+) -> None:
+    """Bind an adapted ``forward`` to one module instance.
+
+    The class method is shared with the frozen prior and with every other
+    instance, so it is left untouched; only ``module`` sees the adapted code.
+    The rebuilt function keeps the original globals, defaults, closure, and
+    module metadata.
+    """
+    rebuilt = FunctionType(
+        adapted_forward.__code__,
+        original_forward.__globals__,
+        original_forward.__name__,
+        original_forward.__defaults__,
+        original_forward.__closure__,
+    )
+    rebuilt.__kwdefaults__ = original_forward.__kwdefaults__
+    rebuilt.__module__ = original_forward.__module__
+    rebuilt.__qualname__ = original_forward.__qualname__
+    setattr(rebuilt, marker, True)
+    module.forward = MethodType(rebuilt, module)
 
 
 def _preserve_feature_map_redraw_dtype(module: nn.Module) -> None:

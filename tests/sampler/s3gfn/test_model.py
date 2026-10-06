@@ -146,35 +146,6 @@ class _AdapterPolicy(nn.Module):
         )
 
 
-_ORIGINAL_ADAPTER_FORWARD_CODE = MolformerSelfAttention.forward.__code__
-_ORIGINAL_ADAPTER_POLICY_FORWARD_CODE = _AdapterPolicy.forward.__code__
-
-
-@pytest.fixture(autouse=True)
-def restore_adapter_test_forward(monkeypatch):
-    """Isolate class-level code replacement between adapter tests."""
-    monkeypatch.setattr(
-        MolformerSelfAttention.forward,
-        "__code__",
-        _ORIGINAL_ADAPTER_FORWARD_CODE,
-    )
-    monkeypatch.delattr(
-        MolformerSelfAttention.forward,
-        "_s3gfn_attention_mask_adapter",
-        raising=False,
-    )
-    monkeypatch.setattr(
-        _AdapterPolicy.forward,
-        "__code__",
-        _ORIGINAL_ADAPTER_POLICY_FORWARD_CODE,
-    )
-    monkeypatch.delattr(
-        _AdapterPolicy.forward,
-        "_s3gfn_attention_mask_validator",
-        raising=False,
-    )
-
-
 @pytest.fixture
 def make_model():
     """Return a factory building ``S3GFNModel`` from language-model doubles.
@@ -290,6 +261,34 @@ def test_attention_mask_adapter_rejects_arbitrary_caller_mask(monkeypatch):
 
     with pytest.raises(ValueError, match="does not support arbitrary 3D attention"):
         policy(torch.ones((1, 2, 2)), attention_mask=torch.ones((1, 2, 2)))
+
+
+def test_attention_mask_adapter_leaves_other_instances_unchanged(monkeypatch):
+    """Adapting one policy must not alter the shared class methods."""
+    revision_module = (
+        "transformers_modules.ibm-research.GP-MoLFormer-Uniq."
+        f"{model_module._SUPPORTED_GP_MOLFORMER_REVISION}.modeling_molformer"
+    )
+    monkeypatch.setattr(MolformerSelfAttention.forward, "__module__", revision_module)
+    attention_code = MolformerSelfAttention.forward.__code__
+    policy_code = _AdapterPolicy.forward.__code__
+    policy, prior = _AdapterPolicy(), _AdapterPolicy()
+    unsupported_mask = torch.ones((1, 1, 2, 2)).tril()
+
+    model_module._install_gp_molformer_attention_mask_adapter(policy)
+    # A second install finds the instance-level markers and changes nothing.
+    adapted_forward = policy.attention.forward
+    model_module._install_gp_molformer_attention_mask_adapter(policy)
+
+    assert policy.attention.forward == adapted_forward
+    assert MolformerSelfAttention.forward.__code__ is attention_code
+    assert _AdapterPolicy.forward.__code__ is policy_code
+    assert not hasattr(MolformerSelfAttention.forward, "_s3gfn_attention_mask_adapter")
+    assert "forward" not in vars(prior) and "forward" not in vars(prior.attention)
+    # The frozen prior keeps the in-layer check for query-dependent masks.
+    with pytest.raises(ValueError, match="does not support arbitrary 3D attention"):
+        prior.attention(torch.ones((1, 2, 2)), attention_mask=unsupported_mask)
+    policy.attention(torch.ones((1, 2, 2)), attention_mask=unsupported_mask)
 
 
 def test_attention_mask_adapter_rejects_unknown_revision(monkeypatch):
