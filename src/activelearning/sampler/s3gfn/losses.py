@@ -22,6 +22,8 @@ def sequence_log_probabilities_from_logits(
     This is the shared scoring core: ``shifted_logits[:, i]`` must be the
     distribution predicting ``labels[:, i]``. Padding labels contribute zero,
     while EOS is included because it is a regular non-padding label.
+    Reduced-precision logits are promoted to float32 first: a BF16 sum over a
+    full sequence is only accurate to about half a nat.
 
     Parameters
     ----------
@@ -36,7 +38,8 @@ def sequence_log_probabilities_from_logits(
     Returns
     -------
     Tensor
-        Sequence log probabilities with shape ``(batch,)``.
+        Sequence log probabilities with shape ``(batch,)``, in float32 for
+        ``bfloat16`` or ``float16`` logits.
 
     Raises
     ------
@@ -48,6 +51,8 @@ def sequence_log_probabilities_from_logits(
             "The causal LM logits must align with the shifted sequence labels."
         )
 
+    if shifted_logits.dtype in (torch.bfloat16, torch.float16):
+        shifted_logits = shifted_logits.float()
     token_log_probabilities = functional.log_softmax(shifted_logits, dim=-1).gather(
         dim=-1,
         index=labels.unsqueeze(-1),
@@ -176,8 +181,11 @@ def relative_trajectory_balance_loss(
     if policy_log_probabilities.numel() == 0:
         return log_z.sum() * 0.0
 
-    target = prior_log_probabilities.detach() + beta * reward_scores
-    residual = log_z.reshape(()) + policy_log_probabilities - target
+    # A 0-dim ``log_z`` does not take part in type promotion, so adding it to
+    # reduced-precision likelihoods would round its contribution away.
+    dtype = torch.promote_types(policy_log_probabilities.dtype, log_z.dtype)
+    target = prior_log_probabilities.detach().to(dtype) + beta * reward_scores
+    residual = log_z.reshape(()) + policy_log_probabilities.to(dtype) - target
     return residual.square().mean()
 
 
