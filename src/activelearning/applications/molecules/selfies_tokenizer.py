@@ -240,3 +240,29 @@ class SelfiesTokenizer(SequenceTokenizer):
         if device is not None:
             batch = batch.to(device)
         return batch
+
+    def attention_mask_from_batch(self, token_batch: Tensor) -> Tensor:
+        """Return one for every non-padding SELFIES token position.
+
+        Parameters
+        ----------
+        token_batch : Tensor
+            Two-dimensional token-ID tensor.
+
+        Returns
+        -------
+        Tensor
+            ``torch.long`` mask with one at non-padding positions and zero at
+            padding positions.
+
+        Raises
+        ------
+        ValueError
+            If ``token_batch`` is not two-dimensional.
+        """
+        if token_batch.ndim != 2:
+            raise ValueError(
+                "token_batch must be 2-D (B, seq_len), got shape "
+                f"{tuple(token_batch.shape)}"
+            )
+        return token_batch.ne(self.padding_idx).long()
