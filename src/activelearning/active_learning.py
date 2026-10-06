@@ -310,7 +310,7 @@ def active_learning(
 
     total_cost = initial_budget - budget.available_budget
     elapsed_time_s = time.perf_counter() - run_started
-    num_observations = len(dataset.get_observations_iterable())
+    num_observations = sum(1 for _ in dataset.get_observations_iterable())
 
     _finish_run_logging(
         logger=logger,
