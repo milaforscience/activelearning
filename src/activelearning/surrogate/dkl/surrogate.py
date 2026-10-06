@@ -287,7 +287,11 @@ class DeepKernelSurrogate(BoTorchGPSurrogate):
         for _ in range(self._training.pretrain_epochs):
             self._set_train_mode()
             optimizer.zero_grad()
-            self._encoder.mlm_loss(mlm_tokens, self._training.mask_ratio).backward()
+            loss = self._encoder.mlm_loss(mlm_tokens, self._training.mask_ratio)
+            if not loss.requires_grad:
+                # No positions were masked, so there is nothing to optimise.
+                continue
+            loss.backward()
             torch.nn.utils.clip_grad_norm_(all_params, max_norm=1.0)
             optimizer.step()
 
