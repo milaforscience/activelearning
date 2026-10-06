@@ -236,7 +236,11 @@ class DeepKernelSurrogate(BoTorchGPSurrogate):
     @property
     def _has_mlm_loss(self) -> bool:
         """Return whether the encoder provides an MLM auxiliary objective."""
-        return callable(getattr(self._encoder, "mlm_loss", None))
+        if not callable(getattr(self._encoder, "mlm_loss", None)):
+            return False
+        # A tokenizer without a mask token cannot support MLM.
+        tokenizer = getattr(self._encoder, "tokenizer", None)
+        return tokenizer is None or tokenizer.mask_idx is not None
 
     # Shared training loop
 
