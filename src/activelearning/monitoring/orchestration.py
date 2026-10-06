@@ -85,7 +85,7 @@ def collect_round_diagnostics(
             )
 
         diagnostic_calls = (
-            ("sampler", lambda: sampler_diagnostics(record, max_points=max_points)),
+            ("sampler", lambda: sampler_diagnostics(record)),
             ("oracle", lambda: oracle_diagnostics(record)),
             ("dataset", lambda: dataset_diagnostics(record)),
             ("budget", lambda: budget_diagnostics(record)),

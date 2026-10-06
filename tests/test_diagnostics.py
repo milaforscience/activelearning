@@ -78,7 +78,7 @@ def test_general_diagnostics_report_expected_round_statistics() -> None:
         include_figures=True,
         prequential_history=[],
     )
-    sampler_metrics, _ = sampler_diagnostics(record, max_points=1000)
+    sampler_metrics, _ = sampler_diagnostics(record)
     oracle_metrics, _ = oracle_diagnostics(record)
     dataset_metrics, _ = dataset_diagnostics(record)
     budget_metrics, _ = budget_diagnostics(record)
@@ -251,7 +251,7 @@ def test_diagnostics_skip_non_scalar_and_empty_inputs() -> None:
         diagnostics={},
     )
 
-    sampler_metrics, _ = sampler_diagnostics(record, max_points=1)
+    sampler_metrics, _ = sampler_diagnostics(record)
     dataset_metrics, _ = dataset_diagnostics(record)
     budget_metrics, _ = budget_diagnostics(record)
 

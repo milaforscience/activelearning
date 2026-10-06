@@ -128,7 +128,6 @@ class RuntimeGFlowNetLoggerWrapper(GFlowNetLogger):
         use_context: bool = True,
     ) -> None:
         """Log upstream figures and retain Matplotlib figures for round draining."""
-        named_figures: list[tuple[str, Any]] = []
         if isinstance(figs, dict):
             named_figures = list(figs.items())
         else:
@@ -213,7 +212,3 @@ class RuntimeGFlowNetLoggerWrapper(GFlowNetLogger):
         self._pending_metrics = {}
         self._pending_figures = {}
         return metrics, figures
-
-    def end(self) -> None:
-        """Close only the upstream GFlowNet logger backend."""
-        super().end()

@@ -50,11 +50,10 @@ class TopKAcquisitionSelector(Selector):
         if not candidates:
             return []
 
+        acquisition_scores = list(acquisition.score(candidates))
         if cost_fn is None:
-            acquisition_scores = list(acquisition.score(candidates))
             ranking_scores = acquisition_scores
         else:
-            acquisition_scores = list(acquisition.score(candidates))
             ranking_scores = list(
                 cost_weighting_from_cost_fn(cost_fn)(
                     acquisition_scores,
