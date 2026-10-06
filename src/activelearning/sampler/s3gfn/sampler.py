@@ -537,7 +537,7 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             replay_loss=replay_loss,
             auxiliary_loss=auxiliary_loss,
             log_z=float(model.log_z.detach().item()),
-            raw_reward_scores=prepared.reward_scores.detach().cpu().tolist(),
+            reward_scores=prepared.reward_scores.detach().cpu().tolist(),
         )
         return (
             self.batch_size,
@@ -710,7 +710,7 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
                 ),
             )
         ]
-        raw_scores = _score_candidates(acquisition, candidates, cost_fn=cost_fn)
+        scores = _score_candidates(acquisition, candidates, cost_fn=cost_fn)
 
         input_ids = model.encode_smiles(canonical_smiles)
         labels = synthesizability.classify_batch(canonical_smiles)
@@ -718,7 +718,7 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             smiles=tuple(canonical_smiles),
             input_ids=input_ids,
             reward_scores=torch.tensor(
-                raw_scores,
+                scores,
                 # Keep acquisition scores in the runtime floating-point dtype.
                 dtype=self.dtype,
                 device=input_ids.device,

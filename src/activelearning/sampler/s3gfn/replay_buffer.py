@@ -40,7 +40,7 @@ class ReplayBatch:
     input_ids : Tensor
         Padded integer token ids for the sampled trajectories.
     reward_scores : Tensor
-        Scaled reward scores aligned with the sampled trajectories.
+        Acquisition scores ``r(x)`` aligned with the sampled trajectories.
     smiles : tuple[str, ...]
         Molecule strings aligned with the sampled trajectories.
     fidelity_indices : Tensor or None

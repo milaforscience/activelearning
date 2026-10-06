@@ -25,7 +25,7 @@ class _RoundMetrics:
     replay_losses: list[float | None] = field(default_factory=list)
     auxiliary_losses: list[float | None] = field(default_factory=list)
     log_z_values: list[float] = field(default_factory=list)
-    raw_reward_scores: list[float] = field(default_factory=list)
+    reward_scores: list[float] = field(default_factory=list)
     online_updates: int = 0
     replay_updates: int = 0
     generation_attempts: int = 0
@@ -45,14 +45,14 @@ class _RoundMetrics:
         replay_loss: float | None,
         auxiliary_loss: float | None,
         log_z: float,
-        raw_reward_scores: Sequence[float],
+        reward_scores: Sequence[float],
     ) -> None:
         """Record one training step and its generated-batch statistics."""
         self.generated_counts.append(generated_count)
         self.valid_counts.append(valid_count)
         self.synthesizable_counts.append(synthesizable_count)
         self.log_z_values.append(log_z)
-        self.raw_reward_scores.extend(raw_reward_scores)
+        self.reward_scores.extend(reward_scores)
         self.online_rtb_losses.append(online_loss)
         if online_loss is not None:
             self.online_updates += 1
@@ -180,9 +180,9 @@ class S3GFNLoggingMixin:
             metrics["s3gfn/train/auxiliary_loss_mean"] = _mean(auxiliary_losses)
         if round_metrics.log_z_values:
             metrics["s3gfn/train/log_z_final"] = round_metrics.log_z_values[-1]
-        if round_metrics.raw_reward_scores:
-            metrics["s3gfn/reward/raw_mean"] = _mean(round_metrics.raw_reward_scores)
-            metrics["s3gfn/reward/raw_max"] = max(round_metrics.raw_reward_scores)
+        if round_metrics.reward_scores:
+            metrics["s3gfn/reward/mean"] = _mean(round_metrics.reward_scores)
+            metrics["s3gfn/reward/max"] = max(round_metrics.reward_scores)
         if round_metrics.training_duration_s is not None:
             metrics["s3gfn/train/duration_s"] = float(round_metrics.training_duration_s)
         if round_metrics.generation_duration_s is not None:
