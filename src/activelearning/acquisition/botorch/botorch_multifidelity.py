@@ -22,6 +22,7 @@ from botorch.acquisition.objective import ScalarizedPosteriorTransform
 
 from activelearning.acquisition.botorch.botorch_acquisition import (
     QBatchBoTorchAcquisition,
+    clamp_negative_scores,
 )
 from activelearning.acquisition.botorch.candidate_set import CandidateSetSpec
 from activelearning.runtime import RuntimeContext
@@ -145,8 +146,7 @@ class _QMultiFidelityEntropyBase(QBatchBoTorchAcquisition):
 
     def _score_encoded(self, X: torch.Tensor) -> list[float]:
         """Evaluate information gain and clamp negative estimates to zero."""
-        scores = super()._score_encoded(X)
-        return [max(0.0, score) for score in scores]
+        return clamp_negative_scores(super()._score_encoded(X))
 
 
 class QMultiFidelityMaxValueEntropy(_QMultiFidelityEntropyBase):
