@@ -143,6 +143,10 @@ class RuntimeGFlowNetLoggerWrapper(GFlowNetLogger):
         for key, figure in formatted_figures.items():
             if not isinstance(figure, Figure):
                 continue
+            # Upstream may emit one key at several inner steps; keep the latest.
+            replaced = self._pending_figures.get(key)
+            if replaced is not None and replaced is not figure:
+                plt.close(replaced)
             self._pending_figures[key] = figure
         self._record_step(step)
         super().log_plots(formatted_figures, step=step, use_context=False)
