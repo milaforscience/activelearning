@@ -284,6 +284,31 @@ class VariationalDKLSurrogate(DeepKernelSurrogate):
             raise RuntimeError("Surrogate has not been fitted yet.")
         return self._botorch_adapter
 
+    def get_train_data(self) -> tuple[torch.Tensor, torch.Tensor]:
+        """Return training inputs in latent feature space and training targets.
+
+        Overrides the base method, which returns the stored token-space
+        inputs.  The adapter returned by :meth:`get_model` operates on latent
+        features, so the training inputs are encoded to match.
+
+        Returns
+        -------
+        train_X : torch.Tensor
+            Latent training features, with an optional fidelity confidence as
+            the final column.
+        train_Y : torch.Tensor
+            Training targets.
+
+        Raises
+        ------
+        RuntimeError
+            If the surrogate has not been fitted.
+        """
+        train_X, train_Y = super().get_train_data()
+        self._set_eval_mode()
+        with torch.no_grad():
+            return self._encode_with_fidelity(train_X.to(self.device)), train_Y
+
     def get_fidelity_dimension(self) -> Optional[int]:
         """Return the fidelity column index in latent feature space.
 
