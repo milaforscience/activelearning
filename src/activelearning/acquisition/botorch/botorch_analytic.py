@@ -7,6 +7,7 @@ analytic acquisition object.
 
 from typing import Any, Optional
 
+import torch
 from botorch.acquisition.analytic import (
     ExpectedImprovement as _EI,
     LogExpectedImprovement as _LogEI,
@@ -18,6 +19,7 @@ from botorch.acquisition.analytic import (
 
 from activelearning.acquisition.botorch.botorch_acquisition import (
     AnalyticBoTorchAcquisition,
+    clamp_negative_scores,
 )
 
 
@@ -55,6 +57,10 @@ class UpperConfidenceBound(AnalyticBoTorchAcquisition):
 class ExpectedImprovement(AnalyticBoTorchAcquisition):
     """Analytic Expected Improvement (EI).
 
+    Expected improvement is theoretically non-negative. Scores are clamped to
+    zero because cancellation in the direct analytic formula can produce small
+    negative floating-point values near zero.
+
     Parameters
     ----------
     best_f : float, optional
@@ -79,6 +85,10 @@ class ExpectedImprovement(AnalyticBoTorchAcquisition):
             best_f=self._resolve_best_f(self._best_f_override),
             maximize=self.maximize,
         )
+
+    def _score_encoded(self, X: torch.Tensor) -> list[float]:
+        """Evaluate EI and clamp negative numerical artifacts to zero."""
+        return clamp_negative_scores(super()._score_encoded(X))
 
 
 class LogExpectedImprovement(AnalyticBoTorchAcquisition):

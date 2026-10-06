@@ -1,8 +1,7 @@
-"""Pydantic models of acquisition functions.
+"""Pydantic configuration models for live telemetry backends.
 
-Changes in the interface of existing acquisition functions should be reflected in this
-configuration. New acquisition functions should define their corresponding pydantic
-model here and be added to ``LoggerConfig``.
+Each model builds a :class:`~activelearning.logger.logger.Logger` implementation.
+Add new backend configuration models to ``LoggerConfig``.
 """
 
 from typing import Any, Annotated, Literal, Union
@@ -98,24 +97,6 @@ LoggerConfig = Annotated[
     Field(discriminator="type"),
 ]
 """Discriminated union of all supported logger configurations."""
-
-
-def build_logger(config: LoggerConfig | None) -> Logger | None:
-    """Build a logger from a config object, or return None if config is None.
-
-    Parameters
-    ----------
-    config : LoggerConfig or None
-        Logger configuration object or None.
-
-    Returns
-    -------
-    logger : Logger or None
-        Built logger instance, or None if config is None.
-    """
-    if config is None:
-        return None
-    return config.build()
 
 
 def _config_uses_logger_type(node: Any, logger_type: str) -> bool:

@@ -22,6 +22,7 @@ from botorch.acquisition.objective import ScalarizedPosteriorTransform
 
 from activelearning.acquisition.botorch.botorch_acquisition import (
     QBatchBoTorchAcquisition,
+    clamp_negative_scores,
 )
 from activelearning.acquisition.botorch.candidate_set import CandidateSetSpec
 from activelearning.runtime import RuntimeContext
@@ -37,6 +38,9 @@ class _QMultiFidelityEntropyBase(QBatchBoTorchAcquisition):
     :class:`QMultiFidelityMaxValueEntropy` and
     :class:`QMultiFidelityLowerBoundMaxValueEntropy`. Subclasses set
     ``_botorch_acqf_class`` to select the underlying BoTorch implementation.
+    Information gain is theoretically non-negative. Scores are clamped to zero
+    because finite-sample and floating-point error can produce negative
+    estimates, and downstream weighted samplers require non-negative weights.
 
     This class is not intended to be instantiated directly.
 
@@ -139,6 +143,10 @@ class _QMultiFidelityEntropyBase(QBatchBoTorchAcquisition):
             build_kwargs["expand"] = self._expand
 
         return self._botorch_acqf_class(**build_kwargs)
+
+    def _score_encoded(self, X: torch.Tensor) -> list[float]:
+        """Evaluate information gain and clamp negative estimates to zero."""
+        return clamp_negative_scores(super()._score_encoded(X))
 
 
 class QMultiFidelityMaxValueEntropy(_QMultiFidelityEntropyBase):

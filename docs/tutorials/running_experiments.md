@@ -56,7 +56,7 @@ uv run activelearning config/branin/multi_fidelity.yaml \
 ```
 
 ```text
-[Step 1] round=1 | num_new_samples=300 | round_cost=3.0000 | total_cost=3.0000 | budget_remaining=0.0000
+[Step 1] active_learning/round=1 | active_learning/samples/proposed=10000 | active_learning/samples/selected=300 | active_learning/observations/new=300 | active_learning/cost/round=3.0000 | active_learning/cost/cumulative=3.0000 | active_learning/budget/remaining=0.0000 | profiling/...
 Done. Rounds: 1 | Total cost: 3.0000
 ```
 
@@ -94,7 +94,37 @@ The bundled `config/aim_logging.yaml` changes the logger configuration while
 leaving the experiment components inherited from the first file. This overlay
 can be composed with any base experiment config.
 
-## **Logging**
+## **Monitoring and outputs**
+
+The [Quickstart](../getting-started/quickstart.md) introduced the core metrics
+printed for each round. You can send those metrics and timing information to
+two independent outputs: a logger for live feedback and a run writer for
+durable records. Diagnostics can add optional model and component analysis to
+either output:
+
+```yaml
+logger:
+  type: ConsoleLogger
+  project_name: activelearning_tutorials
+
+run_writer:
+  type: JSONLinesRunWriter
+  output_dir: outputs/my_run
+
+diagnostics:
+  enabled: true
+  figure_interval: 1
+  max_points: 1000
+```
+
+`logger` submits live scalar metrics and figures to the console or a tracker.
+`run_writer` persists `run_manifest.json`, `round_history.jsonl`,
+`experiment_log.csv`, `run_summary.json`, and diagnostic figures below
+`artifacts/`. `diagnostics` controls optional enrichment for either configured
+sink; it does not disable core metrics or profiling. For the full lifecycle and
+behavior matrix, see [Monitoring and Diagnostics](../concepts/monitoring_and_diagnostics.md).
+
+### **Live telemetry backends**
 
 The framework supports several logging backends. Install the optional
 dependency for the backend you want, then configure its `logger.type`:
@@ -149,9 +179,19 @@ Open the URL shown in the terminal. All runs appear under the
 `activelearning_tutorials` project. The most useful views to start with are:
 
 - **Config tab** — the full resolved config that was used for the run
-- **Metrics** — scalar time series for `round_cost`, `total_cost`, and `budget_remaining`
-- **Images** — the Branin contour and the latest queried batch, if
-  `oracle.log_landscape=true`
+- **Metrics** — scalar time series for `active_learning/cost/round`,
+  `active_learning/cost/cumulative`, `active_learning/samples/selected`, and
+  `active_learning/budget/remaining`, plus the `profiling/` phase durations
+- **Images** — the Branin contour under
+  `oracle/branin/query_landscape` and the latest surrogate
+  diagnostic under `surrogate/general/predicted_vs_observed`, if enabled
+
+All framework-owned keys use slash-delimited namespaces. GFlowNet metrics and
+figures mirrored into the active-learning logger use `sampler/gflownet/`;
+their native inner training steps remain available in the upstream GFlowNet
+logger. S3-GFN uses `sampler/s3gfn/` for training, generation, and reward
+metrics, and emits `sampler/s3gfn/training_losses`,
+`sampler/s3gfn/log_z`, and `sampler/s3gfn/reward/trajectory` figures.
 
 !!! tip "Comparing runs"
     Because all runs log to the same `activelearning_tutorials` project, you
@@ -159,12 +199,27 @@ Open the URL shown in the terminal. All runs appear under the
     Use the logged landscape images to inspect where each run queried; a
     benchmark metric is still needed for a quantitative quality comparison.
 
-### **Disable logging**
+### **Configure concerns independently**
 
-Set `logger` to `null` in the config or as a CLI override:
+Set `logger` to `null` to disable live telemetry while preserving any configured
+run-writer output:
 
 ```sh
 uv run activelearning config/branin/single_fidelity.yaml logger=null
+```
+
+Set `run_writer` to `null` to disable durable records while preserving any
+configured live telemetry:
+
+```sh
+uv run activelearning config/branin/single_fidelity.yaml run_writer=null
+```
+
+Set `diagnostics.enabled=false` to omit optional diagnostic metrics and figures
+while retaining core metrics and profiling in every configured sink:
+
+```sh
+uv run activelearning config/branin/single_fidelity.yaml diagnostics.enabled=false
 ```
 
 ## **Validate a config without running**
