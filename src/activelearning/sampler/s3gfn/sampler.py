@@ -822,12 +822,14 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
 
         while len(candidates) < self.n_samples and generated_attempts < max_attempts:
             batch_index += 1
+            remaining_attempts = max_attempts - generated_attempts
+            requested_count = min(self.batch_size, remaining_attempts)
             generated = model.generate(
-                count=self.batch_size,
+                count=requested_count,
                 max_length=self.max_length,
                 temperature=self.sampling_temperature,
             )
-            batch_attempts = max(self.batch_size, len(generated.smiles))
+            batch_attempts = max(requested_count, len(generated.smiles))
             generated_attempts += batch_attempts
             valid_count, invalid_count, duplicate_count = self._process_candidate_batch(
                 smiles=generated.smiles,
