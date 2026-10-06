@@ -138,12 +138,7 @@ def _canonical_identity(value: Any) -> Hashable | object:
                 return _UNSUPPORTED_IDENTITY
             items.append((canonical_key, canonical_item))
         return ("mapping", tuple(sorted(items, key=repr)))
-    if isinstance(value, list):
-        items = [_canonical_identity(item) for item in value]
-        if any(item is _UNSUPPORTED_IDENTITY for item in items):
-            return _UNSUPPORTED_IDENTITY
-        return ("sequence", tuple(items))
-    if isinstance(value, tuple):
+    if isinstance(value, (list, tuple)):
         items = [_canonical_identity(item) for item in value]
         if any(item is _UNSUPPORTED_IDENTITY for item in items):
             return _UNSUPPORTED_IDENTITY

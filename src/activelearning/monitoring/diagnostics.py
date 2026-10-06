@@ -89,34 +89,28 @@ def surrogate_diagnostics(
 
 def sampler_diagnostics(
     record: "RoundRecord",
-    *,
-    max_points: int,
 ) -> tuple[dict[str, int | float], dict[str, Figure]]:
     """Summarize candidate duplication, overlap, and fidelity proportions."""
-    _ = max_points
     candidates = record.sampled_candidates
     metrics: dict[str, int | float] = {}
     candidate_keys = [candidate_identity(candidate) for candidate in candidates]
     if candidates and all(key is not None for key in candidate_keys):
-        known_candidate_keys = [key for key in candidate_keys if key is not None]
-        unique_keys = set(known_candidate_keys)
-        metrics["sampler/general/duplicate_fraction"] = 1.0 - len(unique_keys) / len(
-            known_candidate_keys
+        unique_count = len(set(candidate_keys))
+        metrics["sampler/general/duplicate_fraction"] = 1.0 - unique_count / len(
+            candidate_keys
         )
-        observed_keys = [
+        observed_keys = {
             candidate_identity(observation)
             for observation in record.observations_before
-        ]
-        if all(key is not None for key in observed_keys):
-            known_observed_keys = {key for key in observed_keys if key is not None}
+        }
+        if None not in observed_keys:
             metrics["sampler/general/observed_overlap_fraction"] = sum(
-                key in known_observed_keys for key in known_candidate_keys
-            ) / len(known_candidate_keys)
-    if candidates:
-        for fidelity in sorted({candidate.fidelity for candidate in candidates}):
-            metrics[f"sampler/general/fidelity_{fidelity}/fraction"] = sum(
-                candidate.fidelity == fidelity for candidate in candidates
-            ) / len(candidates)
+                key in observed_keys for key in candidate_keys
+            ) / len(candidate_keys)
+    for fidelity in sorted({candidate.fidelity for candidate in candidates}):
+        metrics[f"sampler/general/fidelity_{fidelity}/fraction"] = sum(
+            candidate.fidelity == fidelity for candidate in candidates
+        ) / len(candidates)
     return metrics, {}
 
 
@@ -219,43 +213,30 @@ def selection_score_diagnostics(
     ):
         raise ValueError("Selected score indices must refer to the candidate pool.")
 
-    selected_acquisition_scores = [
-        scores.acquisition_scores[index] for index in scores.selected_indices
-    ]
-    selected_ranking_scores = [
-        scores.ranking_scores[index] for index in scores.selected_indices
-    ]
     sampled_acquisition_scores = _finite_values(scores.acquisition_scores)
-    selected_acquisition_scores = _finite_values(selected_acquisition_scores)
+    selected_acquisition_scores = _finite_values(
+        [scores.acquisition_scores[index] for index in scores.selected_indices]
+    )
     sampled_ranking_scores = _finite_values(scores.ranking_scores)
-    selected_ranking_scores = _finite_values(selected_ranking_scores)
+    selected_ranking_scores = _finite_values(
+        [scores.ranking_scores[index] for index in scores.selected_indices]
+    )
 
-    metrics: dict[str, int | float] = {}
-    _merge_diagnostic_metrics(
-        metrics,
-        _summary("acquisition/general/sampled", sampled_acquisition_scores),
-    )
-    _merge_diagnostic_metrics(
-        metrics,
-        _summary("acquisition/general/selected", selected_acquisition_scores),
-    )
-    _merge_diagnostic_metrics(
-        metrics,
-        _summary(
+    metrics: dict[str, int | float] = {
+        **_summary("acquisition/general/sampled", sampled_acquisition_scores),
+        **_summary("acquisition/general/selected", selected_acquisition_scores),
+        **_summary(
             "selector/general/ranking",
             sampled_ranking_scores,
             include_count=False,
         ),
-    )
-    _merge_diagnostic_metrics(
-        metrics,
-        _summary(
+        **_summary(
             "selector/general/selected_ranking",
             selected_ranking_scores,
             include_count=False,
             include_std=False,
         ),
-    )
+    }
 
     figures: dict[str, Figure] = {}
     if include_figures:
@@ -300,30 +281,17 @@ def append_prequential_panel(
     combined = _combine_prediction_panels(panels)
     if combined is None:
         return ()
-    bounded_rows = list(
-        zip(
-            combined.targets,
-            combined.means,
-            combined.standard_deviations or [None] * len(combined.targets),
-            combined.fidelities,
-        )
-    )[-max_points:]
-    standard_deviations = (
-        None
-        if combined.standard_deviations is None
-        else tuple(row[2] for row in bounded_rows if row[2] is not None)
-    )
-    if standard_deviations is not None and len(standard_deviations) != len(
-        bounded_rows
-    ):
-        standard_deviations = None
     return (
         PredictionPanel(
             title="Held-out rolling",
-            targets=tuple(row[0] for row in bounded_rows),
-            means=tuple(row[1] for row in bounded_rows),
-            standard_deviations=standard_deviations,
-            fidelities=tuple(row[3] for row in bounded_rows),
+            targets=combined.targets[-max_points:],
+            means=combined.means[-max_points:],
+            standard_deviations=(
+                None
+                if combined.standard_deviations is None
+                else combined.standard_deviations[-max_points:]
+            ),
+            fidelities=combined.fidelities[-max_points:],
         ),
     )
 
@@ -503,8 +471,6 @@ def _histogram_bin_edges(
 ) -> list[float]:
     """Return common histogram edges for sampled and selected values."""
     values = [*sampled, *selected]
-    if not values:
-        return []
     value_min = min(values)
     value_max = max(values)
     if value_min == value_max:
@@ -526,18 +492,14 @@ def _score_distribution_figure(
     figure = Figure(figsize=(7.0 * len(distributions), 4.5))
     for axis_index, (title, sampled, selected) in enumerate(distributions, start=1):
         axis = figure.add_subplot(1, len(distributions), axis_index)
-        axis.hist(
-            _bounded_values(sampled, max_points),
-            bins=_histogram_bin_edges(sampled, selected),
-            alpha=0.65,
-            label="sampled",
-        )
-        axis.hist(
-            _bounded_values(selected, max_points),
-            bins=_histogram_bin_edges(sampled, selected),
-            alpha=0.65,
-            label="selected",
-        )
+        bins = _histogram_bin_edges(sampled, selected)
+        for label, values in (("sampled", sampled), ("selected", selected)):
+            axis.hist(
+                _bounded_values(values, max_points),
+                bins=bins,
+                alpha=0.65,
+                label=label,
+            )
         axis.set_title(title)
         axis.set_xlabel("Score")
         axis.set_ylabel("Count")
@@ -559,17 +521,6 @@ def _bounded_values(values: Sequence[float], max_points: int) -> list[float]:
         index * (len(values) - 1) // (max_points - 1) for index in range(max_points)
     ]
     return [values[index] for index in indices]
-
-
-def _merge_diagnostic_metrics(
-    target: dict[str, int | float],
-    incoming: Mapping[str, int | float],
-) -> None:
-    """Merge generated score metrics without silently overwriting keys."""
-    duplicates = target.keys() & incoming.keys()
-    if duplicates:
-        raise ValueError(f"Duplicate diagnostic keys: {sorted(duplicates)}")
-    target.update(incoming)
 
 
 def _mean(values: Sequence[float]) -> float:
