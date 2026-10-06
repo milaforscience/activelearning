@@ -314,6 +314,19 @@ class TestVariationalDKLSurrogate:
         # Last column is the encoded fidelity confidence.
         assert latent[:, -1].tolist() == pytest.approx([0.25, 0.5])
 
+    def test_get_train_data_returns_latent_features(
+        self, var_mf_surrogate: VariationalDKLSurrogate
+    ):
+        """get_train_data() inputs must be consumable by the latent-space adapter."""
+        obs = _make_mf_observations([BENZENE, ALANINE], [1.0, 2.0], [1, 2])
+        var_mf_surrogate.fit(obs)
+        train_X, train_Y = var_mf_surrogate.get_train_data()
+        assert train_X.shape == (2, ENCODER_CFG.latent_dim + 1)
+        assert train_X[:, -1].tolist() == pytest.approx([0.25, 0.5])
+        assert train_Y.shape[0] == 2
+        posterior = var_mf_surrogate.get_model().posterior(train_X)
+        assert posterior.mean.shape == (2, 1)
+
     def test_get_model_returns_botorch_adapter(
         self, var_surrogate: VariationalDKLSurrogate
     ):
