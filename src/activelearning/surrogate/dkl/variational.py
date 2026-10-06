@@ -101,6 +101,8 @@ class _VariationalBoTorchAdapter(Model):
         self,
         gp_model: _VariationalDKLGP,
         likelihood: gpytorch.likelihoods.GaussianLikelihood,
+        y_mean: float = 0.0,
+        y_std: float = 1.0,
     ) -> None:
         """Initialize an adapter around a trained variational GP and likelihood.
 
@@ -110,10 +112,16 @@ class _VariationalBoTorchAdapter(Model):
             Sparse variational GP head operating on latent feature vectors.
         likelihood : gpytorch.likelihoods.GaussianLikelihood
             Likelihood used to include observation noise in posterior queries.
+        y_mean : float, default=0.0
+            Mean removed from the targets before GP training.
+        y_std : float, default=1.0
+            Scale the targets were divided by before GP training.
         """
         super().__init__()
         self._gp = gp_model
         self._likelihood = likelihood
+        self._y_mean = y_mean
+        self._y_std = y_std
 
     @property
     def num_outputs(self) -> int:
@@ -163,7 +171,8 @@ class _VariationalBoTorchAdapter(Model):
         Returns
         -------
         GPyTorchPosterior
-            BoTorch posterior backed by the variational GP distribution.
+            BoTorch posterior backed by the variational GP distribution, on
+            the original (pre-standardization) target scale.
         """
         if output_indices is not None and list(output_indices) != [0]:
             raise NotImplementedError(
@@ -174,6 +183,12 @@ class _VariationalBoTorchAdapter(Model):
         dist = self._gp(X)
         if observation_noise:
             dist = self._likelihood(dist)
+        # The GP is trained on standardized targets; acquisition thresholds
+        # such as best_f are on the original scale, so undo the transform.
+        dist = gpytorch.distributions.MultivariateNormal(
+            dist.mean * self._y_std + self._y_mean,
+            dist.lazy_covariance_matrix * self._y_std**2,
+        )
         posterior = GPyTorchPosterior(distribution=dist)
         if posterior_transform is not None:
             posterior = posterior_transform(posterior)
@@ -247,7 +262,10 @@ class VariationalDKLSurrogate(DeepKernelSurrogate):
             device=self.device, dtype=self.dtype
         )
         self._botorch_adapter = _VariationalBoTorchAdapter(
-            self._gp_model, self._likelihood
+            self._gp_model,
+            self._likelihood,
+            y_mean=self._y_mean,
+            y_std=self._y_std,
         )
         self.model = self._gp_model  # exposes is_fitted() / state-dict helpers
 
@@ -288,8 +306,9 @@ class VariationalDKLSurrogate(DeepKernelSurrogate):
         """Return training inputs in latent feature space and training targets.
 
         Overrides the base method, which returns the stored token-space
-        inputs.  The adapter returned by :meth:`get_model` operates on latent
-        features, so the training inputs are encoded to match.
+        inputs and standardized targets.  The adapter returned by
+        :meth:`get_model` operates on latent features and predicts on the
+        original target scale, so both tensors are converted to match.
 
         Returns
         -------
@@ -297,7 +316,7 @@ class VariationalDKLSurrogate(DeepKernelSurrogate):
             Latent training features, with an optional fidelity confidence as
             the final column.
         train_Y : torch.Tensor
-            Training targets.
+            Training targets on the original, pre-standardization scale.
 
         Raises
         ------
@@ -306,6 +325,7 @@ class VariationalDKLSurrogate(DeepKernelSurrogate):
         """
         train_X, train_Y = super().get_train_data()
         self._set_eval_mode()
+        train_Y = train_Y * self._y_std + self._y_mean
         with torch.no_grad():
             return self._encode_with_fidelity(train_X.to(self.device)), train_Y
 

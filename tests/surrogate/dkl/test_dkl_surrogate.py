@@ -346,6 +346,54 @@ class TestVariationalDKLSurrogate:
         posterior = var_mf_surrogate.get_model().posterior(train_X)
         assert posterior.mean.shape == (2, 1)
 
+    def test_posterior_is_on_original_target_scale(
+        self, var_surrogate: VariationalDKLSurrogate
+    ):
+        """The adapter posterior must be comparable with raw observation values."""
+        ys = [100.0, 102.0, 104.0]
+        var_surrogate.fit(_make_observations([BENZENE, ALANINE, ETHANOL], ys))
+        latent = var_surrogate.encode_candidates(
+            _make_candidates([BENZENE, ALANINE, ETHANOL])
+        )
+        model = var_surrogate.get_model()
+        with torch.no_grad():
+            posterior = model.posterior(latent)
+            standardized = var_surrogate._gp_model(latent)
+        y_mean, y_std = var_surrogate._y_mean, var_surrogate._y_std
+        assert y_mean == pytest.approx(102.0)
+        assert y_std == pytest.approx(2.0)
+        # Mean is shifted and scaled; covariance is scaled by the variance.
+        assert torch.allclose(
+            posterior.mean.squeeze(-1), standardized.mean * y_std + y_mean
+        )
+        assert torch.allclose(
+            posterior.distribution.covariance_matrix,
+            standardized.covariance_matrix * y_std**2,
+        )
+        # A standardized posterior would sit near 0 instead of near the data.
+        assert (posterior.mean - 102.0).abs().max() < 10.0
+        _, train_Y = var_surrogate.get_train_data()
+        assert train_Y.squeeze(-1).tolist() == pytest.approx(ys)
+
+    def test_posterior_with_noise_matches_predict(
+        self, var_surrogate: VariationalDKLSurrogate
+    ):
+        """posterior() and predict() must agree on mean and standard deviation."""
+        var_surrogate.fit(
+            _make_observations([BENZENE, ALANINE, ETHANOL], [100.0, 102.0, 104.0])
+        )
+        candidates = _make_candidates([BENZENE, ETHANOL])
+        prediction = var_surrogate.predict(candidates)
+        latent = var_surrogate.encode_candidates(candidates)
+        with torch.no_grad():
+            posterior = var_surrogate.get_model().posterior(
+                latent, observation_noise=True
+            )
+        assert posterior.mean.squeeze(-1).tolist() == pytest.approx(prediction["mean"])
+        assert posterior.variance.sqrt().squeeze(-1).tolist() == pytest.approx(
+            prediction["std"]
+        )
+
     def test_get_model_returns_botorch_adapter(
         self, var_surrogate: VariationalDKLSurrogate
     ):
