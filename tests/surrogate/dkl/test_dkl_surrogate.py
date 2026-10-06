@@ -240,6 +240,15 @@ def test_fit_without_mask_token_skips_mlm(
     assert molecule_dkl_surrogate.is_fitted()
 
 
+def test_pretraining_with_zero_mask_ratio_is_noop(
+    molecule_dkl_surrogate: DeepKernelSurrogate,
+) -> None:
+    """MLM pretraining must not fail when no positions are masked."""
+    molecule_dkl_surrogate._training = TRAINING.model_copy(update={"mask_ratio": 0.0})
+    molecule_dkl_surrogate.fit(_make_observations([BENZENE, ALANINE], [1.0, -1.0]))
+    assert molecule_dkl_surrogate.is_fitted()
+
+
 @pytest.fixture
 def var_surrogate() -> VariationalDKLSurrogate:
     encoder = ENCODER_CFG.build()
