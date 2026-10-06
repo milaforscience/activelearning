@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 
 from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
@@ -175,6 +175,29 @@ def collect_round_diagnostics(
         else:
             _close_figures(component_figures.values())
     return metrics, figures, updated_prequential_history
+
+
+def discard_round_diagnostics(components: Iterable[object]) -> None:
+    """Clear transient component diagnostics for a round that did not complete.
+
+    A round that stops before the oracle query never reaches
+    :func:`collect_round_diagnostics`, so figures and logger backends opened
+    while sampling would otherwise stay open.
+    """
+    for component in components:
+        drain = getattr(component, "drain_round_diagnostics", None)
+        if not callable(drain):
+            continue
+        try:
+            _, figures = drain(include_figures=False, max_points=1)
+        except Exception:
+            _logger.warning(
+                "Could not discard %s implementation diagnostics.",
+                type(component).__name__,
+                exc_info=True,
+            )
+            continue
+        _close_figures(figures.values())
 
 
 def record_completed_round(

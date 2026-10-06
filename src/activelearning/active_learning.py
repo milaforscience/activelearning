@@ -10,6 +10,7 @@ from activelearning.logger.logger import Logger
 from activelearning.monitoring.diagnostics_config import DiagnosticsConfig
 from activelearning.monitoring.orchestration import (
     collect_round_diagnostics,
+    discard_round_diagnostics,
     record_completed_round,
 )
 from activelearning.oracle.oracle import Oracle
@@ -121,10 +122,8 @@ def active_learning(
     resolved_runtime_context = runtime_context or DEFAULT_RUNTIME_CONTEXT
     logger = resolved_runtime_context.logger
 
-    bind_runtime_context(
-        [dataset, surrogate, acquisition, sampler, selector, oracle, budget],
-        resolved_runtime_context,
-    )
+    components = [dataset, surrogate, acquisition, sampler, selector, oracle, budget]
+    bind_runtime_context(components, resolved_runtime_context)
     _initialize_surrogate_fidelities(surrogate, oracle)
 
     initial_budget = budget.available_budget
@@ -202,6 +201,7 @@ def active_learning(
 
         # No candidates selected for this round; terminate to avoid stalling.
         if not selected_samples:
+            discard_round_diagnostics(components)
             break
 
         # Query oracle to obtain total cost for the samples.
@@ -214,6 +214,7 @@ def active_learning(
             can_afford = budget.can_afford(total_cost)
         if not can_afford:
             # Budget exhausted - stop iteration.
+            discard_round_diagnostics(components)
             break
 
         # Consume budget and query oracle for new observations.
