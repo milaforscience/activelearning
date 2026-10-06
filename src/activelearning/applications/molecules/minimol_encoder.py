@@ -217,16 +217,14 @@ class MiniMolSmilesFixedEncoder(FixedEncoder):
         TypeError
             If MiniMol does not return a sequence of tensors.
         """
-        strings: list[str] = []
         for value in values:
             if not isinstance(value, str):
                 raise ValueError(
                     "MiniMol SMILES fixed encoders require string inputs, got "
                     f"{type(value).__name__}."
                 )
-            strings.append(value)
 
-        if not strings:
+        if len(values) == 0:
             return torch.empty(
                 (0, MINIMOL_FINGERPRINT_DIM),
                 dtype=torch.float32,
@@ -235,30 +233,23 @@ class MiniMolSmilesFixedEncoder(FixedEncoder):
 
         resolved: dict[str, Tensor] = {}
         missing: list[str] = []
-        missing_set: set[str] = set()
-        for string in strings:
-            if string in resolved:
-                continue
-            cached = self._fingerprint_cache.get(string) if self.cache_size else None
-            if cached is not None:
+        for string in dict.fromkeys(values):
+            if string in self._fingerprint_cache:
                 self._fingerprint_cache.move_to_end(string)
-                resolved[string] = cached
-            elif string not in missing_set:
+                resolved[string] = self._fingerprint_cache[string]
+            else:
                 missing.append(string)
-                missing_set.add(string)
 
         if missing:
-            missing_features = self._extract_fingerprints(missing)
-            for string, feature in zip(missing, missing_features):
+            for string, feature in zip(missing, self._extract_fingerprints(missing)):
                 resolved[string] = feature
                 if self.cache_size:
                     self._fingerprint_cache[string] = feature
-                    self._fingerprint_cache.move_to_end(string)
                     while len(self._fingerprint_cache) > self.cache_size:
                         self._fingerprint_cache.popitem(last=False)
 
         return torch.stack(
-            [resolved[string] for string in strings],
+            [resolved[string] for string in values],
             dim=0,
         ).to(device=device, dtype=torch.float32)
 
@@ -313,12 +304,8 @@ class MiniMolSmilesEncoder(LatentEncoder):
     ) -> None:
         """Initialize the MiniMol encoder and trainable projection."""
         super().__init__()
-        if batch_size < 1:
-            raise ValueError("batch_size must be positive.")
         if latent_dim < 1:
             raise ValueError("latent_dim must be positive.")
-        if cache_size < 0:
-            raise ValueError("cache_size must be non-negative.")
 
         self.fixed_encoder = self._build_fixed_encoder(
             batch_size=batch_size,

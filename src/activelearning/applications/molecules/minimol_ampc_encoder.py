@@ -166,10 +166,7 @@ class MiniMolAmpcSmilesFixedEncoder(MiniMolSmilesFixedEncoder):
                 "MiniMol AmpC pooled512 output contains non-finite values."
             )
 
-        return [
-            torch.from_numpy(np.asarray(output, dtype=np.float32).copy())
-            for output in outputs
-        ]
+        return [torch.from_numpy(output.copy()) for output in outputs]
 
 
 class MiniMolAmpcSmilesEncoder(MiniMolSmilesEncoder):
