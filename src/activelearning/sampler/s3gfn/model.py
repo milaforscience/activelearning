@@ -1059,16 +1059,9 @@ class _PriorSequenceScorer(nn.Module):
 
     def forward(self, input_ids: Tensor) -> Tensor:
         """Return one prior sequence log probability per input row."""
-        model_input_ids = input_ids[:, :-1]
-        labels = input_ids[:, 1:]
-        attention_mask = model_input_ids.ne(self.pad_token_id).long()
-        outputs = self.prior(
-            input_ids=model_input_ids,
-            attention_mask=attention_mask,
-        )
-        return sequence_log_probabilities_from_logits(
-            outputs.logits,
-            labels=labels,
+        return sequence_log_probabilities(
+            causal_lm=self.prior,
+            input_ids=input_ids,
             pad_token_id=self.pad_token_id,
         )
 

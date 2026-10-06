@@ -660,6 +660,31 @@ def test_compiled_prior_scorer_preserves_values_detachment_and_ownership(
     assert tuple(compiled_model.state_dict()) == original_state_keys
 
 
+def test_compiled_prior_scorer_keeps_the_eager_input_contract(
+    monkeypatch,
+    make_model,
+) -> None:
+    """Compiling the prior must not skip validation or empty-input handling."""
+    model = make_model(language_model=_CausalPrefixLanguageModel)
+    monkeypatch.setattr(torch, "compile", lambda callable_, **kwargs: callable_)
+    model.compile_prior_scorer()
+    monkeypatch.setattr(
+        model.prior,
+        "forward",
+        lambda **kwargs: pytest.fail("The prior must not run for empty inputs."),
+    )
+
+    empty_batch = model.prior_sequence_log_probabilities(
+        torch.empty((0, 4), dtype=torch.long)
+    )
+    single_token = model.prior_sequence_log_probabilities(torch.tensor([[1], [1]]))
+
+    assert empty_batch.tolist() == []
+    assert single_token.tolist() == [0.0, 0.0]
+    with pytest.raises(TypeError, match="integer token ids"):
+        model.prior_sequence_log_probabilities(torch.ones((1, 3)))
+
+
 def test_model_rejects_shared_pad_and_eos_ids() -> None:
     tokenizer = type(
         "Tokenizer",
