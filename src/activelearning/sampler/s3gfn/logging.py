@@ -28,7 +28,6 @@ class _RoundMetrics:
     reward_scores: list[float] = field(default_factory=list)
     reward_score_means: list[float] = field(default_factory=list)
     reward_score_maxes: list[float] = field(default_factory=list)
-    training_step_durations_s: list[float] = field(default_factory=list)
     online_updates: int = 0
     replay_updates: int = 0
     generation_attempts: int = 0

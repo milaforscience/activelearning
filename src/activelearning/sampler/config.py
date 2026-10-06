@@ -397,33 +397,17 @@ class S3GFNSamplerConfig(BaseModel):
     @classmethod
     def _apply_performance_mode(cls, data: Any) -> Any:
         """Fill omitted performance fields from the selected preset."""
-        if not isinstance(data, dict):
+        # The field defaults are the optimized preset; only eager overrides them.
+        if not isinstance(data, dict) or data.get("performance_mode") != "eager":
             return data
-
-        values = dict(data)
-        mode = values.get("performance_mode", "optimized")
-        preset = {
-            "optimized": {
-                "compile_strategy": "training_and_generation",
-                "torch_compile_mode": "default",
-                "torch_compile_dynamic": None,
-                "attention_mask_adapter": True,
-                "compile_prior_scorer": True,
-                "model_dtype": "bfloat16",
-            },
-            "eager": {
-                "compile_strategy": "none",
-                "torch_compile_mode": "default",
-                "torch_compile_dynamic": True,
-                "attention_mask_adapter": False,
-                "compile_prior_scorer": False,
-                "model_dtype": "float32",
-            },
-        }.get(mode)
-        if preset is not None:
-            for field_name, default in preset.items():
-                values.setdefault(field_name, default)
-        return values
+        eager_preset = {
+            "compile_strategy": "none",
+            "torch_compile_dynamic": True,
+            "attention_mask_adapter": False,
+            "compile_prior_scorer": False,
+            "model_dtype": "float32",
+        }
+        return {**eager_preset, **data}
 
     def build(self) -> Sampler:
         """Build the sampler lazily so base installs need no Transformers.

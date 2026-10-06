@@ -527,21 +527,6 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
         )
         return positive_buffer, negative_buffer
 
-    def _build_training_optimizer(
-        self,
-        model: S3GFNModel,
-    ) -> torch.optim.Optimizer:
-        """Build the AdamW optimizer used by one policy-training lifecycle."""
-        policy_parameters = list(model.policy.parameters())
-        if model.fidelity_head is not None:
-            policy_parameters.extend(model.fidelity_head.parameters())
-        return torch.optim.AdamW(
-            [
-                {"params": policy_parameters, "lr": self.learning_rate},
-                {"params": [model.log_z], "lr": self.log_z_learning_rate},
-            ]
-        )
-
     def _train_round(
         self,
         *,
@@ -554,7 +539,15 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
         cost_fn: Callable[[Sequence[Candidate]], list[float]] | None,
     ) -> None:
         """Run the configured training steps and advance the scheduler."""
-        optimizer = self._build_training_optimizer(model)
+        policy_parameters = list(model.policy.parameters())
+        if model.fidelity_head is not None:
+            policy_parameters.extend(model.fidelity_head.parameters())
+        optimizer = torch.optim.AdamW(
+            [
+                {"params": policy_parameters, "lr": self.learning_rate},
+                {"params": [model.log_z], "lr": self.log_z_learning_rate},
+            ]
+        )
         scheduler = self._build_scheduler(optimizer)
         progress_interval = max(1, self.n_train_steps // 10)
         _logger.info(
@@ -564,7 +557,6 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
         )
 
         for step_index in range(self.n_train_steps):
-            step_started = time.perf_counter()
             (
                 generated_count,
                 valid_count,
@@ -581,9 +573,6 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
                 acquisition=acquisition,
                 cost_fn=cost_fn,
                 optimizer=optimizer,
-            )
-            self.round_metrics.training_step_durations_s.append(
-                time.perf_counter() - step_started
             )
             if scheduler is not None:
                 scheduler.step()

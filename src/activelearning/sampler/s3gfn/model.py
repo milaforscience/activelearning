@@ -161,7 +161,6 @@ class S3GFNModel(nn.Module):
         initial_log_z: float = 0.0,
         n_fidelities: int | None = None,
         deterministic_eval: bool | None = True,
-        attention_mask_adapter: bool = False,
     ) -> "S3GFNModel":
         """Load a policy, prior, and tokenizer from Hugging Face or disk.
 
@@ -202,9 +201,6 @@ class S3GFNModel(nn.Module):
             it to ``False``, so omitting it is not equivalent to leaving it
             unset. Pass ``None`` only for checkpoints that do not define this
             custom argument.
-        attention_mask_adapter : bool, optional
-            Install the revision-guarded GP-MoLFormer attention-mask compile
-            adapter on the trainable policy.
 
         Returns
         -------
@@ -248,8 +244,6 @@ class S3GFNModel(nn.Module):
             policy_model_name_or_path,
             **model_kwargs,
         )
-        if attention_mask_adapter:
-            _install_gp_molformer_attention_mask_adapter(policy)
         fidelity_head = None
         if n_fidelities is not None and n_fidelities > 1:
             fidelity_head = FidelityActionHead(
@@ -543,11 +537,10 @@ class S3GFNModel(nn.Module):
                 input_ids
             )
         )
-        fidelity_log_probabilities = self.fidelity_head.log_prob(
+        return sequence_log_probabilities_ + self.fidelity_head.log_prob(
             terminal_hidden_states,
             fidelity_indices,
         )
-        return sequence_log_probabilities_ + fidelity_log_probabilities
 
     def prior_trajectory_log_probabilities(
         self,
@@ -592,6 +585,66 @@ class S3GFNModel(nn.Module):
             batch_size=input_ids.shape[0],
             device=sequence_log_probabilities_.device,
             dtype=sequence_log_probabilities_.dtype,
+        )
+
+    def _positive_rtb(
+        self,
+        positive_input_ids: Tensor,
+        reward_scores: Tensor,
+        beta: float,
+        fidelity_indices: Tensor | None = None,
+    ) -> Tensor:
+        """Evaluate RTB for a non-empty batch of positive trajectories.
+
+        The input scores are reward scores ``r(x)`` (cost-weighted acquisition
+        values, see the module docstring), not positive rewards. RTB
+        therefore uses ``log R(x) = beta * reward_scores``. This method
+        computes the policy and prior sequence log probabilities and then
+        evaluates the mean-squared RTB residual.
+
+        Parameters
+        ----------
+        positive_input_ids : Tensor
+            Positive trajectory token ids with shape ``(batch, sequence_length)``.
+        reward_scores : Tensor
+            One finite reward score ``r(x)`` per trajectory.
+        beta : float
+            Coefficient used to convert scores into ``log R(x)``.
+        fidelity_indices : Tensor or None, optional
+            Optional terminal fidelity-action indices aligned with the
+            trajectories.
+
+        Returns
+        -------
+        Tensor
+            Scalar RTB loss.
+        """
+        positive_input_ids = positive_input_ids.to(self.device)
+        reward_scores = reward_scores.to(
+            device=self.device,
+            dtype=self.log_z.dtype,
+        ).reshape(-1)
+        if positive_input_ids.ndim != 2:
+            raise ValueError(
+                "positive_input_ids must have shape (batch, sequence_length)."
+            )
+        if positive_input_ids.shape[0] != reward_scores.numel():
+            raise ValueError("Positive trajectories and reward scores must align.")
+
+        policy_log_probabilities = self.policy_trajectory_log_probabilities(
+            positive_input_ids,
+            fidelity_indices=fidelity_indices,
+        )
+        prior_log_probabilities = self.prior_trajectory_log_probabilities(
+            positive_input_ids,
+            fidelity_indices=fidelity_indices,
+        )
+        return relative_trajectory_balance_loss(
+            policy_log_probabilities=policy_log_probabilities,
+            prior_log_probabilities=prior_log_probabilities,
+            reward_scores=reward_scores,
+            log_z=self.log_z,
+            beta=beta,
         )
 
     def on_policy_loss(
@@ -753,66 +806,6 @@ class S3GFNModel(nn.Module):
                 total_loss = rtb_loss + aux_coefficient * auxiliary_loss
         return total_loss
 
-    def _positive_rtb(
-        self,
-        positive_input_ids: Tensor,
-        reward_scores: Tensor,
-        beta: float,
-        fidelity_indices: Tensor | None = None,
-    ) -> Tensor:
-        """Evaluate RTB for a non-empty batch of positive trajectories.
-
-        The input scores are reward scores ``r(x)`` (cost-weighted acquisition
-        values, see the module docstring), not positive rewards. RTB
-        therefore uses ``log R(x) = beta * reward_scores``. This method
-        computes the policy and prior sequence log probabilities and then
-        evaluates the mean-squared RTB residual.
-
-        Parameters
-        ----------
-        positive_input_ids : Tensor
-            Positive trajectory token ids with shape ``(batch, sequence_length)``.
-        reward_scores : Tensor
-            One finite reward score ``r(x)`` per trajectory.
-        beta : float
-            Coefficient used to convert scores into ``log R(x)``.
-        fidelity_indices : Tensor or None, optional
-            Optional terminal fidelity-action indices aligned with the
-            trajectories.
-
-        Returns
-        -------
-        Tensor
-            Scalar RTB loss.
-        """
-        positive_input_ids = positive_input_ids.to(self.device)
-        reward_scores = reward_scores.to(
-            device=self.device,
-            dtype=self.log_z.dtype,
-        ).reshape(-1)
-        if positive_input_ids.ndim != 2:
-            raise ValueError(
-                "positive_input_ids must have shape (batch, sequence_length)."
-            )
-        if positive_input_ids.shape[0] != reward_scores.numel():
-            raise ValueError("Positive trajectories and reward scores must align.")
-
-        policy_log_probabilities = self.policy_trajectory_log_probabilities(
-            positive_input_ids,
-            fidelity_indices=fidelity_indices,
-        )
-        prior_log_probabilities = self.prior_trajectory_log_probabilities(
-            positive_input_ids,
-            fidelity_indices=fidelity_indices,
-        )
-        return relative_trajectory_balance_loss(
-            policy_log_probabilities=policy_log_probabilities,
-            prior_log_probabilities=prior_log_probabilities,
-            reward_scores=reward_scores,
-            log_z=self.log_z,
-            beta=beta,
-        )
-
     def _select_terminal_hidden_states(
         self,
         outputs: Any,
@@ -961,33 +954,13 @@ class S3GFNModel(nn.Module):
             raise ValueError("torch.compile mode must not be empty.")
         if self._policy_forward_compiled:
             return
-        compile_function = getattr(torch, "compile", None)
-        if compile_function is None:
-            raise RuntimeError(
-                "torch.compile is required for compiled S3-GFN policy execution."
-            )
-        if mode == "max-autotune":
-            policy_parameter = next(self.policy.parameters(), None)
-            compile_options: dict[str, str | bool] = {
-                "max_autotune": True,
-                "triton.cudagraphs": False,
-            }
-            if (
-                policy_parameter is not None
-                and policy_parameter.dtype == torch.bfloat16
-            ):
-                compile_options["max_autotune_gemm_backends"] = "ATEN"
-            compiled_forward = compile_function(
-                self.policy.forward,
-                dynamic=dynamic,
-                options=compile_options,
-            )
-        else:
-            compiled_forward = compile_function(
-                self.policy.forward,
-                mode=mode,
-                dynamic=dynamic,
-            )
+        compiled_forward = _torch_compile(
+            self.policy.forward,
+            self.policy,
+            mode=mode,
+            dynamic=dynamic,
+            purpose="compiled S3-GFN policy execution",
+        )
         if training_only:
             self._compiled_policy_forward = compiled_forward
         else:
@@ -1003,29 +976,13 @@ class S3GFNModel(nn.Module):
         """Compile frozen-prior sequence scoring under no-grad semantics."""
         if self._compiled_prior_scorer is not None:
             return
-        compile_function = getattr(torch, "compile", None)
-        if compile_function is None:
-            raise RuntimeError("torch.compile is required for prior compilation.")
-        scorer = _PriorSequenceScorer(self.prior, self.pad_token_id)
-        if mode == "max-autotune":
-            prior_parameter = next(self.prior.parameters(), None)
-            options: dict[str, str | bool] = {
-                "max_autotune": True,
-                "triton.cudagraphs": False,
-            }
-            if prior_parameter is not None and prior_parameter.dtype == torch.bfloat16:
-                options["max_autotune_gemm_backends"] = "ATEN"
-            compiled_scorer = compile_function(
-                scorer,
-                dynamic=dynamic,
-                options=options,
-            )
-        else:
-            compiled_scorer = compile_function(
-                scorer,
-                mode=mode,
-                dynamic=dynamic,
-            )
+        compiled_scorer = _torch_compile(
+            _PriorSequenceScorer(self.prior, self.pad_token_id),
+            self.prior,
+            mode=mode,
+            dynamic=dynamic,
+            purpose="prior compilation",
+        )
         object.__setattr__(self, "_compiled_prior_scorer", compiled_scorer)
 
 
@@ -1040,6 +997,30 @@ def _model_hidden_size(model: nn.Module) -> int:
         "The policy configuration must expose hidden_size, n_embd, or d_model "
         "for terminal fidelity actions."
     )
+
+
+def _torch_compile(
+    target: Any,
+    module: nn.Module,
+    *,
+    mode: str,
+    dynamic: bool | None,
+    purpose: str,
+) -> Any:
+    """Compile ``target`` with options that are safe for ``module``'s dtype."""
+    compile_function = getattr(torch, "compile", None)
+    if compile_function is None:
+        raise RuntimeError(f"torch.compile is required for {purpose}.")
+    if mode != "max-autotune":
+        return compile_function(target, mode=mode, dynamic=dynamic)
+    options: dict[str, str | bool] = {
+        "max_autotune": True,
+        "triton.cudagraphs": False,
+    }
+    parameter = next(module.parameters(), None)
+    if parameter is not None and parameter.dtype == torch.bfloat16:
+        options["max_autotune_gemm_backends"] = "ATEN"
+    return compile_function(target, dynamic=dynamic, options=options)
 
 
 _SUPPORTED_GP_MOLFORMER_REVISION = "6eca879581e2302b4e1ab07bb02908636bddb4a2"
