@@ -115,9 +115,7 @@ class DeepKernelSurrogate(BoTorchGPSurrogate):
                 "method."
             )
         latent_dim = getattr(encoder, "latent_dim", None)
-        if isinstance(latent_dim, bool):
-            raise TypeError("encoder must define an integer latent_dim attribute.")
-        if not isinstance(latent_dim, int):
+        if isinstance(latent_dim, bool) or not isinstance(latent_dim, int):
             raise TypeError("encoder must define an integer latent_dim attribute.")
         if latent_dim < 1:
             raise TypeError("encoder.latent_dim must be a positive integer.")
@@ -250,9 +248,8 @@ class DeepKernelSurrogate(BoTorchGPSurrogate):
         all_params = [p for group in optimizer.param_groups for p in group["params"]]
         train_X = self._train_X.to(device=self.device, dtype=self.dtype)
         targets = self._train_Y.squeeze(-1).to(device=self.device, dtype=self.dtype)
-        has_mlm_loss = self._has_mlm_loss
         mlm_tokens = None
-        if has_mlm_loss:
+        if self._has_mlm_loss:
             # Auxiliary masked-token objectives consume integer token IDs;
             # ordinary DKL encoders never enter this branch.
             mlm_tokens = (

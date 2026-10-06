@@ -135,8 +135,7 @@ class SelfiesTokenizer(SequenceTokenizer):
         """
         if raw_batch.ndim != 2:
             raise ValueError(
-                "raw_batch must be 2-D (B, seq_len), got shape "
-                f"{tuple(raw_batch.shape)}"
+                f"raw_batch must be 2-D (B, seq_len), got shape {tuple(raw_batch.shape)}"
             )
 
         batch = raw_batch.clone().long()

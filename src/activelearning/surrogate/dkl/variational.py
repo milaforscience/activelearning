@@ -198,8 +198,6 @@ class _VariationalBoTorchAdapter(Model):
 class VariationalDKLSurrogate(DeepKernelSurrogate):
     """DKL surrogate with a sparse variational GP head.
 
-    The encoder and sparse GP are separate components:
-
     - Encoder and GP are **separate** components; encoding is explicit.
     - Training minimises ``VariationalELBO + MLM loss`` via Adam (ELBO, not MLL).
     - GP operates in **latent feature space** (encoder output + optional fidelity).
@@ -271,15 +269,8 @@ class VariationalDKLSurrogate(DeepKernelSurrogate):
 
     def _runtime_modules(self) -> tuple[torch.nn.Module, ...]:
         """Return variational GP modules that follow the runtime context."""
-        return tuple(
-            module
-            for module in (
-                self._gp_model,
-                self._likelihood,
-                self._botorch_adapter,
-            )
-            if module is not None
-        )
+        modules = (self._gp_model, self._likelihood, self._botorch_adapter)
+        return tuple(module for module in modules if module is not None)
 
     def get_model(self) -> _VariationalBoTorchAdapter:
         """Return the BoTorch-compatible adapter wrapping the variational GP.
@@ -344,9 +335,7 @@ class VariationalDKLSurrogate(DeepKernelSurrogate):
             Fidelity column index in multi-fidelity mode, or ``None`` for
             single-fidelity surrogates.
         """
-        if not self._is_multi_fidelity:
-            return None
-        return self._encoder.latent_dim
+        return self._encoder.latent_dim if self._is_multi_fidelity else None
 
     def encode_candidates(self, candidates: Iterable[Candidate]) -> torch.Tensor:
         """Return encoder latent features (+ fidelity) for each candidate.
@@ -394,18 +383,9 @@ class VariationalDKLSurrogate(DeepKernelSurrogate):
         return self._gp_model(self._encode_with_fidelity(model_X))
 
     def _make_optimizer(self) -> Adam:
-        return Adam(
-            [
-                parameter
-                for parameter in (
-                    list(self._encoder.parameters())
-                    + list(self._gp_model.parameters())
-                    + list(self._likelihood.parameters())
-                )
-                if parameter.requires_grad
-            ],
-            lr=self._training.lr,
-        )
+        modules = (self._encoder, self._gp_model, self._likelihood)
+        params = [p for m in modules for p in m.parameters() if p.requires_grad]
+        return Adam(params, lr=self._training.lr)
 
     def predict(self, candidates: Iterable[Candidate]) -> dict[str, Any]:
         """Predict target means and standard deviations for candidates.
@@ -431,8 +411,7 @@ class VariationalDKLSurrogate(DeepKernelSurrogate):
         if self._gp_model is None or self._likelihood is None:
             raise RuntimeError("Surrogate has not been fitted yet.")
 
-        # encode_candidates() now returns latent features directly
-        latent_X = self.encode_candidates(list(candidates)).to(self.device)
+        latent_X = self.encode_candidates(candidates)
         with torch.no_grad():
             pred = self._likelihood(self._gp_model(latent_X))
 

@@ -78,11 +78,5 @@ class ExactDKLSurrogate(DeepKernelSurrogate):
 
     def _make_optimizer(self) -> Adam:
         # model already contains the likelihood as a submodule
-        return Adam(
-            [
-                parameter
-                for parameter in self.model.parameters()
-                if parameter.requires_grad
-            ],
-            lr=self._training.lr,
-        )
+        params = [p for p in self.model.parameters() if p.requires_grad]
+        return Adam(params, lr=self._training.lr)
