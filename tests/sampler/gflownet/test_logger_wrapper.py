@@ -1,6 +1,7 @@
 from unittest.mock import Mock, patch
 
 import torch
+from matplotlib import pyplot as plt
 from matplotlib.figure import Figure
 
 from activelearning.sampler.gflownet.logger_wrapper import (
@@ -101,6 +102,26 @@ def test_log_plots_retains_component_first_figure_names() -> None:
         max_points=1000,
     )
     assert figures == {"sampler/gflownet/validation/gflownet_loss": figure}
+
+
+def test_log_plots_closes_figure_replaced_under_the_same_key() -> None:
+    """Only the latest figure per key stays open until the round is drained."""
+    wrapper = _wrapper()
+    first, second = plt.figure(), plt.figure()
+
+    with patch(
+        "activelearning.sampler.gflownet.logger_wrapper.GFlowNetLogger.log_plots"
+    ):
+        wrapper.log_plots({"loss": first}, step=1, use_context=True)
+        wrapper.log_plots({"loss": second}, step=2, use_context=True)
+
+    try:
+        assert not plt.fignum_exists(first.number)
+        assert plt.fignum_exists(second.number)
+        assert list(wrapper._pending_figures.values()) == [second]
+    finally:
+        plt.close(first)
+        plt.close(second)
 
 
 def test_log_histogram_namespaces_upstream_key() -> None:
