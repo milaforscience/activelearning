@@ -389,7 +389,7 @@ The main molecule-specific fields are:
 | `sampler.torch_compile_dynamic` | Dynamic-shape policy passed to `torch.compile`. |
 | `sampler.attention_mask_adapter` | Enables the GP-MoLFormer attention-mask adapter for the compiled S3-GFN path. |
 | `sampler.compile_prior_scorer` | Compiles frozen-prior sequence scoring as a separate no-gradient graph. |
-| `sampler.model_dtype` | S3-GFN model and loss dtype: `float32` or `bfloat16`. |
+| `sampler.model_dtype` | S3-GFN model dtype: `float32` or `bfloat16`. Likelihoods and losses are accumulated in `float32`. |
 | `sampler.batch_size` | Number of molecules generated during each S3-GFN training step. |
 | `sampler.replay_batch_size` | Maximum positive and negative trajectories sampled for a replay update. |
 | `sampler.generation_batch_size` | Number of molecules generated per final candidate-generation call; omitted values inherit `sampler.batch_size`. |

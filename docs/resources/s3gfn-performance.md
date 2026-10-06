@@ -39,7 +39,7 @@ The low-level controls are:
 | `torch_compile_dynamic` | Dynamic-shape policy passed to `torch.compile`; `null` lets PyTorch choose. |
 | `attention_mask_adapter` | Enables the GP-MoLFormer attention-mask adapter used by the compiled path. |
 | `compile_prior_scorer` | Compiles frozen-prior sequence scoring as a separate no-gradient graph. |
-| `model_dtype` | `float32` or `bfloat16` for S3-GFN model and loss tensors. |
+| `model_dtype` | `float32` or `bfloat16` for the S3-GFN model. Sequence likelihoods and losses are accumulated in `float32` either way. |
 
 ## **Batch sizes and generation attempts**
 
