@@ -230,6 +230,16 @@ class TestExactDKLSurrogate:
 # ---------------------------------------------------------------------------
 
 
+def test_fit_without_mask_token_skips_mlm(
+    molecule_dkl_surrogate: DeepKernelSurrogate,
+) -> None:
+    """A tokenizer with no mask token must train GP-only instead of raising."""
+    molecule_dkl_surrogate._encoder.tokenizer.mask_idx = None
+    with pytest.warns(UserWarning, match="mask_ratio and pretrain_epochs"):
+        molecule_dkl_surrogate.fit(_make_observations([BENZENE, ALANINE], [1.0, -1.0]))
+    assert molecule_dkl_surrogate.is_fitted()
+
+
 @pytest.fixture
 def var_surrogate() -> VariationalDKLSurrogate:
     encoder = ENCODER_CFG.build()
