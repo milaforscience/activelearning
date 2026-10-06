@@ -766,7 +766,7 @@ class RuntimeLoggingSelector(TopKAcquisitionSelector):
         acquisition: Optional[DummyAcquisition] = None,
         cost_fn: Optional[Callable[[Sequence[Candidate]], list[float]]] = None,
         round_budget: Optional[float] = None,
-    ):
+    ) -> list[Candidate]:
         result = super().__call__(
             candidates,
             acquisition=acquisition,
