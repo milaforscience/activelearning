@@ -4,9 +4,7 @@ import math
 import pytest
 import torch
 
-from activelearning.surrogate.encoder_config import (
-    SelfiesTransformerEncoderConfig,
-)
+from activelearning.surrogate.encoder_config import SelfiesTransformerEncoderConfig
 from activelearning.surrogate.dkl.config import DKLTrainingConfig
 from activelearning.surrogate.dkl.kernel import EncoderKernel
 from activelearning.surrogate.dkl import (
@@ -66,10 +64,7 @@ def _make_mf_candidates(
 @pytest.fixture
 def exact_surrogate() -> ExactDKLSurrogate:
     encoder = ENCODER_CFG.build()
-    return ExactDKLSurrogate(
-        encoder=encoder,
-        training_params=TRAINING,
-    )
+    return ExactDKLSurrogate(encoder=encoder, training_params=TRAINING)
 
 
 @pytest.fixture
@@ -92,14 +87,9 @@ def molecule_dkl_surrogate(
     """Yield both molecular DKL variants for shared correctness tests."""
     encoder = ENCODER_CFG.build()
     if request.param == "exact":
-        return ExactDKLSurrogate(
-            encoder=encoder,
-            training_params=TRAINING,
-        )
+        return ExactDKLSurrogate(encoder=encoder, training_params=TRAINING)
     return VariationalDKLSurrogate(
-        encoder=encoder,
-        training_params=TRAINING,
-        num_inducing=8,
+        encoder=encoder, training_params=TRAINING, num_inducing=8
     )
 
 
@@ -197,9 +187,8 @@ class TestExactDKLSurrogate:
         assert tokens[:, -1].tolist() == pytest.approx([0.5, 1.0])
 
     def test_multi_fidelity_requires_confidence_mapping(self) -> None:
-        encoder = ENCODER_CFG.build()
         surrogate = ExactDKLSurrogate(
-            encoder=encoder,
+            encoder=ENCODER_CFG.build(),
             training_params=TRAINING,
             is_multi_fidelity=True,
             target_fidelity=3,
@@ -253,9 +242,7 @@ def test_pretraining_with_zero_mask_ratio_is_noop(
 def var_surrogate() -> VariationalDKLSurrogate:
     encoder = ENCODER_CFG.build()
     return VariationalDKLSurrogate(
-        encoder=encoder,
-        training_params=TRAINING,
-        num_inducing=8,
+        encoder=encoder, training_params=TRAINING, num_inducing=8
     )
 
 
@@ -446,9 +433,7 @@ class TestVariationalDKLSurrogate:
 
 
 @pytest.fixture
-def fitted_exact(
-    exact_surrogate: ExactDKLSurrogate,
-) -> ExactDKLSurrogate:
+def fitted_exact(exact_surrogate: ExactDKLSurrogate) -> ExactDKLSurrogate:
     exact_surrogate.fit(
         _make_observations([BENZENE, ALANINE, ETHANOL], [1.0, 2.0, 3.0])
     )
@@ -668,35 +653,20 @@ class TestEncoderKernelBatchDims:
         result = kernel(x, x).evaluate()
         assert result.shape[0] == 2  # no shape error
 
-    def test_kernel_diagonal_without_fidelity(self):
-        """Kernel diagonal must match the dense covariance diagonal."""
+    @pytest.mark.parametrize("include_fidelity", [False, True])
+    def test_kernel_diagonal_matches_dense(self, include_fidelity: bool):
+        """Kernel diagonal must match the dense diagonal, with or without fidelity."""
         import gpytorch
 
         encoder = ENCODER_CFG.build()
         kernel = EncoderKernel(
             encoder,
-            gpytorch.kernels.RBFKernel(),
-            include_fidelity=False,
+            gpytorch.kernels.RBFKernel(
+                ard_num_dims=encoder.latent_dim + int(include_fidelity)
+            ),
+            include_fidelity=include_fidelity,
         )
-        x = torch.zeros(3, encoder.max_tokens, dtype=torch.float64)
-
-        diagonal = kernel(x, x, diag=True).to_dense()
-        dense_diagonal = kernel(x, x).to_dense().diagonal()
-
-        torch.testing.assert_close(diagonal, dense_diagonal)
-
-    def test_kernel_diagonal_with_fidelity(self):
-        """Kernel diagonal must include the fidelity coordinate."""
-        import gpytorch
-
-        encoder = ENCODER_CFG.build()
-        kernel = EncoderKernel(
-            encoder,
-            gpytorch.kernels.RBFKernel(ard_num_dims=encoder.latent_dim + 1),
-            include_fidelity=True,
-        )
-        x = torch.zeros(3, encoder.max_tokens + 1, dtype=torch.float64)
-        x[:, -1] = 1.0
+        x = torch.ones(3, encoder.max_tokens + int(include_fidelity)).double()
 
         diagonal = kernel(x, x, diag=True).to_dense()
         dense_diagonal = kernel(x, x).to_dense().diagonal()
@@ -830,10 +800,8 @@ class TestExactSurrogatePredictionCorrectness:
         training targets.
         """
         torch.manual_seed(0)
-        encoder = ENCODER_CFG.build()
         surrogate = ExactDKLSurrogate(
-            encoder=encoder,
-            training_params=self.ORDERING_TRAINING,
+            encoder=ENCODER_CFG.build(), training_params=self.ORDERING_TRAINING
         )
         training_selfies = [BENZENE, ALANINE, ETHANOL]
         surrogate.fit(_make_observations(training_selfies, [-5.0, 0.0, 5.0]))
