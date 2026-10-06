@@ -461,6 +461,29 @@ def test_molecule_s3gfn_minimol_variational_multi_fidelity_config_parses() -> No
     assert config.oracle.mol_repr == "smiles"
 
 
+def test_molecule_s3gfn_minimol_fixed_variational_gp_config_parses() -> None:
+    """Ensure the fixed-feature MiniMol variational GP example matches the schema."""
+    config_path = (
+        REPOSITORY_ROOT
+        / "config"
+        / "molecules"
+        / "s3gfn_minimol_fixed_variational_multi_fidelity.yaml"
+    )
+
+    config = load_and_parse(config_path, ActiveLearningConfig)
+
+    assert config.sampler.type == "S3GFNSampler"
+    assert config.sampler.fidelities == [1, 2, 3]
+    assert config.surrogate.is_multi_fidelity is True
+    assert config.surrogate.type == "VariationalGPSurrogate"
+    assert config.surrogate.target_fidelity == 3
+    assert config.surrogate.encoder.type == "MiniMolSmilesFixedEncoder"
+    assert config.surrogate.num_inducing == 64
+    assert config.acquisition.type == "QMultiFidelityLowerBoundMaxValueEntropy"
+    assert config.oracle.type == "XTBIPEAOracle"
+    assert config.oracle.mol_repr == "smiles"
+
+
 def test_molecule_s3gfn_minimol_ampc_variational_multi_fidelity_config_parses() -> None:
     """Ensure the AmpC MiniMol variational example matches the schema."""
     config_path = (
