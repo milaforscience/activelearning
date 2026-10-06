@@ -310,7 +310,8 @@ class S3GFNSamplerConfig(BaseModel):
     compile_prior_scorer : bool, default=True
     Compile frozen-prior sequence scoring as a separate no-grad graph.
     model_dtype : {"float32", "bfloat16"}, default="bfloat16"
-    Floating-point dtype for the S3-GFN model and loss tensors.
+    Floating-point dtype for the S3-GFN model. Sequence likelihoods and losses
+    are accumulated in float32 regardless.
     cache_dir : str, optional
     Directory for Hugging Face model and tokenizer files.
     max_length : int, default=140

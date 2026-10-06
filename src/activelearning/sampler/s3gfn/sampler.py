@@ -171,8 +171,9 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
         compile_prior_scorer : bool, optional
             Compile frozen-prior sequence scoring as a separate no-grad graph.
         model_dtype : {"float32", "bfloat16"}, optional
-            Floating-point dtype for the S3-GFN policy, prior, fidelity head,
-            and loss tensors.
+            Floating-point dtype for the S3-GFN policy, prior, and fidelity
+            head. Sequence likelihoods and losses are accumulated in float32
+            regardless.
         cache_dir : str or None, optional
             Directory used for Hugging Face downloads and cache files.
         max_length : int, optional
