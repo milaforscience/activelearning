@@ -1015,6 +1015,29 @@ class TestMultiFidelityAcquisitionIntegration:
 
         assert scores == [0.0, 0.0, 0.25]
 
+    @pytest.mark.parametrize("bad_score", [float("nan"), float("-inf")])
+    def test_clamped_acquisitions_reject_non_finite_scores(
+        self,
+        train_data_spec: TrainDataCandidateSetSpec,
+        bad_score: float,
+    ) -> None:
+        """A failed evaluation must not be clamped into a valid zero score."""
+        from activelearning.acquisition.botorch.botorch_analytic import (
+            ExpectedImprovement,
+        )
+        from activelearning.acquisition.botorch.botorch_multifidelity import (
+            QMultiFidelityLowerBoundMaxValueEntropy,
+        )
+
+        acquisitions = (
+            ExpectedImprovement(),
+            QMultiFidelityLowerBoundMaxValueEntropy(candidate_set_spec=train_data_spec),
+        )
+        for acq in acquisitions:
+            acq._botorch_acqf = lambda X: torch.tensor([0.25, bad_score], dtype=X.dtype)
+            with pytest.raises(ValueError, match="non-finite"):
+                acq._score_encoded(torch.zeros(2, 1, 1, dtype=torch.float64))
+
     def test_qmflbmes_scores_single_fidelity(
         self,
         fitted_surrogate: BoTorchGPSurrogate,

@@ -19,6 +19,7 @@ from botorch.acquisition.analytic import (
 
 from activelearning.acquisition.botorch.botorch_acquisition import (
     AnalyticBoTorchAcquisition,
+    clamp_negative_scores,
 )
 
 
@@ -87,8 +88,7 @@ class ExpectedImprovement(AnalyticBoTorchAcquisition):
 
     def _score_encoded(self, X: torch.Tensor) -> list[float]:
         """Evaluate EI and clamp negative numerical artifacts to zero."""
-        scores = super()._score_encoded(X)
-        return [max(0.0, score) for score in scores]
+        return clamp_negative_scores(super()._score_encoded(X))
 
 
 class LogExpectedImprovement(AnalyticBoTorchAcquisition):
