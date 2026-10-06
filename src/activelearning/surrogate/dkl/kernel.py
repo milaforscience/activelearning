@@ -82,49 +82,22 @@ class EncoderKernel(gpytorch.kernels.Kernel):
             ``(N,)``, depending on ``diag``. The concrete return type is
             provided by the base kernel.
         """
-        if self.include_fidelity:
-            # Peel off the fidelity column before encoding.
-            # Use `...` so this works for any leading batch/q dimensions that
-            # BoTorch may add (e.g. shape (batch, q, d) during acquisition scoring).
-            fid1, fid2 = x1[..., -1:], x2[..., -1:]
-            tok1, tok2 = x1[..., :-1], x2[..., :-1]
-        else:
-            tok1, tok2 = x1, x2
-            fid1 = fid2 = None
-
-        # The encoder expects (N, seq_len); BoTorch may pass (*batch, q, seq_len).
-        # Flatten all leading dims, encode, then restore.
-        f1 = self._encode_flat(tok1)
-        f2 = self._encode_flat(tok2)
-
-        if fid1 is not None:
-            f1 = torch.cat([f1, fid1.to(f1.dtype)], dim=-1)
-            f2 = torch.cat([f2, fid2.to(f2.dtype)], dim=-1)
-
         return self.base_kernel(
-            f1.to(x1.dtype),
-            f2.to(x1.dtype),
+            self._encode(x1).to(x1.dtype),
+            self._encode(x2).to(x1.dtype),
             diag=diag,
             last_dim_is_batch=last_dim_is_batch,
             **params,
         )
 
-    def _encode_flat(self, inputs: torch.Tensor) -> torch.Tensor:
-        """Encode inputs with any leading batch dimensions.
-
-        Parameters
-        ----------
-        inputs : Tensor
-            Shape ``(*leading, input_dim)``.
-
-        Returns
-        -------
-        Tensor
-            Shape ``(*leading, latent_dim)``.
-        """
-        leading = inputs.shape[:-1]
-        input_dim = inputs.shape[-1]
-        # Flatten to (N, input_dim), encode, then restore leading dimensions.
-        flat = inputs.reshape(-1, input_dim)
-        features = self.encoder(flat)  # (N, latent_dim)
-        return features.reshape(*leading, -1)  # (*leading, latent_dim)
+    def _encode(self, x: Tensor) -> Tensor:
+        """Encode ``(*leading, d)`` inputs, re-appending the fidelity column if any."""
+        inputs = x[..., :-1] if self.include_fidelity else x
+        # The encoder expects (N, input_dim); BoTorch may add leading batch/q
+        # dimensions (e.g. (batch, q, d) during acquisition scoring), so
+        # flatten them, encode, then restore.
+        features = self.encoder(inputs.reshape(-1, inputs.shape[-1]))
+        features = features.reshape(*x.shape[:-1], -1)
+        if self.include_fidelity:
+            features = torch.cat([features, x[..., -1:].to(features.dtype)], dim=-1)
+        return features

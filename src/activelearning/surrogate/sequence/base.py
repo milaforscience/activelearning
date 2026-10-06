@@ -60,16 +60,14 @@ class SequenceEncoder(LatentEncoder):
         ValueError
             If any input value is not a string.
         """
-        string_values: list[str] = []
         for value in values:
             if not isinstance(value, str):
                 raise ValueError(
                     "String sequence surrogates require string inputs, got "
                     f"{type(value).__name__}."
                 )
-            string_values.append(value)
         return self.tokenizer.batch_from_strings(
-            string_values,
+            list(values),
             max_tokens=self.max_tokens,
             device=device,
         )
