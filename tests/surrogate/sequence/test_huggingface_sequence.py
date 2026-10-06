@@ -495,6 +495,8 @@ def test_gpmolformer_encoder_works_with_exact_dkl_without_mlm(
     assert surrogate.is_fitted()
     assert not torch.equal(encoder.projection.weight, projection_before)
     assert torch.equal(encoder.backbone.base.scale, backbone_before)
+    # Moving the GP (which owns the encoder) must not change the backbone dtype.
+    assert encoder.backbone.base.scale.dtype == backbone_before.dtype
     assert all(
         not parameter.requires_grad for parameter in encoder.backbone.parameters()
     )

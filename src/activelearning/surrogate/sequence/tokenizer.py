@@ -76,3 +76,19 @@ class SequenceTokenizer(Protocol):
             encoder.
         """
         ...
+
+    def attention_mask_from_batch(self, token_batch: Tensor) -> Tensor:
+        """Return a binary attention mask aligned with a token-ID batch.
+
+        Parameters
+        ----------
+        token_batch : Tensor
+            Two-dimensional token-ID tensor.
+
+        Returns
+        -------
+        Tensor
+            A ``torch.long`` tensor with the same first two dimensions as
+            ``token_batch``. Non-padding positions contain one.
+        """
+        ...
