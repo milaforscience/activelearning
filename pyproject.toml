@@ -27,6 +27,11 @@ aim = ["aim"]
 molecules = [
     "selfies>=2.2.0",
     "rdkit>=2026.3.1",
+    # GP-MoLFormer's remote code needs the legacy tuple KV cache (removed in
+    # 4.54) and transformers.onnx (removed in 5.0); 4.48 fixes the known
+    # deserialization advisories.
+    "transformers>=4.48,<4.54",
+    "huggingface-hub>=0.34.3",
 ]
 
 [dependency-groups]
