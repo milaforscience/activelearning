@@ -23,6 +23,7 @@ def masked_mean(token_features: Tensor, mask: Tensor) -> Tensor:
     Tensor
         Features with shape ``(B, ...)``.
     """
-    weights = mask.unsqueeze(-1).to(token_features.dtype)
+    trailing_dims = (1,) * (token_features.dim() - mask.dim())
+    weights = mask.reshape(*mask.shape, *trailing_dims).to(token_features.dtype)
     denominator = weights.sum(dim=1).clamp_min(1.0)
     return (token_features * weights).sum(dim=1) / denominator
