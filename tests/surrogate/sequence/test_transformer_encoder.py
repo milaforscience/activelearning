@@ -6,6 +6,7 @@ import pytest
 import selfies as sf
 import torch
 
+from activelearning.surrogate.sequence.pooling import masked_mean
 from activelearning.surrogate.sequence.transformer_encoder import (
     MaskedMeanPool,
     PositionalEncoding,
@@ -358,3 +359,16 @@ class TestTransformerSequenceEncoder:
         loss = encoder.mlm_loss(short_token_batch, mask_ratio=0.15)
         assert loss.ndim == 0
         assert float(loss) == 0.0
+
+
+def test_masked_mean_broadcasts_over_all_trailing_dimensions() -> None:
+    """masked_mean must accept features of shape (B, seq_len, ...)."""
+    features = torch.arange(2 * 3 * 4 * 5, dtype=torch.float64).reshape(2, 3, 4, 5)
+    mask = torch.tensor([[True, True, False], [False, False, False]])
+
+    out = masked_mean(features, mask)
+
+    assert out.shape == (2, 4, 5)
+    assert torch.allclose(out[0], features[0, :2].mean(dim=0))
+    # Fully masked rows return zero rather than NaN.
+    assert torch.equal(out[1], torch.zeros(4, 5, dtype=torch.float64))
