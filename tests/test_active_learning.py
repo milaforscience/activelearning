@@ -528,6 +528,47 @@ def test_active_learning_discards_sampler_diagnostics_on_early_exit(selector) ->
     assert sampler._figure is None
 
 
+def test_active_learning_counts_observations_from_unsized_iterable() -> None:
+    """The run summary must not require the dataset iterable to define len()."""
+
+    class _Reiterable:
+        def __init__(self, items: list[Observation]) -> None:
+            self._items = items
+
+        def __iter__(self):
+            return iter(self._items)
+
+    class _UnsizedDataset(ListDataset):
+        def get_observations_iterable(self) -> Iterable[Observation]:
+            return _Reiterable(super().get_observations_iterable())
+
+    run_writer = RecordingRunWriter()
+
+    active_learning(
+        dataset=_UnsizedDataset(),
+        surrogate=DummyMeanSurrogate(),
+        acquisition=DummyAcquisition(),
+        sampler=PoolScoreSampler(
+            candidate_pool=[Candidate(index, fidelity=0) for index in range(3)],
+            num_samples=3,
+        ),
+        selector=TopKAcquisitionSelector(num_samples=2),
+        oracle=MultiFidelityOracle(
+            fidelity_configs={
+                0: {
+                    "cost_per_sample": 1.0,
+                    "score_fn": lambda value: float(value),
+                    "fidelity_confidence": 1.0,
+                }
+            }
+        ),
+        budget=Budget(available_budget=2.0, schedule=lambda _: 2.0),
+        run_writer=run_writer,
+    )
+
+    assert run_writer.summary["num_observations"] == 2
+
+
 def test_active_learning_finalizes_run_writer_on_zero_round_exit():
     """Early termination still writes a complete zero-round summary."""
     run_writer = RecordingRunWriter()
