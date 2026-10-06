@@ -207,8 +207,13 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             raise ValueError("n_train_steps must be positive.")
         if num_warmup_steps < 0:
             raise ValueError("num_warmup_steps must be nonnegative.")
-        if learning_rate <= 0.0 or log_z_learning_rate <= 0.0:
-            raise ValueError("learning rates must be positive.")
+        if (
+            learning_rate <= 0.0
+            or not math.isfinite(learning_rate)
+            or log_z_learning_rate <= 0.0
+            or not math.isfinite(log_z_learning_rate)
+        ):
+            raise ValueError("learning rates must be finite and positive.")
         if beta <= 0.0 or not math.isfinite(beta):
             raise ValueError("beta must be a finite positive value.")
         if aux_coefficient < 0.0 or not math.isfinite(aux_coefficient):
