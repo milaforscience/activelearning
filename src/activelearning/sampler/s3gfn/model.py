@@ -7,7 +7,7 @@ comparing their trajectory probabilities with a reward-weighted target:
 
 ``log((Z * P_policy(tau)) / (R(x) * P_prior(tau)))``.
 
-The API accepts scaled reward scores ``r(x)`` and converts them to positive
+The API accepts acquisition scores ``r(x)`` and converts them to positive
 rewards with ``R(x) = exp(beta * r(x))``. The implementation follows the
 generation and loss flow of the upstream S3-GFN trainer:
 https://github.com/hyeonahkimm/s3gfn/blob/43aa7b310e9e03ef71ea0bd0cce501a48b6e2d52/src/s3gfn/train.py
@@ -569,7 +569,7 @@ class S3GFNModel(nn.Module):
     ) -> Tensor:
         """Evaluate RTB for a non-empty batch of positive trajectories.
 
-        The input scores are scaled scores ``r(x)``, not positive rewards. RTB
+        The input scores are acquisition scores ``r(x)``, not positive rewards. RTB
         therefore uses ``log R(x) = beta * reward_scores``. This method
         computes the policy and prior sequence log probabilities and then
         evaluates the mean-squared RTB residual.
@@ -579,7 +579,7 @@ class S3GFNModel(nn.Module):
         positive_input_ids : Tensor
             Positive trajectory token ids with shape ``(batch, sequence_length)``.
         reward_scores : Tensor
-            One finite scaled score ``r(x)`` per trajectory.
+            One finite acquisition score ``r(x)`` per trajectory.
         beta : float
             Coefficient used to convert scores into ``log R(x)``.
         fidelity_indices : Tensor or None, optional
@@ -637,7 +637,7 @@ class S3GFNModel(nn.Module):
         positive_input_ids : Tensor
             Positive trajectory token ids with shape ``(batch, sequence_length)``.
         reward_scores : Tensor
-            One finite scaled score ``r(x)`` per trajectory.
+            One finite acquisition score ``r(x)`` per trajectory.
         beta : float
             Coefficient used to convert scores into
             ``log R(x) = beta * r(x)``.
@@ -694,7 +694,7 @@ class S3GFNModel(nn.Module):
         positive_input_ids : Tensor
             Positive replay token ids with shape ``(batch, sequence_length)``.
         reward_scores : Tensor
-            One finite scaled score ``r(x)`` per positive trajectory.
+            One finite acquisition score ``r(x)`` per positive trajectory.
         beta : float
             Coefficient used to convert scores into ``log R(x)``.
         negative_input_ids : Tensor or None, optional

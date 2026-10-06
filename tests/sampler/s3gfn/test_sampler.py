@@ -118,7 +118,7 @@ def test_sampler_resets_round_metrics_at_sample_start(
         replay_loss=None,
         auxiliary_loss=None,
         log_z=0.0,
-        raw_reward_scores=[1.0],
+        reward_scores=[1.0],
     )
     observed_metrics = []
     sampler._new_round_model = lambda: FakeModel()
@@ -429,7 +429,7 @@ def test_round_metrics_aggregate_scalars_and_figures(
         replay_loss=None,
         auxiliary_loss=None,
         log_z=0.1,
-        raw_reward_scores=[2.0, 4.0, 6.0],
+        reward_scores=[2.0, 4.0, 6.0],
     )
     metrics.record_training_step(
         generated_count=2,
@@ -439,7 +439,7 @@ def test_round_metrics_aggregate_scalars_and_figures(
         replay_loss=3.0,
         auxiliary_loss=0.5,
         log_z=0.2,
-        raw_reward_scores=[8.0, 10.0],
+        reward_scores=[8.0, 10.0],
     )
     metrics.record_generation_batch(
         attempts=5,
@@ -473,8 +473,8 @@ def test_round_metrics_aggregate_scalars_and_figures(
     assert logged["s3gfn/train/replay_loss_mean"] == pytest.approx(3.0)
     assert logged["s3gfn/train/auxiliary_loss_mean"] == pytest.approx(0.5)
     assert logged["s3gfn/train/log_z_final"] == pytest.approx(0.2)
-    assert logged["s3gfn/reward/raw_mean"] == pytest.approx(6.0)
-    assert logged["s3gfn/reward/raw_max"] == pytest.approx(10.0)
+    assert logged["s3gfn/reward/mean"] == pytest.approx(6.0)
+    assert logged["s3gfn/reward/max"] == pytest.approx(10.0)
     assert logged["s3gfn/generation/yield"] == pytest.approx(0.4)
     assert logged["s3gfn/generation/invalid_rate"] == pytest.approx(0.2)
     assert logged["s3gfn/generation/duplicate_rate"] == pytest.approx(0.2)
@@ -526,7 +526,7 @@ def test_round_metrics_are_a_noop_without_runtime_logger(
         replay_loss=None,
         auxiliary_loss=None,
         log_z=0.0,
-        raw_reward_scores=[1.0],
+        reward_scores=[1.0],
     )
 
     sampler._log_round_metrics(
