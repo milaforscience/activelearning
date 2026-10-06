@@ -146,14 +146,9 @@ class DeepKernelSurrogate(BoTorchGPSurrogate):
 
     def _apply_runtime_context(self) -> None:
         """Apply the currently bound runtime device/dtype to all learnable modules."""
-        # Runtime precision applies to trainable DKL components; frozen
-        # pretrained encoders may restore their checkpoint dtype below.
         self._encoder = self._encoder.to(device=self.device, dtype=self.dtype)
         for module in self._runtime_modules():
             module.to(device=self.device, dtype=self.dtype)
-        restore_backbone_dtype = getattr(self._encoder, "restore_backbone_dtype", None)
-        if restore_backbone_dtype is not None:
-            restore_backbone_dtype()
 
     def _runtime_modules(self) -> tuple[torch.nn.Module, ...]:
         """Return modules that need the active runtime device and dtype."""
@@ -296,20 +291,8 @@ class DeepKernelSurrogate(BoTorchGPSurrogate):
         """Warn when explicit MLM settings target an encoder without MLM loss."""
         if self._has_mlm_loss:
             return
-        fields_set = getattr(self._training, "model_fields_set", None)
-        if fields_set is not None:
-            explicitly_configured = bool(
-                {"mask_ratio", "pretrain_epochs"} & set(fields_set)
-            )
-        else:
-            from activelearning.surrogate.dkl.config import DKLTrainingConfig
-
-            defaults = DKLTrainingConfig.model_fields
-            explicitly_configured = (
-                self._training.pretrain_epochs != defaults["pretrain_epochs"].default
-                or self._training.mask_ratio != defaults["mask_ratio"].default
-            )
-        if explicitly_configured:
+        fields_set = getattr(self._training, "model_fields_set", ())
+        if {"mask_ratio", "pretrain_epochs"} & set(fields_set):
             warn(
                 "The configured encoder does not expose mlm_loss; "
                 "mask_ratio and pretrain_epochs will be ignored.",
