@@ -146,9 +146,14 @@ class DeepKernelSurrogate(BoTorchGPSurrogate):
 
     def _apply_runtime_context(self) -> None:
         """Apply the currently bound runtime device/dtype to all learnable modules."""
+        # Runtime precision applies to trainable DKL components; frozen
+        # pretrained encoders may restore their checkpoint dtype below.
         self._encoder = self._encoder.to(device=self.device, dtype=self.dtype)
         for module in self._runtime_modules():
             module.to(device=self.device, dtype=self.dtype)
+        restore_backbone_dtype = getattr(self._encoder, "restore_backbone_dtype", None)
+        if restore_backbone_dtype is not None:
+            restore_backbone_dtype()
 
     def _runtime_modules(self) -> tuple[torch.nn.Module, ...]:
         """Return modules that need the active runtime device and dtype."""
