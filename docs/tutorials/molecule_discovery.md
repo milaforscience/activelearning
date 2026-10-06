@@ -63,7 +63,7 @@ additional memory.
 
 With a runtime logger enabled, S3-GFN training telemetry is grouped under
 `sampler/s3gfn/`. The scalar metrics include online, replay, and contrastive
-losses, log-Z, reward-score statistics, generation validity and duplicate rates,
+losses, log-Z, statistics of the reward score (the cost-weighted acquisition value that S3-GFN exponentiates into its reward), generation validity and duplicate rates,
 fidelity proportions, and training or generation durations. The corresponding
 trajectory figures are `sampler/s3gfn/training_losses`,
 `sampler/s3gfn/log_z`, and `sampler/s3gfn/reward/trajectory`.

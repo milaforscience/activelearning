@@ -45,7 +45,8 @@ class ReplayBatch:
     input_ids : Tensor
         Padded integer token ids for the sampled trajectories.
     reward_scores : Tensor
-        Acquisition scores ``r(x)`` aligned with the sampled trajectories.
+        Reward scores ``r(x)`` (cost-weighted acquisition values) aligned with
+        the sampled trajectories.
     smiles : tuple[str, ...]
         Molecule strings aligned with the sampled trajectories.
     fidelity_indices : Tensor or None
@@ -176,10 +177,11 @@ class ReplayBuffer:
         reward_scores: Tensor | Sequence[float] | None = None,
         fidelity_indices: Tensor | Sequence[int] | None = None,
     ) -> int:
-        """Add aligned trajectories and acquisition reward scores.
+        """Add aligned trajectories and their reward scores.
 
-        ``reward_scores`` stores the acquisition score ``r(x)`` used by RTB.
-        The loss converts it to the log target reward
+        ``reward_scores`` stores the reward score ``r(x)`` used by RTB: the
+        acquisition value, divided by oracle cost when the sampler has a cost
+        function. The loss converts it to the log target reward
         ``log R(x) = beta * r(x)``.
 
         Parameters
@@ -190,7 +192,7 @@ class ReplayBuffer:
         smiles : Sequence[str]
             Molecule strings aligned with the rows of ``input_ids``.
         reward_scores : Tensor or Sequence[float] or None, optional
-            Acquisition scores ``r(x)`` aligned with ``smiles``. If
+            Reward scores ``r(x)`` aligned with ``smiles``. If
             omitted, every trajectory receives a score of zero.
         fidelity_indices : Tensor or Sequence[int] or None, optional
             Optional terminal fidelity-action indices aligned with ``smiles``.

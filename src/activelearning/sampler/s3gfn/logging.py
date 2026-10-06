@@ -51,7 +51,12 @@ class _RoundMetrics:
         log_z: float,
         reward_scores: Sequence[float],
     ) -> None:
-        """Record one training step and its generated-batch statistics."""
+        """Record one training step and its generated-batch statistics.
+
+        ``reward_scores`` are the batch's reward scores ``r(x)``: acquisition
+        values, cost-weighted when the sampler has a cost function. They are
+        not the positive RTB reward ``exp(beta * r(x))``.
+        """
         self.generated_counts.append(generated_count)
         self.valid_counts.append(valid_count)
         self.synthesizable_counts.append(synthesizable_count)
@@ -188,13 +193,12 @@ class S3GFNLoggingMixin:
                 metrics["sampler/s3gfn/train/log_z_final"] = round_metrics.log_z_values[
                     -1
                 ]
+            # Statistics of the reward score r(x), not of exp(beta * r(x)).
             if round_metrics.reward_scores:
                 metrics["sampler/s3gfn/reward/mean"] = _mean(
                     round_metrics.reward_scores
                 )
-                metrics["sampler/s3gfn/reward/max"] = max(
-                    round_metrics.reward_scores
-                )
+                metrics["sampler/s3gfn/reward/max"] = max(round_metrics.reward_scores)
             if round_metrics.training_duration_s is not None:
                 metrics["sampler/s3gfn/train/duration_s"] = float(
                     round_metrics.training_duration_s
@@ -313,7 +317,11 @@ def _build_log_z_figure(metrics: _RoundMetrics, max_points: int) -> Figure | Non
 
 
 def _build_reward_figure(metrics: _RoundMetrics, max_points: int) -> Figure | None:
-    """Build a reward-score trajectory figure for recorded training batches."""
+    """Build a reward-score trajectory figure for recorded training batches.
+
+    Plots the per-step mean and max of ``r(x)``, the cost-weighted acquisition
+    value, before RTB exponentiates it into a reward.
+    """
     if not metrics.reward_score_means:
         return None
 
