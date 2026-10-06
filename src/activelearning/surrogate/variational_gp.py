@@ -170,7 +170,6 @@ class VariationalGPSurrogate(BoTorchGPSurrogate):
         self._gp_model: _VariationalGP | None = None
         self._likelihood: gpytorch.likelihoods.GaussianLikelihood | None = None
         self._botorch_adapter: _VariationalBoTorchAdapter | None = None
-        self._model_train_Y: torch.Tensor | None = None
         self._y_mean = 0.0
         self._y_std = 1.0
         super().__init__(
@@ -203,16 +202,17 @@ class VariationalGPSurrogate(BoTorchGPSurrogate):
             device=self.device,
         ).unsqueeze(-1)
         self._train_Y = train_y
-        self._model_train_Y = self._standardize_targets(train_y)
+        targets = self._standardize_targets(train_y).squeeze(-1)
         pending_state = self._pending_state_dict
         self._pending_state_dict = None
         self._build_variational_model()
         self._apply_runtime_context()
-        self._remove_noise_prior()
+        # A 0.1 initial noise keeps early Cholesky factorizations conditioned.
+        self._likelihood.noise = 0.1
         if pending_state is not None:
             self.load_state_dict(pending_state)
         else:
-            self._train_variational_gp(len(observation_list))
+            self._train_variational_gp(targets)
 
     def updates_from_latest(self) -> bool:
         """Return false because the model is rebuilt from all observations."""
@@ -228,25 +228,17 @@ class VariationalGPSurrogate(BoTorchGPSurrogate):
             return None
 
         state = {
-            f"model.{name}": value
-            for name, value in self._gp_model.state_dict().items()
+            f"{prefix}.{name}": value
+            for prefix, module in (
+                ("model", self._gp_model),
+                ("likelihood", self._likelihood),
+            )
+            for name, value in module.state_dict().items()
         }
-        state.update(
-            {
-                f"likelihood.{name}": value
-                for name, value in self._likelihood.state_dict().items()
-            }
-        )
-        state["outcome_mean"] = torch.tensor(
-            self._y_mean,
-            dtype=self.dtype,
-            device=self.device,
-        )
-        state["outcome_std"] = torch.tensor(
-            self._y_std,
-            dtype=self.dtype,
-            device=self.device,
-        )
+        for name, value in (("mean", self._y_mean), ("std", self._y_std)):
+            state[f"outcome_{name}"] = torch.tensor(
+                value, dtype=self.dtype, device=self.device
+            )
         return state
 
     def load_state_dict(self, state_dict: dict[str, torch.Tensor]) -> None:
@@ -321,8 +313,8 @@ class VariationalGPSurrogate(BoTorchGPSurrogate):
 
     def _build_variational_model(self) -> None:
         """Build the GP, likelihood, and BoTorch adapter."""
-        input_dim = self._encoder.feature_dim + (1 if self._is_multi_fidelity else 0)
         assert self._train_X is not None
+        input_dim = self._train_X.shape[-1]
         sample_indices = torch.randint(
             self._train_X.shape[0],
             (self._num_inducing,),
@@ -378,12 +370,7 @@ class VariationalGPSurrogate(BoTorchGPSurrogate):
             return features
 
         fidelities = torch.tensor(
-            [
-                self._encode_fidelity_level(item.fidelity)
-                if item.fidelity is not None
-                else self.get_target_fidelity_value()
-                for item in items
-            ],
+            [self._encode_fidelity_level(item.fidelity) for item in items],
             dtype=self.dtype,
             device=self.device,
         ).unsqueeze(-1)
@@ -403,32 +390,23 @@ class VariationalGPSurrogate(BoTorchGPSurrogate):
         self._y_std = float(train_y.std().nan_to_num(nan=1.0).clamp_min(1e-6))
         return (train_y - self._y_mean) / self._y_std
 
-    def _train_variational_gp(self, num_data: int) -> None:
+    def _train_variational_gp(self, targets: torch.Tensor) -> None:
         """Optimize the variational ELBO and learned inducing locations."""
         assert self._gp_model is not None
         assert self._likelihood is not None
-        assert self._train_X is not None
-        assert self._model_train_Y is not None
 
         objective = VariationalELBO(
             self._likelihood,
             self._gp_model,
-            num_data=num_data,
+            num_data=targets.shape[0],
         )
-        trainable_parameters = [
-            parameter
-            for parameter in (
-                list(self._gp_model.parameters()) + list(self._likelihood.parameters())
-            )
-            if parameter.requires_grad
-        ]
-        optimizer = Adam(trainable_parameters, lr=self._training.lr)
         parameters = [
             parameter
-            for group in optimizer.param_groups
-            for parameter in group["params"]
+            for module in (self._gp_model, self._likelihood)
+            for parameter in module.parameters()
+            if parameter.requires_grad
         ]
-        targets = self._model_train_Y.squeeze(-1)
+        optimizer = Adam(parameters, lr=self._training.lr)
         for _ in range(self._training.epochs):
             self._gp_model.train()
             self._likelihood.train()
@@ -440,11 +418,3 @@ class VariationalGPSurrogate(BoTorchGPSurrogate):
             optimizer.step()
         self._gp_model.eval()
         self._likelihood.eval()
-
-    def _remove_noise_prior(self) -> None:
-        """Remove the noise prior and initialize observation noise safely."""
-        assert self._likelihood is not None
-        noise_covar = self._likelihood.noise_covar
-        noise_covar._priors.pop("noise_prior", None)
-        with torch.no_grad():
-            noise_covar.noise = 0.1
