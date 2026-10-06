@@ -180,6 +180,21 @@ def test_huggingface_tokenizer_uses_pretrained_ids() -> None:
     assert tokenizer.vocab_size == 12
 
 
+def test_huggingface_tokenizer_vocab_size_includes_added_tokens() -> None:
+    """Added special tokens have IDs beyond the base ``vocab_size``."""
+
+    class _TokenizerWithAddedPad(_FakeHuggingFaceTokenizer):
+        pad_token_id = 12
+
+        def __len__(self):
+            return 13
+
+    tokenizer = HuggingFaceTokenizer(tokenizer=_TokenizerWithAddedPad())
+
+    assert tokenizer.vocab_size == 13
+    assert tokenizer.padding_idx < tokenizer.vocab_size
+
+
 def test_huggingface_tokenizer_bounds_attention_mask_cache() -> None:
     """Attention-mask entries are evicted after reaching the configured limit."""
     tokenizer = HuggingFaceTokenizer(

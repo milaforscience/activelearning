@@ -118,18 +118,18 @@ class HuggingFaceTokenizer(SequenceTokenizer):
 
     @property
     def vocab_size(self) -> int:
-        """Return the vocabulary size reported by the wrapped tokenizer.
+        """Return the full size of the wrapped tokenizer's token-ID range.
 
-        The wrapped tokenizer's ``vocab_size`` attribute is preferred. If it
-        does not define that attribute, its length is used instead.
+        The tokenizer length is used rather than its ``vocab_size`` attribute,
+        which excludes tokens added after the base vocabulary.
 
         Returns
         -------
         int
-            Number of token IDs in the tokenizer vocabulary.
+            Number of token IDs in the tokenizer vocabulary, including added
+            tokens.
         """
-        size = getattr(self._tokenizer, "vocab_size", None)
-        return int(len(self._tokenizer) if size is None else size)
+        return len(self._tokenizer)
 
     def _require_token_id(self, attribute: str, name: str) -> int:
         """Return a required special-token id."""
