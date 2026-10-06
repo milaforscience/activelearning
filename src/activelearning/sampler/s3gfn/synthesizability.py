@@ -32,10 +32,10 @@ def passes_sa_threshold(sa_score: float, threshold: float = 3.0) -> bool:
     ValueError
         If ``threshold`` is not finite.
     """
-    if not math.isfinite(sa_score):
-        return False
     if not math.isfinite(threshold):
         raise ValueError("threshold must be finite.")
+    if not math.isfinite(sa_score):
+        return False
     return sa_score < threshold
 
 
