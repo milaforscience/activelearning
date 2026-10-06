@@ -30,6 +30,11 @@ class _ReplayEntry:
     fidelity_index: int | None = None
     fingerprint: Any | None = None
 
+    @property
+    def key(self) -> tuple[str, int | None]:
+        """Return the trajectory identity: molecule and terminal fidelity action."""
+        return (self.smiles, self.fidelity_index)
+
 
 @dataclass(frozen=True)
 class ReplayBatch:
@@ -70,8 +75,12 @@ class ReplayBuffer:
     ``policy="reward"`` keeps high-reward, chemically diverse trajectories.
     ``policy="fifo"`` keeps unique trajectories in insertion order for the
     negative auxiliary loss. Reward-prioritized insertion compares a new
-    fingerprint with every retained fingerprint, so its time and memory costs
-    grow with ``capacity``.
+    fingerprint with every retained fingerprint at the same fidelity action,
+    so its time and memory costs grow with ``capacity``.
+
+    A trajectory is identified by its molecule and terminal fidelity action,
+    so the same molecule may be retained once per fidelity action. When all
+    entries share one fidelity action, this reduces to per-molecule identity.
     """
 
     def __init__(
@@ -89,11 +98,13 @@ class ReplayBuffer:
         pad_token_id : int
             Token id used to pad trajectories when a replay batch is sampled.
         capacity : int, optional
-            Maximum number of unique trajectories retained by the buffer.
+            Maximum number of unique (molecule, fidelity action) trajectories
+            retained by the buffer.
         similarity_threshold : float or None, optional
             Tanimoto-similarity threshold used by the reward-prioritized
             policy. A new molecule at or above this similarity to a stored
-            molecule replaces it only when its reward score is higher. This
+            molecule with the same fidelity action replaces it only when its
+            reward score is higher. This
             value is ignored by the FIFO policy. ``None`` uses ``0.75`` and
             does not emit a FIFO warning when the default is selected
             implicitly.
@@ -133,7 +144,7 @@ class ReplayBuffer:
         self.similarity_threshold = threshold
         self.policy = policy
         self._entries: list[_ReplayEntry] = []
-        self._smiles: set[str] = set()
+        self._keys: set[tuple[str, int | None]] = set()
         self._random = random.Random(seed)
         self._torch_generator = torch.Generator().manual_seed(seed)
 
@@ -245,7 +256,7 @@ class ReplayBuffer:
         if token_ids.dtype not in (torch.int32, torch.int64):
             raise TypeError("Replay trajectories must contain integer token ids.")
         normalized_smiles = smiles.strip()
-        if not normalized_smiles or normalized_smiles in self._smiles:
+        if not normalized_smiles or (normalized_smiles, fidelity_index) in self._keys:
             return False
         if not math.isfinite(reward_score):
             raise ValueError("Replay reward scores must be finite.")
@@ -280,34 +291,43 @@ class ReplayBuffer:
         """Append a unique entry and evict the oldest when full."""
         if len(self._entries) == self.capacity:
             evicted = self._entries.pop(0)
-            self._smiles.remove(evicted.smiles)
+            self._keys.remove(evicted.key)
         self._entries.append(entry)
-        self._smiles.add(entry.smiles)
+        self._keys.add(entry.key)
         return True
 
     def _add_reward(self, entry: _ReplayEntry) -> bool:
-        """Keep high-score diverse entries using Tanimoto similarity."""
-        if self._entries:
+        """Keep high-score diverse entries using Tanimoto similarity.
+
+        Similarity is compared only against entries with the same terminal
+        fidelity action, so diversity is enforced per fidelity and the same
+        molecule may be retained once for each fidelity.
+        """
+        same_fidelity_indices = [
+            index
+            for index, stored in enumerate(self._entries)
+            if stored.fidelity_index == entry.fidelity_index
+        ]
+        if same_fidelity_indices:
             _, DataStructs, _ = require_rdkit()
             similarities = DataStructs.BulkTanimotoSimilarity(
                 entry.fingerprint,
-                [stored.fingerprint for stored in self._entries],
+                [self._entries[index].fingerprint for index in same_fidelity_indices],
             )
-            nearest_index, nearest_similarity = max(
+            nearest_position, nearest_similarity = max(
                 enumerate(similarities),
                 key=lambda item: item[1],
             )
             if nearest_similarity >= self.similarity_threshold:
+                nearest_index = same_fidelity_indices[nearest_position]
                 if self._entries[nearest_index].reward_score >= entry.reward_score:
                     return False
-                self._smiles.remove(self._entries[nearest_index].smiles)
-                self._entries[nearest_index] = entry
-                self._smiles.add(entry.smiles)
+                self._replace_entry(nearest_index, entry)
                 return True
 
         if len(self._entries) < self.capacity:
             self._entries.append(entry)
-            self._smiles.add(entry.smiles)
+            self._keys.add(entry.key)
             return True
 
         lowest_index = min(
@@ -316,10 +336,14 @@ class ReplayBuffer:
         )
         if self._entries[lowest_index].reward_score >= entry.reward_score:
             return False
-        self._smiles.remove(self._entries[lowest_index].smiles)
-        self._entries[lowest_index] = entry
-        self._smiles.add(entry.smiles)
+        self._replace_entry(lowest_index, entry)
         return True
+
+    def _replace_entry(self, index: int, entry: _ReplayEntry) -> None:
+        """Replace the entry at ``index`` and keep the identity set in sync."""
+        self._keys.remove(self._entries[index].key)
+        self._entries[index] = entry
+        self._keys.add(entry.key)
 
     def sample(
         self,

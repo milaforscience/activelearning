@@ -36,7 +36,17 @@ def _fake_rdkit():
     return _FakeChem, _FakeDataStructs, _FakeAllChem
 
 
-def test_positive_buffer_replaces_a_similar_lower_reward(monkeypatch):
+# Single-fidelity behaviour must not depend on how the shared fidelity action
+# is represented, so these tests cover both ``None`` and a constant index.
+_CONSTANT_FIDELITIES = pytest.mark.parametrize("fidelity", [None, 0])
+
+
+def _constant_fidelity(fidelity: int | None) -> list[int] | None:
+    return None if fidelity is None else [fidelity]
+
+
+@_CONSTANT_FIDELITIES
+def test_positive_buffer_replaces_a_similar_lower_reward(monkeypatch, fidelity):
     monkeypatch.setattr(replay_module, "require_rdkit", _fake_rdkit)
     buffer = replay_module.ReplayBuffer(
         pad_token_id=0,
@@ -45,27 +55,78 @@ def test_positive_buffer_replaces_a_similar_lower_reward(monkeypatch):
         policy="reward",
         seed=1,
     )
-    tokens = torch.tensor([1, 2, 0])
+    tokens = torch.tensor([1, 2, 0]).unsqueeze(0)
+    fidelities = _constant_fidelity(fidelity)
 
-    assert buffer.add_batch(tokens.unsqueeze(0), ["CC"], [1.0]) == 1
-    assert buffer.add_batch(tokens.unsqueeze(0), ["CCC"], [0.5]) == 0
-    assert buffer.add_batch(tokens.unsqueeze(0), ["CCC"], [2.0]) == 1
+    assert buffer.add_batch(tokens, ["CC"], [1.0], fidelity_indices=fidelities) == 1
+    assert buffer.add_batch(tokens, ["CCC"], [0.5], fidelity_indices=fidelities) == 0
+    assert buffer.add_batch(tokens, ["CCC"], [2.0], fidelity_indices=fidelities) == 1
+    assert buffer.add_batch(tokens, ["CCC"], [3.0], fidelity_indices=fidelities) == 0
     assert [entry.smiles for entry in buffer.entries] == ["CCC"]
 
 
-def test_negative_buffer_is_fifo_and_deduplicated():
+@_CONSTANT_FIDELITIES
+def test_negative_buffer_is_fifo_and_deduplicated(fidelity):
     buffer = replay_module.ReplayBuffer(
         pad_token_id=0,
         capacity=2,
         policy="fifo",
     )
-    tokens = torch.tensor([1, 2, 0])
+    tokens = torch.tensor([1, 2, 0]).unsqueeze(0)
+    fidelities = _constant_fidelity(fidelity)
 
-    assert buffer.add_batch(tokens.unsqueeze(0), ["a"]) == 1
-    assert buffer.add_batch(tokens.unsqueeze(0), ["a"]) == 0
-    assert buffer.add_batch(tokens.unsqueeze(0), ["b"]) == 1
-    assert buffer.add_batch(tokens.unsqueeze(0), ["c"]) == 1
+    assert buffer.add_batch(tokens, ["a"], fidelity_indices=fidelities) == 1
+    assert buffer.add_batch(tokens, ["a"], fidelity_indices=fidelities) == 0
+    assert buffer.add_batch(tokens, ["b"], fidelity_indices=fidelities) == 1
+    assert buffer.add_batch(tokens, ["c"], fidelity_indices=fidelities) == 1
     assert [entry.smiles for entry in buffer.entries] == ["b", "c"]
+
+
+@pytest.mark.parametrize("policy", ["reward", "fifo"])
+def test_buffer_keeps_same_molecule_at_each_fidelity(monkeypatch, policy):
+    monkeypatch.setattr(replay_module, "require_rdkit", _fake_rdkit)
+    buffer = replay_module.ReplayBuffer(pad_token_id=0, capacity=4, policy=policy)
+    tokens = torch.tensor([1, 2, 0]).unsqueeze(0)
+
+    assert buffer.add_batch(tokens, ["CC"], [1.0], fidelity_indices=[0]) == 1
+    assert buffer.add_batch(tokens, ["CC"], [3.0], fidelity_indices=[1]) == 1
+    assert buffer.add_batch(tokens, ["CC"], [5.0], fidelity_indices=[1]) == 0
+    assert [entry.key for entry in buffer.entries] == [("CC", 0), ("CC", 1)]
+
+
+def test_positive_buffer_similarity_is_compared_within_fidelity(monkeypatch):
+    monkeypatch.setattr(replay_module, "require_rdkit", _fake_rdkit)
+    buffer = replay_module.ReplayBuffer(
+        pad_token_id=0,
+        capacity=4,
+        similarity_threshold=0.75,
+        policy="reward",
+    )
+    tokens = torch.tensor([1, 2, 0]).unsqueeze(0)
+
+    assert buffer.add_batch(tokens, ["CC"], [1.0], fidelity_indices=[0]) == 1
+    # A similar molecule at another fidelity is kept alongside, not replacing.
+    assert buffer.add_batch(tokens, ["CCC"], [2.0], fidelity_indices=[1]) == 1
+    # At the same fidelity, the higher-reward similar molecule replaces.
+    assert buffer.add_batch(tokens, ["CCC"], [2.0], fidelity_indices=[0]) == 1
+    assert [entry.key for entry in buffer.entries] == [("CCC", 0), ("CCC", 1)]
+
+
+def test_full_positive_buffer_evicts_global_lowest_reward(monkeypatch):
+    monkeypatch.setattr(replay_module, "require_rdkit", _fake_rdkit)
+    buffer = replay_module.ReplayBuffer(
+        pad_token_id=0,
+        capacity=2,
+        similarity_threshold=0.75,
+        policy="reward",
+    )
+    tokens = torch.tensor([[1, 2, 0], [1, 3, 0]])
+
+    assert (
+        buffer.add_batch(tokens, ["CC", "N"], [1.0, 2.0], fidelity_indices=[0, 1]) == 2
+    )
+    assert buffer.add_batch(tokens[:1], ["O"], [1.5], fidelity_indices=[1]) == 1
+    assert [entry.key for entry in buffer.entries] == [("O", 1), ("N", 1)]
 
 
 def test_fifo_buffer_warns_when_similarity_threshold_is_configured():
