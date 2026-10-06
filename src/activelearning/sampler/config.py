@@ -147,7 +147,6 @@ class PoolFileSamplerConfig(BaseModel):
     """
 
     type: Literal["PoolFileSampler"] = "PoolFileSampler"
-    type: Literal["PoolFileSampler"] = "PoolFileSampler"
     candidate_pool_file: Path
     num_samples: int = Field(gt=0)
     fidelities: _Fidelities = None
@@ -206,7 +205,6 @@ class GFlowNetSamplerConfig(BaseModel):
         Must include ``env._target_`` and all required env fields.
     """
 
-    type: Literal["GFlowNetSampler"] = "GFlowNetSampler"
     type: Literal["GFlowNetSampler"] = "GFlowNetSampler"
     n_samples: int = Field(gt=0)
     fidelities: _FidelityLevels | None = None
@@ -326,7 +324,6 @@ class S3GFNSamplerConfig(BaseModel):
     Random seed for policy training and sampling.
     """
 
-    type: Literal["S3GFNSampler"] = "S3GFNSampler"
     type: Literal["S3GFNSampler"] = "S3GFNSampler"
     n_samples: int = Field(gt=0)
     fidelities: _FidelityLevels | None = None
