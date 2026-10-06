@@ -242,7 +242,6 @@ class TestTransformerSequenceEncoder:
     def test_max_tokens_attribute(self, encoder: TransformerSequenceEncoder):
         # max_tokens includes the CLS and EOS positions.
         assert encoder.max_tokens == 32
-        assert encoder.max_tokens == 32
 
     def test_latent_dim_attribute(self, encoder: TransformerSequenceEncoder):
         assert encoder.latent_dim == 8

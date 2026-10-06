@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 import torch
 from torch import Tensor, nn
@@ -24,32 +22,6 @@ class _NumericEncoder(LatentEncoder):
 
     def __init__(self) -> None:
         super().__init__()
-        self.projection = nn.Linear(2, self.latent_dim)
-
-    def forward(self, inputs: Tensor) -> Tensor:
-        """Project a batch of continuous inputs to latent features."""
-        return self.projection(inputs)
-
-
-class _MissingPrepareInputsEncoder(nn.Module):
-    """Encoder-like module missing the raw-input preparation contract."""
-
-    latent_dim = 2
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.projection = nn.Linear(2, self.latent_dim)
-
-    def forward(self, inputs: Tensor) -> Tensor:
-        """Project a batch of continuous inputs to latent features."""
-        return self.projection(inputs)
-
-
-class _MissingLatentDimEncoder(LatentEncoder):
-    """Encoder missing the required latent-dimension contract."""
-
-    def __init__(self) -> None:
-        super().__init__()
         self.projection = nn.Linear(2, 2)
 
     def forward(self, inputs: Tensor) -> Tensor:
@@ -57,17 +29,21 @@ class _MissingLatentDimEncoder(LatentEncoder):
         return self.projection(inputs)
 
 
+class _MissingLatentDimEncoder(_NumericEncoder):
+    """Encoder missing the required latent-dimension contract."""
+
+    latent_dim = None
+
+
 @pytest.mark.parametrize(
-    "surrogate_type",
-    [ExactDKLSurrogate, VariationalDKLSurrogate],
+    ("surrogate_type", "surrogate_kwargs"),
+    [(ExactDKLSurrogate, {}), (VariationalDKLSurrogate, {"num_inducing": 2})],
 )
-def test_dkl_accepts_non_molecular_inputs(surrogate_type: type) -> None:
+def test_dkl_accepts_non_molecular_inputs(
+    surrogate_type: type, surrogate_kwargs: dict
+) -> None:
     """Both DKL variants should train through the generic encoder contract."""
     torch.manual_seed(0)
-    surrogate_kwargs: dict[str, Any] = {}
-    if surrogate_type is VariationalDKLSurrogate:
-        surrogate_kwargs["num_inducing"] = 2
-
     surrogate = surrogate_type(
         encoder=_NumericEncoder(),
         training_params=DKLTrainingConfig(epochs=1, lr=1e-2),
@@ -89,7 +65,8 @@ def test_dkl_accepts_non_molecular_inputs(surrogate_type: type) -> None:
 @pytest.mark.parametrize(
     ("encoder", "message"),
     [
-        (_MissingPrepareInputsEncoder(), "prepare_inputs"),
+        # A plain module lacks the raw-input preparation contract.
+        (nn.Linear(2, 2), "prepare_inputs"),
         (_MissingLatentDimEncoder(), "latent_dim"),
     ],
 )
