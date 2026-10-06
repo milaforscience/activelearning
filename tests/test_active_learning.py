@@ -492,6 +492,42 @@ def test_active_learning_stops_when_selector_returns_empty(
     assert num_iter == 0
 
 
+@pytest.mark.parametrize(
+    "selector",
+    [Mock(return_value=[]), TopKAcquisitionSelector(num_samples=5)],
+    ids=["empty_selection", "unaffordable_selection"],
+)
+def test_active_learning_discards_sampler_diagnostics_on_early_exit(selector) -> None:
+    """A round that stops before the oracle query still drains its sampler."""
+    sampler = DiagnosticPoolSampler(
+        candidate_pool=[Candidate(index, fidelity=0) for index in range(5)],
+        num_samples=5,
+    )
+
+    _, cost, num_rounds = active_learning(
+        dataset=ListDataset(),
+        surrogate=DummyMeanSurrogate(),
+        acquisition=DummyAcquisition(),
+        sampler=sampler,
+        selector=selector,
+        oracle=MultiFidelityOracle(
+            fidelity_configs={
+                0: {
+                    "cost_per_sample": 1.0,
+                    "score_fn": lambda value: float(value),
+                    "fidelity_confidence": 1.0,
+                }
+            }
+        ),
+        budget=Budget(available_budget=3.0, schedule=lambda _: 3.0),
+    )
+    plt.close(sampler.created_figure)
+
+    assert (cost, num_rounds) == (0.0, 0)
+    assert sampler.created_figure is not None
+    assert sampler._figure is None
+
+
 def test_active_learning_finalizes_run_writer_on_zero_round_exit():
     """Early termination still writes a complete zero-round summary."""
     run_writer = RecordingRunWriter()
