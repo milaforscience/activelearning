@@ -20,7 +20,9 @@ dependencies = [
     "huggingface-hub>=0.34.3",
     # MiniMol imports pkg_resources, which was removed from newer setuptools.
     "setuptools<81",
-    # Graphium's compiled PyG dependencies use local versions on Linux.
+    # Graphium's compiled PyG dependencies use local versions on Linux. They are
+    # hosted on data.pyg.org, so they resolve only with that wheel index: the
+    # workspace's [tool.uv].find-links, or --find-links for pip.
     "torch-cluster==1.6.3; sys_platform == 'darwin' and platform_machine == 'arm64'",
     "torch-scatter==2.1.2; sys_platform == 'darwin' and platform_machine == 'arm64'",
     "torch-sparse==0.6.18; sys_platform == 'darwin' and platform_machine == 'arm64'",

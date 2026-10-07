@@ -65,13 +65,10 @@ the application package after `make setup`.
 - Molecular tests and examples: `applications/molecules/tests/` and
   `applications/molecules/config/`
 
-The `activelearning` distribution is domain-neutral. Install the reusable
-molecular components separately when needed:
-
-```sh
-pip install activelearning
-pip install activelearning-molecules
-```
+The `activelearning` distribution is domain-neutral; the reusable molecular
+components are a separate distribution. Neither is published on PyPI. To use
+them outside this repository, install from Git as described in the
+[molecular application guide](applications/molecules/README.md#installation).
 
 Run molecular experiments through the application-owned command:
 
