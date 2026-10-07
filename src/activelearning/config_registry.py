@@ -117,6 +117,14 @@ class ConfigRegistry:
                 },
             ) from error
 
+    def categories_of(self, model: type[BuildableConfig]) -> list[ConfigCategory]:
+        """Return the categories in which a configuration model is registered."""
+        return [
+            category
+            for category, models in self._models.items()
+            if model in models.values()
+        ]
+
 
 def registered_config(category: ConfigCategory) -> Any:
     """Create a Pydantic annotation that dispatches through the registry."""
@@ -132,6 +140,20 @@ def registered_config(category: ConfigCategory) -> Any:
             # keeps direct construction of composite config models convenient
             # for application packages, which cannot pass Pydantic context.
             if type(value) is not BuildableConfig:
+                # Models unknown to this registry are accepted as external
+                # configs; a model registered elsewhere is a category mistake.
+                registered = registry.categories_of(type(value))
+                if registered and category not in registered:
+                    raise PydanticCustomError(
+                        "registered_config_type",
+                        "{model} is a {registered} configuration and cannot "
+                        "be used as a {category} configuration.",
+                        {
+                            "model": type(value).__name__,
+                            "registered": ", ".join(registered),
+                            "category": category,
+                        },
+                    )
                 return value
             config_type = getattr(value, "type", None)
             if not isinstance(config_type, str):

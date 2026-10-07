@@ -12,10 +12,14 @@ from activelearning.config_registry import (
     create_config_registry,
 )
 from activelearning.dataset.config import DatasetConfig
-from activelearning.logger.config import LoggerConfig, MultiLoggerConfig
+from activelearning.logger.config import (
+    ConsoleLoggerConfig,
+    LoggerConfig,
+    MultiLoggerConfig,
+)
 from activelearning.oracle.config import CompositeOracleConfig, OracleConfig
 from activelearning.sampler.config import SamplerConfig
-from activelearning.selector.config import SelectorConfig
+from activelearning.selector.config import CostAwareSelectorConfig, SelectorConfig
 from activelearning.surrogate.config import SurrogateConfig
 from activelearning.surrogate.dkl.config import ExactDKLSurrogateConfig
 from activelearning.surrogate.encoder_config import EncoderConfig, FixedEncoderConfig
@@ -157,6 +161,20 @@ def test_external_logger_can_be_nested_but_multilogger_cannot() -> None:
             },
             context={"config_registry": registry},
         )
+
+
+def test_config_instances_are_checked_against_their_category() -> None:
+    """A concrete config registered in another category is rejected."""
+    selector = CostAwareSelectorConfig()
+    with pytest.raises(ValidationError, match="cannot be used as a logger"):
+        MultiLoggerConfig(loggers=[selector])
+
+    console = ConsoleLoggerConfig(project_name="demo")
+    # A model the registry does not know is accepted as an external config.
+    external = _buildable_model("ExternalLogger")()
+    parsed = MultiLoggerConfig(loggers=[console, external])
+
+    assert parsed.loggers == [console, external]
 
 
 def test_duplicate_component_registration_names_the_conflict() -> None:
