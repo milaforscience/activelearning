@@ -528,3 +528,15 @@ def test_molecule_dkl_exact_multi_fidelity_pool_config_parses() -> None:
     assert config.selector.type == "CostAwareSelector"
     assert config.oracle.type == "XTBIPEAOracle"
     assert config.sampler.fidelities == [1, 2, 3]
+
+
+@pytest.mark.parametrize(
+    "config_path",
+    sorted(MOLECULE_CONFIG_ROOT.glob("*.yaml")),
+    ids=lambda path: path.stem,
+)
+def test_every_molecule_example_config_parses(config_path: Path) -> None:
+    """Every shipped molecule config parses with the application catalogs."""
+    config = load_and_parse_molecule_config(config_path, ActiveLearningConfig)
+
+    assert isinstance(config, ActiveLearningConfig)
