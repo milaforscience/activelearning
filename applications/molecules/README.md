@@ -8,11 +8,18 @@ tokenization, the xTB oracle, and S3-GFN.
 
 ## Installation
 
-For an installed environment:
+Neither `activelearning` nor `activelearning-molecules` is published on PyPI.
+To install them outside this repository, install both from Git in one command:
 
 ```sh
-pip install activelearning-molecules
+pip install --find-links https://data.pyg.org/whl/torch-2.5.0+cpu.html \
+    "activelearning @ git+https://github.com/milaforscience/activelearning.git" \
+    "activelearning-molecules @ git+https://github.com/milaforscience/activelearning.git#subdirectory=applications/molecules"
 ```
+
+`--find-links` is required on Linux: MiniMol's compiled PyG dependencies are
+pinned to `+pt25cpu` wheels that are hosted on `data.pyg.org`, not PyPI. For the
+core framework alone, install only the first requirement and omit the flag.
 
 For this repository, install the complete workspace and development tools from
 the repository root:

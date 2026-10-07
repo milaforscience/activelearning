@@ -122,7 +122,6 @@ Python `*Config` classes belong to the distribution that implements their
 component. Experiment YAML is user-owned and may live at any path:
 
 ```sh
-pip install activelearning activelearning-molecules
 activelearning-molecules path/to/my/experiment.yaml
 ```
 

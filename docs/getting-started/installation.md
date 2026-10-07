@@ -45,9 +45,9 @@ uv sync --all-packages --group dev
 ```
 
 Both commands install dependencies into a local `.venv/`, pinned to the exact
-versions in the lockfile. For an installed environment outside this repository,
-use `pip install activelearning` and add `pip install activelearning-molecules`
-only when molecular components are needed.
+versions in the lockfile. The packages are not published on PyPI; to install
+them outside this repository, follow the Git-based instructions in the
+[molecular application guide](https://github.com/milaforscience/activelearning/tree/main/applications/molecules#installation).
 
 !!! note
     `uv sync` strictly enforces the lockfile state. This guarantees experimental reproducibility but will remove any extraneous packages from the environment.
