@@ -1,18 +1,11 @@
-"""Pydantic models of surrogate models.
-
-Changes in the interface of existing surrogates should be reflected in this
-configuration. New built-in surrogates should be added to the explicit
-discriminated union below.
-"""
+"""Pydantic models of surrogate models."""
 
 from typing import (
-    Annotated,
     Any,
     Callable,
     ClassVar,
     Literal,
     Protocol,
-    Union,
     cast,
     runtime_checkable,
 )
@@ -27,6 +20,7 @@ from pydantic import (
 )
 from gpytorch.module import Module
 
+from activelearning.config_registry import BuildableConfig, registered_config
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
 from activelearning.surrogate.dkl.config import (
     ExactDKLSurrogateConfig,
@@ -60,7 +54,7 @@ class FidelityAwareSurrogateConfig(Protocol):
         """
 
 
-class DummyMeanSurrogateConfig(BaseModel):
+class DummyMeanSurrogateConfig(BuildableConfig):
     """Configuration for the constant-mean baseline surrogate."""
 
     type: Literal["DummyMeanSurrogate"] = "DummyMeanSurrogate"
@@ -76,7 +70,7 @@ class DummyMeanSurrogateConfig(BaseModel):
         return DummyMeanSurrogate()
 
 
-class BoTorchGPSurrogateConfig(BaseModel):
+class BoTorchGPSurrogateConfig(BuildableConfig):
     """Configuration for the numeric-input BoTorch Gaussian process surrogate.
 
     The optional import-string fields allow callers to provide custom fitting
@@ -104,6 +98,7 @@ class BoTorchGPSurrogateConfig(BaseModel):
 
     type: Literal["BoTorchGPSurrogate"] = "BoTorchGPSurrogate"
     input_representation: ClassVar[str] = "numeric"
+    is_botorch_compatible: ClassVar[bool] = True
     scale_inputs: bool = True
     standardize_outputs: bool = True
     optimize_hyperparameters: bool = True
@@ -133,9 +128,9 @@ class BoTorchGPSurrogateConfig(BaseModel):
         BoTorchGPSurrogateConfig
             Revalidated config with the derived ``is_multi_fidelity`` value.
         """
-        data = self.model_dump()
-        data["is_multi_fidelity"] = len(confidences) > 1
-        return type(self).model_validate(data)
+        return self.model_copy(
+            update={"is_multi_fidelity": len(confidences) > 1},
+        )
 
     @field_validator("custom_fit_function")
     @classmethod
@@ -268,10 +263,11 @@ class VariationalGPTrainingConfig(BaseModel):
     lr: float = Field(default=1e-3, gt=0.0)
 
 
-class VariationalGPSurrogateConfig(BaseModel):
+class VariationalGPSurrogateConfig(BuildableConfig):
     """Configuration for a sparse variational GP on fixed features."""
 
     type: Literal["VariationalGPSurrogate"] = "VariationalGPSurrogate"
+    is_botorch_compatible: ClassVar[bool] = True
     encoder: FixedEncoderConfig
     training_params: VariationalGPTrainingConfig = Field(
         default_factory=VariationalGPTrainingConfig
@@ -303,9 +299,7 @@ class VariationalGPSurrogateConfig(BaseModel):
                 f"the oracle. Oracle declares: {sorted(confidences)}."
             )
 
-        data = self.model_dump()
-        data["target_fidelity"] = target_fidelity
-        resolved = type(self).model_validate(data)
+        resolved = self.model_copy(update={"target_fidelity": target_fidelity})
         resolved._is_multi_fidelity = is_multi_fidelity
         return resolved
 
@@ -323,13 +317,11 @@ class VariationalGPSurrogateConfig(BaseModel):
         )
 
 
-SurrogateConfig = Annotated[
-    Union[
-        DummyMeanSurrogateConfig,
-        BoTorchGPSurrogateConfig,
-        ExactDKLSurrogateConfig,
-        VariationalDKLSurrogateConfig,
-        VariationalGPSurrogateConfig,
-    ],
-    Field(discriminator="type"),
-]
+SURROGATE_CONFIGS = (
+    DummyMeanSurrogateConfig,
+    BoTorchGPSurrogateConfig,
+    ExactDKLSurrogateConfig,
+    VariationalDKLSurrogateConfig,
+    VariationalGPSurrogateConfig,
+)
+SurrogateConfig = registered_config("surrogate")

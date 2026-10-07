@@ -20,11 +20,12 @@ from activelearning.config import ActiveLearningConfig
 from activelearning.utils.config_loader import load_and_parse, load_config
 
 
-def test_format_activelearning_command_quotes_shell_sensitive_arguments() -> None:
+def test_format_command_quotes_shell_sensitive_arguments() -> None:
     """Reproduction commands must preserve paths and overrides with spaces."""
-    from activelearning.main import _format_activelearning_command
+    from activelearning.main import _format_command
 
-    command = _format_activelearning_command(
+    command = _format_command(
+        "activelearning",
         [Path("config with spaces.yaml")],
         ["run.name=experiment name"],
     )

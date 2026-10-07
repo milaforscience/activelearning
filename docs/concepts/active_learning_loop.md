@@ -67,7 +67,7 @@ acquisition updates, sampler sampling, selection, oracle work, dataset
 updates, diagnostics, and total round time. The outer loop commits these
 values at the active-learning round. Logger backends receive live metrics and
 figures at that step, while a configured run writer persists the same round
-data for post-hoc analysis. GFlowNet and S3-GFN retain their native inner
+data for post-hoc analysis. GFlowNet implementations retain their native inner
 training resolution in implementation-specific diagnostics without advancing
 the active-learning round. See [Monitoring and Diagnostics](monitoring_and_diagnostics.md)
 for the metric and artifact conventions.
