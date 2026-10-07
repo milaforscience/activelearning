@@ -104,7 +104,8 @@ merely by being installed, Python package entry points would be the appropriate
 discovery mechanism.
 
 The supported catalog categories are `dataset`, `surrogate`, `acquisition`,
-`sampler`, `selector`, `oracle`, `logger`, and `encoder`. Runtime settings,
+`sampler`, `selector`, `oracle`, `logger`, `encoder`, and `fixed_encoder`
+(fixed, non-trainable feature encoders). Runtime settings,
 budgets, diagnostics, run writers, budget schedules, and acquisition
 candidate-set specifications remain local typed models because they are not
 cross-distribution component extension points.
