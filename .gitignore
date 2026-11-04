@@ -313,9 +313,6 @@ poetry.toml
 # LSP config files
 pyrightconfig.json
 
-# Local experiment scripts
-scripts/
-
 ### VisualStudioCode ###
 .vscode/*
 
@@ -340,3 +337,7 @@ wandb/
 # GFlowNet runtime artifacts
 logs/gflownet/
 data/replay.csv
+
+# Outputs and plots
+outputs/
+plots/

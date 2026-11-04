@@ -993,6 +993,30 @@ class TestMultiFidelityAcquisitionIntegration:
         acq.update(mf_surrogate, mf_obs)
         self._scores_valid(acq.score(mf_cands))
 
+    def test_qmflbmes_scores_single_fidelity(
+        self,
+        fitted_surrogate: BoTorchGPSurrogate,
+        single_fidelity_observations: list[Observation],
+        candidates: list[Candidate],
+        train_data_spec: TrainDataCandidateSetSpec,
+    ) -> None:
+        """The generalized acquisition should support a one-level surrogate."""
+        from activelearning.acquisition.botorch.botorch_multifidelity import (
+            QMultiFidelityLowerBoundMaxValueEntropy,
+        )
+
+        acq = QMultiFidelityLowerBoundMaxValueEntropy(
+            candidate_set_spec=train_data_spec,
+            num_fantasies=2,
+            num_mv_samples=5,
+            num_y_samples=16,
+        )
+        acq.update(fitted_surrogate, single_fidelity_observations)
+
+        assert acq._resolved_target_fidelity_value is None
+        assert acq._resolved_project_to_target_fidelity_fn is None
+        self._scores_valid(acq.score(candidates))
+
     def test_qmfkg_scores(
         self,
         mf_surrogate: BoTorchGPSurrogate,

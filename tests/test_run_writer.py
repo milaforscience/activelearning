@@ -1,11 +1,25 @@
 import csv
 import json
 import math
+from pathlib import Path
 
 import pytest
 
-from activelearning.run_writer import JSONLinesRunWriter
+from activelearning.run_writer import JSONLinesRunWriter, _resolve_method
 from activelearning.utils.types import Candidate, Observation
+
+
+def test_resolve_method_uses_generic_metadata_before_output_path(tmp_path) -> None:
+    """Method resolution should not depend on an experiment-specific config key."""
+    output_dir = tmp_path / "runs" / "path_method" / "seed_0"
+    manifest = {
+        "config": {"branin_benchmark": {"method": "config_method"}},
+        "run": {"method": "metadata_method"},
+    }
+
+    assert _resolve_method(manifest, output_dir) == "metadata_method"
+    assert _resolve_method({"config": manifest["config"]}, output_dir) == "path_method"
+    assert _resolve_method({}, Path(tmp_path.anchor)) is None
 
 
 def test_run_writer_persists_manifest_round_history_and_summary(tmp_path) -> None:

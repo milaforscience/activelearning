@@ -62,6 +62,7 @@ oracle:
 
 budget:
   available_budget: 300.0
+  max_rounds: 300
   schedule:
     type: constant
     value: 30.0
@@ -110,6 +111,7 @@ The fields that materially define the study are:
 - `oracle.fidelity_confidences`: optional confidence map $\kappa(m)$; the built-in augmented-function oracles derive it from relative cost when omitted.
 - `sampler.fidelities`: fidelity levels the sampler will stamp on candidates.  Accepts a simple list for uniform fidelity sampling, or a cost map that biases sampling inversely proportional to fidelity cost.  **When omitted, the validator auto-fills this from the oracle's fidelity set.**  An error is raised if the sampler declares levels that are not in the oracle's set.
 - `budget.available_budget` and `budget.schedule`: total expenditure limit and per-round spending policy (`constant` or `sigmoid_iterations` in the current schema).
+- `budget.max_rounds`: optional positive limit on the number of completed active-learning rounds.
 
 ## **Configuration Overrides**
 
@@ -117,29 +119,29 @@ The CLI accepts OmegaConf dotlist overrides following the config path. Overrides
 
 ```bash
 # Quick pilot with a reduced budget
-uv run activelearning config/branin_single_fidelity.yaml \
-  budget.available_budget=30
+uv run activelearning config/branin/single_fidelity.yaml \
+  budget.available_budget=3.0
 
 # Adjust the round budget
-uv run activelearning config/branin_multi_fidelity.yaml \
-  budget.schedule.value=5
+uv run activelearning config/branin/multi_fidelity.yaml \
+  budget.schedule.value=0.5
 
-# Larger candidate pool
-uv run activelearning config/branin_multi_fidelity.yaml \
-  sampler.num_samples=20000
+# Larger candidate pool per round
+uv run activelearning config/branin/multi_fidelity.yaml \
+  sampler.num_samples=200
 ```
 
 Disable logging entirely via an inline override:
 
 ```bash
-uv run activelearning config/branin_single_fidelity.yaml logger=null
+uv run activelearning config/branin/single_fidelity.yaml logger=null
 ```
 
 Compose multiple YAML files by passing them in sequence — later files override shared keys:
 
 ```bash
 # Add Aim logging to any run without touching the base config
-uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml
+uv run activelearning config/branin/multi_fidelity.yaml config/aim_logging.yaml
 ```
 
 !!! tip "When to override vs. when to edit the YAML"
@@ -149,13 +151,13 @@ uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml
 ## **Starting Points**
 
 !!! tip "Good configs to start from"
-    - `config/branin_single_fidelity.yaml` — simplest runnable baseline, single fidelity, Branin 2D.
-    - `config/branin_multi_fidelity.yaml` — multi-fidelity Branin with fidelity costs 0.01 / 0.1 / 1.0.
-    - `config/hartmann_single_fidelity.yaml` — single-fidelity Hartmann, budget 100/10.
-    - `config/hartmann_multi_fidelity.yaml` — multi-fidelity Hartmann with fidelity costs 0.125 / 0.25 / 1.0.
-    - `config/aim_logging.yaml` — logger overlay; compose with any base config to add Aim: `uv run activelearning config/branin_multi_fidelity.yaml config/aim_logging.yaml`
+    - `config/branin/single_fidelity.yaml` — simplest runnable baseline, single fidelity, Branin 2D.
+    - `config/branin/multi_fidelity.yaml` — multi-fidelity Branin with fidelity costs 0.01 / 0.1 / 1.0.
+    - `config/hartmann/single_fidelity.yaml` — single-fidelity Hartmann, budget 100/10.
+    - `config/hartmann/multi_fidelity.yaml` — multi-fidelity Hartmann with fidelity costs 0.125 / 0.25 / 1.0.
+    - `config/aim_logging.yaml` — logger overlay; compose with any base config to add Aim: `uv run activelearning config/branin/multi_fidelity.yaml config/aim_logging.yaml`
 
-    For guided walkthroughs, see the [Synthetic Function Examples](../tutorials/synthetic_function_experiment.md) tutorial.
+    For guided walkthroughs, see the [Running Experiments](../tutorials/running_experiments.md) tutorial.
 
 ## **Recommended Procedure**
 

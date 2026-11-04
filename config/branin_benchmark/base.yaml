@@ -1,0 +1,76 @@
+# Benchmark experiment: Shared Branin base for the 5-method, 5-seed
+# multi-fidelity benchmark suite.
+#
+# Run with:
+#   uv run activelearning config/branin_benchmark/base.yaml config/branin_benchmark/mf_gfn.yaml runtime.seed=<seed>
+
+runtime:
+  device: cpu
+  precision: 64
+  seed: 42
+
+budget:
+  available_budget: 100.0
+  max_rounds: 300
+  schedule:
+    type: constant
+    value: 1.0
+
+logger:
+  type: ConsoleLogger
+  project_name: branin_benchmark
+  run_name: branin-${branin_benchmark.method}-seed${runtime.seed}
+
+run_writer:
+  type: JSONLinesRunWriter
+  output_dir: outputs/branin_benchmark/${branin_benchmark.method}/seed_${runtime.seed}
+
+branin_benchmark:
+  top_k: 50
+  negate_score: true
+  initial_data:
+    multi: config/branin_benchmark/data/initial_multi_fidelity.csv
+    single: config/branin_benchmark/data/initial_single_fidelity.csv
+    mid: config/branin_benchmark/data/initial_mid_fidelity.csv
+    low: config/branin_benchmark/data/initial_low_fidelity.csv
+  domain_bounds:
+    - [-5.0, 10.0]
+    - [0.0, 15.0]
+  candidate_sample_count: 10
+  gflownet:
+    n_dim: 2
+    grid_length: 100
+    optimizer_batch_size: 16
+    random_action_prob: 0.0
+    reward_beta: 1.0
+    reward_rho: 1.0
+    fidelity_action: first
+
+dataset:
+  type: ListDataset
+  initial_data:
+    path: ${branin_benchmark.initial_data.multi}
+    x_columns: [x1, x2]
+    y_column: y
+    fidelity_column: fidelity
+    metadata_columns: remaining
+
+surrogate:
+  type: BoTorchGPSurrogate
+
+acquisition:
+  type: QMultiFidelityLowerBoundMaxValueEntropy
+  candidate_set_spec:
+    type: TrainDataCandidateSetSpec
+
+sampler:
+  type: ExactGridSampler
+  bounds: ${branin_benchmark.domain_bounds}
+  points_per_dimension: [100, 100]
+  fidelities: [1, 2, 3]
+  num_samples: ${branin_benchmark.candidate_sample_count}
+  use_acquisition_scores: true
+
+selector:
+  type: TopKAcquisitionSelector
+  num_samples: 1
