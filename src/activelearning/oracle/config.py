@@ -119,7 +119,7 @@ class XTBIPEAOracleConfig(BaseModel):
     num_conformers: int = Field(default=2, ge=1)
     per_fidelity_num_conformers: dict[int, int] | None = None
     correction_factor: float = 4.8455
-    mol_repr: str = "selfies"
+    mol_repr: Literal["selfies", "smiles"] = "selfies"
     negate_score: bool | None = None
     log_molecule_visualizations: bool = False
     molecule_visualization_limit: int = Field(default=25, ge=1)
