@@ -22,7 +22,7 @@ def _load_tokenizer() -> Any:
     except ImportError as error:  # pragma: no cover - optional dependency
         raise missing_optional_dependency_error(
             component="Hugging Face tokenization",
-            extra="molecules",
+            extra="transformers",
             error=error,
         ) from error
     return AutoTokenizer

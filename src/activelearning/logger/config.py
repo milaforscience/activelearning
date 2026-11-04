@@ -1,13 +1,10 @@
-"""Pydantic configuration models for live telemetry backends.
+"""Pydantic configuration models for live telemetry backends."""
 
-Each model builds a :class:`~activelearning.logger.logger.Logger` implementation.
-Add new backend configuration models to ``LoggerConfig``.
-"""
+from typing import Any, Literal
 
-from typing import Any, Annotated, Literal, Union
+from pydantic import model_validator
 
-from pydantic import BaseModel, Field
-
+from activelearning.config_registry import BuildableConfig, registered_config
 from activelearning.logger.logger import (
     AimLogger,
     CometLogger,
@@ -18,7 +15,7 @@ from activelearning.logger.logger import (
 )
 
 
-class ConsoleLoggerConfig(BaseModel):
+class ConsoleLoggerConfig(BuildableConfig):
     type: Literal["ConsoleLogger"] = "ConsoleLogger"
     project_name: str
     run_name: str | None = None
@@ -27,7 +24,7 @@ class ConsoleLoggerConfig(BaseModel):
         return ConsoleLogger(project_name=self.project_name, run_name=self.run_name)
 
 
-class WandbLoggerConfig(BaseModel):
+class WandbLoggerConfig(BuildableConfig):
     type: Literal["WandbLogger"] = "WandbLogger"
     project_name: str
     run_name: str | None = None
@@ -36,7 +33,7 @@ class WandbLoggerConfig(BaseModel):
         return WandbLogger(project_name=self.project_name, run_name=self.run_name)
 
 
-class CometLoggerConfig(BaseModel):
+class CometLoggerConfig(BuildableConfig):
     type: Literal["CometLogger"] = "CometLogger"
     project_name: str
     run_name: str | None = None
@@ -52,7 +49,7 @@ class CometLoggerConfig(BaseModel):
         )
 
 
-class AimLoggerConfig(BaseModel):
+class AimLoggerConfig(BuildableConfig):
     type: Literal["AimLogger"] = "AimLogger"
     project_name: str
     run_name: str | None = None
@@ -66,37 +63,31 @@ class AimLoggerConfig(BaseModel):
         )
 
 
-# Forward reference needed for the recursive MultiLoggerConfig.
-_ChildLoggerConfig = Annotated[
-    Union[
-        "ConsoleLoggerConfig",
-        "WandbLoggerConfig",
-        "CometLoggerConfig",
-        "AimLoggerConfig",
-    ],
-    Field(discriminator="type"),
-]
-
-
-class MultiLoggerConfig(BaseModel):
+class MultiLoggerConfig(BuildableConfig):
     type: Literal["MultiLogger"] = "MultiLogger"
-    loggers: list[_ChildLoggerConfig]
+    loggers: list["LoggerConfig"]
+
+    @model_validator(mode="after")
+    def reject_nested_multi_loggers(self) -> "MultiLoggerConfig":
+        """Preserve the non-recursive MultiLogger configuration contract."""
+        if any(isinstance(logger, MultiLoggerConfig) for logger in self.loggers):
+            raise ValueError("MultiLogger cannot contain another MultiLogger.")
+        return self
 
     def build(self) -> Logger:
         return MultiLogger(loggers=[child.build() for child in self.loggers])
 
 
-LoggerConfig = Annotated[
-    Union[
-        ConsoleLoggerConfig,
-        WandbLoggerConfig,
-        CometLoggerConfig,
-        AimLoggerConfig,
-        MultiLoggerConfig,
-    ],
-    Field(discriminator="type"),
-]
-"""Discriminated union of all supported logger configurations."""
+LOGGER_CONFIGS = (
+    ConsoleLoggerConfig,
+    WandbLoggerConfig,
+    CometLoggerConfig,
+    AimLoggerConfig,
+    MultiLoggerConfig,
+)
+LoggerConfig = registered_config("logger")
+
+MultiLoggerConfig.model_rebuild(_types_namespace={"LoggerConfig": LoggerConfig})
 
 
 def _config_uses_logger_type(node: Any, logger_type: str) -> bool:

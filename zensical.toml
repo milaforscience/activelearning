@@ -30,7 +30,6 @@ nav = [
         {"Running Experiments" = "tutorials/running_experiments.md"},
         {"Branin Benchmark" = "tutorials/branin_benchmark.md"},
         {"Sampling using GFlowNets" = "tutorials/gflownet_sampler.md"},
-        {"Molecule Discovery with SELFIES and xTB" = "tutorials/molecule_discovery.md"},
     ]},
     {"Extension Guide" = [
         {"Overview" = "extension-guide/overview.md"},
@@ -42,7 +41,6 @@ nav = [
     ]},
     {"Resources" = [
         {"FAQ" = "resources/faq.md"},
-        {"S3-GFN Performance" = "resources/s3gfn-performance.md"},
         {"References and Citation" = "resources/references.md"},
         {"Contributing" = "contributing.md"},
     ]},

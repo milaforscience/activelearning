@@ -188,12 +188,12 @@ component base classes. A drain must clear pending state, must not call
 Acquisition and selector implementations may use this hook for optional
 implementation-specific diagnostics without changing their public return types.
 
-S3-GFN reports training health, generation validity and yield, reward
-summaries, durations, and bounded training-loss, log-$Z$, and reward figures.
-Its contrastive objective is named explicitly. The GFlowNet adapter retains
-upstream metrics until the active-learning round ends; internal GFlowNet steps
-do not advance the experiment tracker step. Branin and xTB oracles retain
-their query figures until the same round boundary.
+Application-specific components may report training health, generation
+validity, reward summaries, durations, or figures through the same
+round-diagnostics hook. The GFlowNet adapter retains upstream metrics until
+the active-learning round ends; internal GFlowNet steps do not advance the
+experiment tracker step. Branin retains its query figures until the same round
+boundary.
 
 ## Failure Behavior
 

@@ -1,14 +1,15 @@
 """Pydantic models of acquisition functions.
 
 Changes in the interface of existing acquisition functions should be reflected in this
-configuration. New acquisition functions should define their corresponding pydantic
-model here and be added to ``AcquisitionConfig``.
+configuration. New acquisition functions should define a ``BuildableConfig`` schema
+and list it in their distribution's configuration catalog.
 """
 
-from typing import Annotated, Literal, Optional, Union
+from typing import Annotated, ClassVar, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
+from activelearning.config_registry import BuildableConfig, registered_config
 from activelearning.acquisition.acquisition import Acquisition
 from activelearning.acquisition.botorch.candidate_set import (
     CandidateSetSpec,
@@ -58,7 +59,7 @@ CandidateSetSpecConfig = Annotated[
 ]
 
 
-class DummyAcquisitionConfig(BaseModel):
+class DummyAcquisitionConfig(BuildableConfig):
     type: Literal["DummyAcquisition"] = "DummyAcquisition"
     beta: float = 1.0
 
@@ -66,7 +67,13 @@ class DummyAcquisitionConfig(BaseModel):
         return DummyAcquisition(beta=self.beta)
 
 
-class UpperConfidenceBoundConfig(BaseModel):
+class _BoTorchAcquisitionConfig(BuildableConfig):
+    """Base contract for acquisitions that require a BoTorch surrogate."""
+
+    requires_botorch_surrogate: ClassVar[bool] = True
+
+
+class UpperConfidenceBoundConfig(_BoTorchAcquisitionConfig):
     type: Literal["UpperConfidenceBound"] = "UpperConfidenceBound"
     beta: float = 2.0
     maximize: bool = True
@@ -80,7 +87,7 @@ class UpperConfidenceBoundConfig(BaseModel):
         )
 
 
-class ExpectedImprovementConfig(BaseModel):
+class ExpectedImprovementConfig(_BoTorchAcquisitionConfig):
     type: Literal["ExpectedImprovement"] = "ExpectedImprovement"
     best_f: Optional[float] = None
     maximize: bool = True
@@ -94,7 +101,7 @@ class ExpectedImprovementConfig(BaseModel):
         )
 
 
-class LogExpectedImprovementConfig(BaseModel):
+class LogExpectedImprovementConfig(_BoTorchAcquisitionConfig):
     type: Literal["LogExpectedImprovement"] = "LogExpectedImprovement"
     best_f: Optional[float] = None
     maximize: bool = True
@@ -108,7 +115,7 @@ class LogExpectedImprovementConfig(BaseModel):
         )
 
 
-class ProbabilityOfImprovementConfig(BaseModel):
+class ProbabilityOfImprovementConfig(_BoTorchAcquisitionConfig):
     type: Literal["ProbabilityOfImprovement"] = "ProbabilityOfImprovement"
     best_f: Optional[float] = None
     maximize: bool = True
@@ -122,7 +129,7 @@ class ProbabilityOfImprovementConfig(BaseModel):
         )
 
 
-class LogProbabilityOfImprovementConfig(BaseModel):
+class LogProbabilityOfImprovementConfig(_BoTorchAcquisitionConfig):
     type: Literal["LogProbabilityOfImprovement"] = "LogProbabilityOfImprovement"
     best_f: Optional[float] = None
     maximize: bool = True
@@ -136,7 +143,7 @@ class LogProbabilityOfImprovementConfig(BaseModel):
         )
 
 
-class PosteriorMeanConfig(BaseModel):
+class PosteriorMeanConfig(_BoTorchAcquisitionConfig):
     type: Literal["PosteriorMean"] = "PosteriorMean"
     maximize: bool = True
     target_fidelity_value: Optional[float] = None
@@ -148,7 +155,7 @@ class PosteriorMeanConfig(BaseModel):
         )
 
 
-class QMultiFidelityMaxValueEntropyConfig(BaseModel):
+class QMultiFidelityMaxValueEntropyConfig(_BoTorchAcquisitionConfig):
     type: Literal["QMultiFidelityMaxValueEntropy"] = "QMultiFidelityMaxValueEntropy"
     candidate_set_spec: CandidateSetSpecConfig
     num_fantasies: int = Field(default=16, gt=0)
@@ -168,7 +175,7 @@ class QMultiFidelityMaxValueEntropyConfig(BaseModel):
         )
 
 
-class QMultiFidelityLowerBoundMaxValueEntropyConfig(BaseModel):
+class QMultiFidelityLowerBoundMaxValueEntropyConfig(_BoTorchAcquisitionConfig):
     type: Literal["QMultiFidelityLowerBoundMaxValueEntropy"] = (
         "QMultiFidelityLowerBoundMaxValueEntropy"
     )
@@ -190,7 +197,7 @@ class QMultiFidelityLowerBoundMaxValueEntropyConfig(BaseModel):
         )
 
 
-class QMultiFidelityKnowledgeGradientConfig(BaseModel):
+class QMultiFidelityKnowledgeGradientConfig(_BoTorchAcquisitionConfig):
     type: Literal["QMultiFidelityKnowledgeGradient"] = "QMultiFidelityKnowledgeGradient"
     num_fantasies: int = Field(default=64, gt=0)
     current_value: Optional[float] = None
@@ -206,18 +213,16 @@ class QMultiFidelityKnowledgeGradientConfig(BaseModel):
         )
 
 
-AcquisitionConfig = Annotated[
-    Union[
-        DummyAcquisitionConfig,
-        UpperConfidenceBoundConfig,
-        ExpectedImprovementConfig,
-        LogExpectedImprovementConfig,
-        ProbabilityOfImprovementConfig,
-        LogProbabilityOfImprovementConfig,
-        PosteriorMeanConfig,
-        QMultiFidelityMaxValueEntropyConfig,
-        QMultiFidelityLowerBoundMaxValueEntropyConfig,
-        QMultiFidelityKnowledgeGradientConfig,
-    ],
-    Field(discriminator="type"),
-]
+ACQUISITION_CONFIGS = (
+    DummyAcquisitionConfig,
+    UpperConfidenceBoundConfig,
+    ExpectedImprovementConfig,
+    LogExpectedImprovementConfig,
+    ProbabilityOfImprovementConfig,
+    LogProbabilityOfImprovementConfig,
+    PosteriorMeanConfig,
+    QMultiFidelityMaxValueEntropyConfig,
+    QMultiFidelityLowerBoundMaxValueEntropyConfig,
+    QMultiFidelityKnowledgeGradientConfig,
+)
+AcquisitionConfig = registered_config("acquisition")
