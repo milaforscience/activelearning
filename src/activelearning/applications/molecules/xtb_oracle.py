@@ -87,12 +87,30 @@ class ConformerConfig:
     prune_rms_thresh: float = 1.5
 
     def __post_init__(self) -> None:
+        """Validate that at least one conformer will be generated.
+
+        Raises
+        ------
+        ValueError
+            If ``num_conformers`` is smaller than one.
+        """
         if self.num_conformers < 1:
             raise ValueError("num_conformers must be at least 1.")
 
 
 def hartree_to_ev(hartree: float) -> float:
-    """Convert energy from Hartree to electronvolt."""
+    """Convert an energy from Hartree to electronvolts.
+
+    Parameters
+    ----------
+    hartree : float
+        Energy in Hartree.
+
+    Returns
+    -------
+    float
+        Equivalent energy in electronvolts.
+    """
     return hartree * _HARTREE_TO_EV
 
 
@@ -109,8 +127,8 @@ def _decode_to_smiles(molecule: str, mol_repr: str = "selfies") -> str:
     Returns
     -------
     str
-        SMILES string. May be empty when a syntactically valid SELFIES string
-        collapses to the empty molecule during decoding.
+        SMILES string. May be empty when the input represents an empty
+        molecule.
 
     Raises
     ------
@@ -452,8 +470,8 @@ class XTBIPEAOracle(MultiFidelityOracle):
         ``TOTAL ENERGY`` differences in the optimisation logs, minus
         the empirical ``correction_factor``.
 
-    Each ``candidate.x`` must be a SELFIES (or SMILES) string representing the
-    molecule to evaluate.
+    Each ``candidate.x`` must be a SELFIES or SMILES string, as selected by
+    ``mol_repr``, representing the molecule to evaluate.
 
     Parameters
     ----------
@@ -490,11 +508,11 @@ class XTBIPEAOracle(MultiFidelityOracle):
         Large query batches are ranked by score and capped to this limit.
     Notes
     -----
-    SELFIES strings that decode to the empty molecule and molecules that fail
-    during RDKit/MMFF or xtb processing return ``NaN``. The dataset layer
-    filters these failed evaluations before surrogate fitting, matching the
-    original MF-GFN behavior where geometry-construction failures were treated
-    as invalid molecules.
+    Molecules that decode to the empty molecule or fail during RDKit/MMFF or
+    xtb processing return ``NaN``. The dataset layer filters these failed
+    evaluations before surrogate fitting, matching the original MF-GFN
+    behavior where geometry-construction failures were treated as invalid
+    molecules.
     """
 
     def __init__(
@@ -512,6 +530,45 @@ class XTBIPEAOracle(MultiFidelityOracle):
         log_molecule_visualizations: bool = False,
         molecule_visualization_limit: int = 25,
     ) -> None:
+        """Initialize the xTB-backed molecular oracle.
+
+        Parameters
+        ----------
+        task : {"ea", "ip"}
+            Molecular property to evaluate: electron affinity or ionisation
+            potential.
+        fidelity_costs : dict[int, float]
+            Computational cost per sample for each declared fidelity.
+        fidelity_confidences : dict[int, float], optional
+            Confidence value for each fidelity. If omitted, values are derived
+            by normalizing fidelity costs.
+        gfn_version : int, default=2
+            GFN-xTB parametrisation passed to ``--gfn``.
+        ff : {"mmff", "uff"}, default="mmff"
+            RDKit force field used for initial conformer optimization.
+        correction_factor : float, default=4.8455
+            Empirical correction subtracted from adiabatic IP/EA values.
+        conformer_cfg : ConformerConfig, optional
+            Default RDKit conformer generation settings.
+        per_fidelity_num_conformers : dict[int, int], optional
+            Per-fidelity overrides for the default conformer count.
+        mol_repr : {"selfies", "smiles"}, default="selfies"
+            Representation expected in each candidate's ``x`` value.
+        negate_score : bool, optional
+            Whether to negate the raw property value before returning it.
+            Defaults to ``True`` for IP and ``False`` for EA.
+        log_molecule_visualizations : bool, default=False
+            Whether to log RDKit molecule grids after queries.
+        molecule_visualization_limit : int, default=25
+            Maximum number of molecules included in each logged grid.
+
+        Raises
+        ------
+        ValueError
+            If the task or molecular representation is unsupported, no
+            fidelities are declared, an unsupported fidelity is configured, or
+            the visualization limit is not positive.
+        """
         if task not in {"ea", "ip"}:
             raise ValueError(f"task must be 'ea' or 'ip', got {task!r}")
         if not fidelity_costs:
@@ -604,7 +661,7 @@ class XTBIPEAOracle(MultiFidelityOracle):
         ----------
         candidate : Candidate
             The candidate whose molecule string is to be extracted.
-            ``candidate.x`` must be a SELFIES (or SMILES) string.
+            ``candidate.x`` must be a string in ``self._mol_repr`` format.
 
         Returns
         -------
@@ -618,8 +675,9 @@ class XTBIPEAOracle(MultiFidelityOracle):
         """
         if isinstance(candidate.x, str):
             return candidate.x
+        representation = self._mol_repr.upper()
         raise ValueError(
-            f"Expected candidate.x to be a SELFIES string, "
+            f"Expected candidate.x to be a {representation} string, "
             f"got {type(candidate.x).__name__}."
         )
 

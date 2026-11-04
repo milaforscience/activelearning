@@ -18,31 +18,58 @@ from activelearning.oracle.oracle import Oracle
 
 
 class BraninOracleConfig(BaseModel):
+    """Configuration for the analytic Branin multi-fidelity oracle."""
+
     type: Literal["BraninOracle"] = "BraninOracle"
     fidelity_costs: dict[int, float]
     fidelity_confidences: dict[int, float] | None = None
     log_landscape: bool = False
 
     def build(self) -> Oracle:
+        """Build the configured Branin oracle.
+
+        Returns
+        -------
+        Oracle
+            Configured :class:`~activelearning.oracle.augmented_function_oracle.BraninOracle`.
+        """
         return BraninOracle(
             self.fidelity_costs, self.fidelity_confidences, self.log_landscape
         )
 
 
 class Hartmann6DOracleConfig(BaseModel):
+    """Configuration for the analytic six-dimensional Hartmann oracle."""
+
     type: Literal["Hartmann6DOracle"] = "Hartmann6DOracle"
     fidelity_costs: dict[int, float]
     fidelity_confidences: dict[int, float] | None = None
 
     def build(self) -> Oracle:
+        """Build the configured Hartmann six-dimensional oracle.
+
+        Returns
+        -------
+        Oracle
+            Configured :class:`~activelearning.oracle.augmented_function_oracle.Hartmann6DOracle`.
+        """
         return Hartmann6DOracle(self.fidelity_costs, self.fidelity_confidences)
 
 
 class CompositeOracleConfig(BaseModel):
+    """Configuration for an oracle composed from multiple sub-oracles."""
+
     type: Literal["CompositeOracle"] = "CompositeOracle"
     sub_oracles: list["OracleConfig"]
 
     def build(self) -> Oracle:
+        """Build each configured sub-oracle and combine their outputs.
+
+        Returns
+        -------
+        Oracle
+            Configured :class:`~activelearning.oracle.composite_oracle.CompositeOracle`.
+        """
         return CompositeOracle(sub_oracles=[cfg.build() for cfg in self.sub_oracles])
 
 
@@ -99,6 +126,19 @@ class XTBIPEAOracleConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_per_fidelity_num_conformers(self) -> "XTBIPEAOracleConfig":
+        """Validate conformer overrides against declared fidelity levels.
+
+        Returns
+        -------
+        XTBIPEAOracleConfig
+            This validated configuration instance.
+
+        Raises
+        ------
+        ValueError
+            If an override has a non-positive count or references an
+            undeclared fidelity.
+        """
         if self.per_fidelity_num_conformers is None:
             return self
         invalid_counts = {
@@ -122,6 +162,18 @@ class XTBIPEAOracleConfig(BaseModel):
         return self
 
     def build(self) -> Oracle:
+        """Build the xTB-backed oracle lazily.
+
+        Returns
+        -------
+        Oracle
+            Configured :class:`~activelearning.applications.molecules.xtb_oracle.XTBIPEAOracle`.
+
+        Raises
+        ------
+        ImportError
+            If the optional molecules dependencies are not installed.
+        """
         from activelearning.applications.molecules.xtb_oracle import XTBIPEAOracle
         from activelearning.applications.molecules.xtb_oracle import ConformerConfig
 
