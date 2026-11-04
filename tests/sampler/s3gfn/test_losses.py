@@ -132,3 +132,35 @@ def test_sequence_log_probabilities_from_logits_rejects_misaligned_logits() -> N
             labels=torch.tensor([[2, 3, 1]]),
             pad_token_id=0,
         )
+
+
+def test_rtb_keeps_log_z_contribution_with_bfloat16_likelihoods() -> None:
+    """A float32 ``log_z`` must not be rounded into BF16 likelihoods."""
+    likelihoods = torch.tensor([-64.0], dtype=torch.bfloat16)
+
+    loss = relative_trajectory_balance_loss(
+        policy_log_probabilities=likelihoods,
+        prior_log_probabilities=likelihoods.clone(),
+        reward_scores=torch.zeros(1),
+        log_z=torch.tensor(0.1),
+    )
+
+    assert loss.dtype is torch.float32
+    assert loss.item() == pytest.approx(0.01, abs=1e-5)
+
+
+def test_sequence_log_probabilities_from_bfloat16_logits_accumulate_in_float32() -> (
+    None
+):
+    """BF16 logits are normalized and summed in float32."""
+    generator = torch.Generator().manual_seed(0)
+    logits = (torch.randn(2, 60, 50, generator=generator) * 3).bfloat16()
+    labels = torch.randint(1, 50, (2, 60), generator=generator)
+
+    values = sequence_log_probabilities_from_logits(logits, labels, pad_token_id=0)
+
+    assert values.dtype is torch.float32
+    torch.testing.assert_close(
+        values,
+        sequence_log_probabilities_from_logits(logits.float(), labels, pad_token_id=0),
+    )

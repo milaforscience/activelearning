@@ -20,7 +20,7 @@ import math
 import random
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Iterable, Literal, Sequence
 
 import torch
 from torch import Tensor
@@ -60,8 +60,8 @@ class _PreparedMoleculeBatch:
     reward_scores : Tensor
         Reward scores ``r(x)`` for ``smiles``: acquisition values, divided by
         oracle cost when a cost function is supplied. They are not the positive
-        RTB reward ``exp(beta * r(x))``. The tensor uses the sampler's bound
-        runtime floating-point dtype.
+        RTB reward ``exp(beta * r(x))``. The tensor uses float32 independently
+        of the sampler's model dtype.
     fidelity_indices : Tensor or None
         Optional terminal fidelity-action indices aligned with ``smiles``.
     synthesizable : tuple[bool, ...]
@@ -105,10 +105,19 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
         *,
         trust_remote_code: bool = True,
         deterministic_eval: bool | None = True,
+        compile_strategy: Literal[
+            "none", "training_only", "training_and_generation"
+        ] = "none",
+        torch_compile_mode: str = "default",
+        torch_compile_dynamic: bool | None = True,
+        attention_mask_adapter: bool = False,
+        compile_prior_scorer: bool = False,
+        model_dtype: Literal["float32", "bfloat16"] = "float32",
         cache_dir: str | None = None,
         max_length: int = 140,
         batch_size: int = 64,
         replay_batch_size: int = 64,
+        generation_batch_size: int | None = None,
         n_train_steps: int = 5000,
         num_warmup_steps: int = 100,
         learning_rate: float = 1.0e-4,
@@ -148,17 +157,36 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             checkpoint's own config would otherwise redraw the linear-attention
             random features on every forward pass. Set this to ``None`` for
             checkpoints that do not support it.
+        compile_strategy : {"none", "training_only", "training_and_generation"}, optional
+            Compilation behavior. ``"none"`` is eager, ``"training_only"``
+            compiles differentiable policy likelihoods, and
+            ``"training_and_generation"`` also compiles final generation.
+        torch_compile_mode : str, optional
+            TorchInductor mode passed to :func:`torch.compile` when compiled
+            generation is enabled.
+        torch_compile_dynamic : bool or None, optional
+            Dynamic-shape policy passed to :func:`torch.compile`.
+        attention_mask_adapter : bool, optional
+            Enable the pinned GP-MoLFormer attention-mask compile adapter.
+        compile_prior_scorer : bool, optional
+            Compile frozen-prior sequence scoring as a separate no-grad graph.
+        model_dtype : {"float32", "bfloat16"}, optional
+            Floating-point dtype for the S3-GFN policy, prior, and fidelity
+            head. Sequence likelihoods and losses are accumulated in float32
+            regardless.
         cache_dir : str or None, optional
             Directory used for Hugging Face downloads and cache files.
         max_length : int, optional
             Maximum generated sequence length, including special tokens.
             Tokenization retains full EOS-terminated sequences for RTB.
         batch_size : int, optional
-            Number of molecules generated for each training step and final
-            generation attempt.
+            Number of molecules generated for each training step.
         replay_batch_size : int, optional
             Maximum number of positive and negative trajectories sampled for a
             replay update.
+        generation_batch_size : int or None, optional
+            Number of molecules generated for each final generation attempt.
+            ``None`` inherits ``batch_size``.
         n_train_steps : int, optional
             Number of policy-training iterations per active-learning round.
         num_warmup_steps : int, optional
@@ -186,7 +214,9 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             ``log Z`` gradients.
         max_generation_attempts : int or None, optional
             Maximum number of final-generation samples attempted before
-            failing. Defaults to ``max(n_samples * 20, batch_size * 2)``.
+            failing. Defaults to
+            ``max(n_samples * 20, generation_batch_size * 2)`` after applying
+            the ``batch_size`` fallback.
         seed : int, optional
             Base seed. The active-learning round index is added to it before
             seeding Python, PyTorch, and CUDA generators.
@@ -206,6 +236,8 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             raise ValueError("max_length must be at least two.")
         if batch_size <= 0 or replay_batch_size <= 0:
             raise ValueError("batch_size and replay_batch_size must be positive.")
+        if generation_batch_size is not None and generation_batch_size <= 0:
+            raise ValueError("generation_batch_size must be positive when provided.")
         if n_train_steps <= 0:
             raise ValueError("n_train_steps must be positive.")
         if num_warmup_steps < 0:
@@ -233,6 +265,21 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             raise ValueError("max_generation_attempts must be positive.")
         if seed < 0:
             raise ValueError("seed must be nonnegative.")
+        if compile_strategy not in {
+            "none",
+            "training_only",
+            "training_and_generation",
+        }:
+            raise ValueError(
+                "compile_strategy must be one of 'none', 'training_only', "
+                "or 'training_and_generation'."
+            )
+        if compile_strategy != "none" and not torch_compile_mode:
+            raise ValueError(
+                "torch_compile_mode must not be empty when compilation is enabled."
+            )
+        if model_dtype not in {"float32", "bfloat16"}:
+            raise ValueError("model_dtype must be one of 'float32' or 'bfloat16'.")
 
         self.n_samples = n_samples
         self.fidelities = tuple(int(fidelity) for fidelity in fidelities)
@@ -240,10 +287,17 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
         self.tokenizer_name_or_path = tokenizer_name_or_path
         self.trust_remote_code = trust_remote_code
         self.deterministic_eval = deterministic_eval
+        self.compile_strategy = compile_strategy
+        self.torch_compile_mode = torch_compile_mode
+        self.torch_compile_dynamic = torch_compile_dynamic
+        self.attention_mask_adapter = attention_mask_adapter
+        self.compile_prior_scorer = compile_prior_scorer
+        self.model_dtype = model_dtype
         self.cache_dir = cache_dir
         self.max_length = max_length
         self.batch_size = batch_size
         self.replay_batch_size = replay_batch_size
+        self.generation_batch_size = generation_batch_size
         self.n_train_steps = n_train_steps
         self.num_warmup_steps = num_warmup_steps
         self.learning_rate = learning_rate
@@ -257,12 +311,28 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
         self.max_generation_attempts = (
             max_generation_attempts
             if max_generation_attempts is not None
-            else max(n_samples * 20, batch_size * 2)
+            else max(n_samples * 20, self.effective_generation_batch_size * 2)
         )
         self.seed = seed
         self._pretrained_model: S3GFNModel | None = None
         self._round_index = 0
         self._round_metrics = _RoundMetrics()
+
+    @property
+    def effective_model_dtype(self) -> torch.dtype:
+        """Return the floating-point dtype used by S3-GFN model tensors."""
+        if self.model_dtype == "float32":
+            return torch.float32
+        return torch.bfloat16
+
+    @property
+    def effective_generation_batch_size(self) -> int:
+        """Return the final-generation batch size, including its fallback."""
+        return (
+            self.batch_size
+            if self.generation_batch_size is None
+            else self.generation_batch_size
+        )
 
     def sample(
         self,
@@ -326,6 +396,24 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             pad_token_id=model.pad_token_id
         )
 
+        if self.compile_strategy != "none":
+            model.compile_policy(
+                mode=self.torch_compile_mode,
+                dynamic=self.torch_compile_dynamic,
+                training_only=self.compile_strategy == "training_only",
+            )
+            if self.compile_prior_scorer:
+                model.compile_prior_scorer(
+                    mode=self.torch_compile_mode,
+                    dynamic=self.torch_compile_dynamic,
+                )
+            _logger.info(
+                "S3-GFN round %d: torch.compile enabled with mode=%s; "
+                "the first training step includes lazy compilation.",
+                round_number,
+                self.torch_compile_mode,
+            )
+
         training_started = time.perf_counter()
         self._train_round(
             model=model,
@@ -372,6 +460,7 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
                 deterministic_eval=self.deterministic_eval,
                 cache_dir=self.cache_dir,
                 device=self.device,
+                dtype=self.effective_model_dtype,
                 n_fidelities=len(self.fidelities),
             )
             self._keep_pretrained_template_on_cpu()
@@ -388,6 +477,8 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             tokenizer=self._pretrained_model.tokenizer,
             fidelity_head=copy.deepcopy(self._pretrained_model.fidelity_head),
         ).to(self.device)
+        if self.attention_mask_adapter:
+            model.enable_attention_mask_adapter()
         model.policy.train()
         model.prior.eval()
         _logger.info("Fresh trainable S3-GFN policy initialized.")
@@ -643,7 +734,7 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
         positive_replay = positive_buffer.sample(
             count=min(self.replay_batch_size, len(positive_buffer)),
             device=self.device,
-            dtype=self.dtype,
+            dtype=torch.float32,
             reward_prioritized=True,
             replace=True,
         )
@@ -655,7 +746,7 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             negative_replay = negative_buffer.sample(
                 count=self.replay_batch_size,
                 device=self.device,
-                dtype=self.dtype,
+                dtype=torch.float32,
             )
         loss = model.replay_loss(
             positive_input_ids=positive_replay.input_ids,
@@ -702,7 +793,7 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
                 input_ids=empty_ids,
                 reward_scores=torch.empty(
                     0,
-                    dtype=self.dtype,
+                    dtype=torch.float32,
                     device=empty_ids.device,
                 ),
                 synthesizable=(),
@@ -728,8 +819,8 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             input_ids=input_ids,
             reward_scores=torch.tensor(
                 scores,
-                # Keep reward scores in the runtime floating-point dtype.
-                dtype=self.dtype,
+                # Keep reward scores precise independently of model dtype.
+                dtype=torch.float32,
                 device=input_ids.device,
             ),
             synthesizable=tuple(labels),
@@ -744,6 +835,7 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
         molecule_chem: Any,
     ) -> tuple[tuple[str, ...], Tensor | None]:
         """Return valid canonical SMILES and aligned action indices."""
+        # Validate alignment before filtering; retained indices are remapped below.
         self._resolve_fidelity_values(fidelity_indices, count=len(smiles))
         canonical_smiles: list[str] = []
         retained_fidelity_indices: list[int] = []
@@ -827,13 +919,16 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
         while len(candidates) < self.n_samples and generated_attempts < max_attempts:
             batch_index += 1
             remaining_attempts = max_attempts - generated_attempts
-            requested_count = min(self.batch_size, remaining_attempts)
+            current_batch_size = min(
+                self.effective_generation_batch_size,
+                remaining_attempts,
+            )
             generated = model.generate(
-                count=requested_count,
+                count=current_batch_size,
                 max_length=self.max_length,
                 temperature=self.sampling_temperature,
             )
-            batch_attempts = max(requested_count, len(generated.smiles))
+            batch_attempts = current_batch_size
             generated_attempts += batch_attempts
             valid_count, invalid_count, duplicate_count = self._process_candidate_batch(
                 smiles=generated.smiles,
