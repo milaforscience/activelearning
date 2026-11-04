@@ -1,3 +1,4 @@
+import math
 import warnings
 from abc import ABC, abstractmethod
 from typing import Any, Callable, ClassVar, Iterable, Optional
@@ -8,6 +9,30 @@ from activelearning.acquisition.acquisition import Acquisition
 from activelearning.surrogate.botorch_surrogate import BoTorchGPSurrogate
 from activelearning.surrogate.surrogate import Surrogate, TargetFidelityProjector
 from activelearning.utils.types import Candidate, Observation
+
+
+def clamp_negative_scores(scores: list[float]) -> list[float]:
+    """Clamp negative scores to zero, rejecting non-finite values.
+
+    Parameters
+    ----------
+    scores : list[float]
+        Scores of a theoretically non-negative acquisition.
+
+    Returns
+    -------
+    list[float]
+        Scores with negative numerical artifacts replaced by zero.
+
+    Raises
+    ------
+    ValueError
+        If any score is NaN or infinite. ``max(0.0, nan)`` is ``0.0``, so
+        clamping first would turn a failed evaluation into a valid score.
+    """
+    if not all(math.isfinite(score) for score in scores):
+        raise ValueError("Acquisition produced non-finite scores.")
+    return [max(0.0, score) for score in scores]
 
 
 class BoTorchAcquisitionBase(Acquisition, ABC):

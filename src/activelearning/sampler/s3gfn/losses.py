@@ -131,8 +131,9 @@ def relative_trajectory_balance_loss(
 
     This function represents the positive reward as ``R(x) = exp(beta * r(x))``
     and receives ``r(x)`` through the ``reward_scores`` argument. Consequently,
-    ``beta * reward_scores`` is ``log R(x)``. The argument is therefore an
-    acquisition score, not ``R(x)`` itself, and must not be passed through
+    ``beta * reward_scores`` is ``log R(x)``. The argument is therefore the
+    reward score (the acquisition value, cost-weighted when the sampler has a
+    cost function), not ``R(x)`` itself, and must not be passed through
     ``log`` again. This convention also allows reward scores to be negative.
 
     Parameters
@@ -142,7 +143,7 @@ def relative_trajectory_balance_loss(
     prior_log_probabilities : Tensor
         Frozen prior sequence log probabilities.
     reward_scores : Tensor
-        Finite acquisition reward scores ``r(x)`` aligned with the trajectories.
+        Finite reward scores ``r(x)`` aligned with the trajectories.
         They define the positive reward through ``R(x) = exp(beta * r(x))``.
     log_z : Tensor
         Trainable scalar log normalizer.

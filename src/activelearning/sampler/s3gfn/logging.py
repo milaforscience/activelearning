@@ -26,12 +26,16 @@ class _RoundMetrics:
     auxiliary_losses: list[float | None] = field(default_factory=list)
     log_z_values: list[float] = field(default_factory=list)
     reward_scores: list[float] = field(default_factory=list)
+    reward_score_means: list[float] = field(default_factory=list)
+    reward_score_maxes: list[float] = field(default_factory=list)
     online_updates: int = 0
     replay_updates: int = 0
     generation_attempts: int = 0
     generation_invalid: int = 0
     generation_duplicates: int = 0
     final_candidates: tuple[Candidate, ...] = ()
+    positive_buffer_size: int = 0
+    negative_buffer_size: int = 0
     training_duration_s: float | None = None
     generation_duration_s: float | None = None
 
@@ -47,12 +51,21 @@ class _RoundMetrics:
         log_z: float,
         reward_scores: Sequence[float],
     ) -> None:
-        """Record one training step and its generated-batch statistics."""
+        """Record one training step and its generated-batch statistics.
+
+        ``reward_scores`` are the batch's reward scores ``r(x)``: acquisition
+        values, cost-weighted when the sampler has a cost function. They are
+        not the positive RTB reward ``exp(beta * r(x))``.
+        """
         self.generated_counts.append(generated_count)
         self.valid_counts.append(valid_count)
         self.synthesizable_counts.append(synthesizable_count)
         self.log_z_values.append(log_z)
-        self.reward_scores.extend(reward_scores)
+        reward_values = [float(value) for value in reward_scores]
+        self.reward_scores.extend(reward_values)
+        if reward_values:
+            self.reward_score_means.append(_mean(reward_values))
+            self.reward_score_maxes.append(max(reward_values))
         self.online_rtb_losses.append(online_loss)
         if online_loss is not None:
             self.online_updates += 1
@@ -118,102 +131,120 @@ class S3GFNLoggingMixin:
             len(negative_buffer) if negative_buffer is not None else 0,
         )
 
-    def _log_round_metrics(
+    def drain_round_diagnostics(
         self,
         *,
-        positive_buffer: ReplayBuffer,
-        negative_buffer: ReplayBuffer | None,
-    ) -> None:
-        """Emit one aggregated metric value and optional figures for the round."""
-        if self.logger is None:
-            return
-
+        include_figures: bool,
+        max_points: int,
+    ) -> tuple[dict[str, float | int], dict[str, Figure]]:
+        """Return and clear the S3-GFN diagnostics for the current AL round."""
         round_metrics = self.round_metrics
-        generated_total = sum(round_metrics.generated_counts)
-        valid_total = sum(round_metrics.valid_counts)
-        synthesizable_total = sum(round_metrics.synthesizable_counts)
-        final_candidate_count = len(round_metrics.final_candidates)
-        generation_attempts = round_metrics.generation_attempts
+        try:
+            if not _has_round_data(round_metrics):
+                return {}, {}
+            generated_total = sum(round_metrics.generated_counts)
+            valid_total = sum(round_metrics.valid_counts)
+            synthesizable_total = sum(round_metrics.synthesizable_counts)
+            final_candidate_count = len(round_metrics.final_candidates)
+            generation_attempts = round_metrics.generation_attempts
+            metrics: dict[str, float | int] = {
+                "sampler/s3gfn/train/online_updates": round_metrics.online_updates,
+                "sampler/s3gfn/train/replay_updates": round_metrics.replay_updates,
+                "sampler/s3gfn/train/generated_total": generated_total,
+                "sampler/s3gfn/train/valid_total": valid_total,
+                "sampler/s3gfn/train/synthesizable_total": synthesizable_total,
+                "sampler/s3gfn/train/validity_rate": _safe_ratio(
+                    valid_total, generated_total
+                ),
+                "sampler/s3gfn/train/synthesizable_rate": _safe_ratio(
+                    synthesizable_total, valid_total
+                ),
+                "sampler/s3gfn/train/positive_buffer": round_metrics.positive_buffer_size,
+                "sampler/s3gfn/train/negative_buffer": round_metrics.negative_buffer_size,
+                "sampler/s3gfn/generation/attempts": generation_attempts,
+                "sampler/s3gfn/generation/yield": _safe_ratio(
+                    final_candidate_count, generation_attempts
+                ),
+                "sampler/s3gfn/generation/invalid_rate": _safe_ratio(
+                    round_metrics.generation_invalid, generation_attempts
+                ),
+                "sampler/s3gfn/generation/duplicate_rate": _safe_ratio(
+                    round_metrics.generation_duplicates, generation_attempts
+                ),
+            }
+            online_losses = _present_values(round_metrics.online_rtb_losses)
+            replay_losses = _present_values(round_metrics.replay_losses)
+            contrastive_losses = _present_values(round_metrics.auxiliary_losses)
+            if online_losses:
+                metrics["sampler/s3gfn/train/online_rtb_loss_mean"] = _mean(
+                    online_losses
+                )
+                metrics["sampler/s3gfn/train/online_rtb_loss_final"] = online_losses[-1]
+            if replay_losses:
+                metrics["sampler/s3gfn/train/replay_loss_mean"] = _mean(replay_losses)
+            if contrastive_losses:
+                metrics["sampler/s3gfn/train/contrastive_loss_mean"] = _mean(
+                    contrastive_losses
+                )
+                metrics["sampler/s3gfn/train/contrastive_loss_final"] = (
+                    contrastive_losses[-1]
+                )
+            if round_metrics.log_z_values:
+                metrics["sampler/s3gfn/train/log_z_final"] = round_metrics.log_z_values[
+                    -1
+                ]
+            # Statistics of the reward score r(x), not of exp(beta * r(x)).
+            if round_metrics.reward_scores:
+                metrics["sampler/s3gfn/reward/mean"] = _mean(
+                    round_metrics.reward_scores
+                )
+                metrics["sampler/s3gfn/reward/max"] = max(round_metrics.reward_scores)
+            if round_metrics.training_duration_s is not None:
+                metrics["sampler/s3gfn/train/duration_s"] = float(
+                    round_metrics.training_duration_s
+                )
+            if round_metrics.generation_duration_s is not None:
+                metrics["sampler/s3gfn/generation/duration_s"] = float(
+                    round_metrics.generation_duration_s
+                )
 
-        metrics: dict[str, float | int] = {
-            "s3gfn/train/online_updates": round_metrics.online_updates,
-            "s3gfn/train/replay_updates": round_metrics.replay_updates,
-            "s3gfn/train/generated_total": generated_total,
-            "s3gfn/train/valid_total": valid_total,
-            "s3gfn/train/synthesizable_total": synthesizable_total,
-            "s3gfn/train/validity_rate": _safe_ratio(
-                valid_total,
-                generated_total,
-            ),
-            "s3gfn/train/synthesizable_rate": _safe_ratio(
-                synthesizable_total,
-                valid_total,
-            ),
-            "s3gfn/train/positive_buffer": len(positive_buffer),
-            "s3gfn/train/negative_buffer": (
-                len(negative_buffer) if negative_buffer is not None else 0
-            ),
-            "s3gfn/generation/candidates": final_candidate_count,
-            "s3gfn/generation/attempts": generation_attempts,
-            "s3gfn/generation/yield": _safe_ratio(
-                final_candidate_count,
-                generation_attempts,
-            ),
-            "s3gfn/generation/invalid_rate": _safe_ratio(
-                round_metrics.generation_invalid,
-                generation_attempts,
-            ),
-            "s3gfn/generation/duplicate_rate": _safe_ratio(
-                round_metrics.generation_duplicates,
-                generation_attempts,
-            ),
-        }
-        online_losses = _present_values(round_metrics.online_rtb_losses)
-        replay_losses = _present_values(round_metrics.replay_losses)
-        auxiliary_losses = _present_values(round_metrics.auxiliary_losses)
-        if online_losses:
-            metrics["s3gfn/train/online_rtb_loss_mean"] = _mean(online_losses)
-            metrics["s3gfn/train/online_rtb_loss_final"] = online_losses[-1]
-        if replay_losses:
-            metrics["s3gfn/train/replay_loss_mean"] = _mean(replay_losses)
-        if auxiliary_losses:
-            metrics["s3gfn/train/auxiliary_loss_mean"] = _mean(auxiliary_losses)
-        if round_metrics.log_z_values:
-            metrics["s3gfn/train/log_z_final"] = round_metrics.log_z_values[-1]
-        if round_metrics.reward_scores:
-            metrics["s3gfn/reward/mean"] = _mean(round_metrics.reward_scores)
-            metrics["s3gfn/reward/max"] = max(round_metrics.reward_scores)
-        if round_metrics.training_duration_s is not None:
-            metrics["s3gfn/train/duration_s"] = float(round_metrics.training_duration_s)
-        if round_metrics.generation_duration_s is not None:
-            metrics["s3gfn/generation/duration_s"] = float(
-                round_metrics.generation_duration_s
-            )
-
-        candidate_count = len(round_metrics.final_candidates)
-        fidelity_counts = {fidelity: 0 for fidelity in self.fidelities}
-        for candidate in round_metrics.final_candidates:
-            fidelity_counts[candidate.fidelity] += 1
-        for fidelity, count in fidelity_counts.items():
-            metrics[f"s3gfn/generation/fidelity_{fidelity}"] = _safe_ratio(
-                count,
-                candidate_count,
-            )
-
-        for key, value in metrics.items():
-            self.logger.log_metric(key, value)
-
-        training_losses_figure = _build_training_losses_figure(round_metrics)
-        if training_losses_figure is not None:
-            self.logger.log_figure("s3gfn/training_losses", training_losses_figure)
-        log_z_figure = _build_log_z_figure(round_metrics)
-        if log_z_figure is not None:
-            self.logger.log_figure("s3gfn/log_z", log_z_figure)
+            figures: dict[str, Figure] = {}
+            if include_figures:
+                for key, figure in (
+                    (
+                        "sampler/s3gfn/training_losses",
+                        _build_training_losses_figure(round_metrics, max_points),
+                    ),
+                    (
+                        "sampler/s3gfn/log_z",
+                        _build_log_z_figure(round_metrics, max_points),
+                    ),
+                    (
+                        "sampler/s3gfn/reward/trajectory",
+                        _build_reward_figure(round_metrics, max_points),
+                    ),
+                ):
+                    if figure is not None:
+                        figures[key] = figure
+            return metrics, figures
+        finally:
+            self._round_metrics = _RoundMetrics()
 
 
 def _present_values(values: Sequence[float | None]) -> list[float]:
     """Return recorded numeric values while omitting unavailable updates."""
     return [float(value) for value in values if value is not None]
+
+
+def _has_round_data(metrics: _RoundMetrics) -> bool:
+    """Return whether an accumulator contains data from a completed round."""
+    return bool(
+        metrics.generated_counts
+        or metrics.final_candidates
+        or metrics.generation_attempts
+        or metrics.training_duration_s is not None
+        or metrics.generation_duration_s is not None
+    )
 
 
 def _mean(values: Sequence[float]) -> float:
@@ -226,12 +257,15 @@ def _safe_ratio(numerator: int, denominator: int) -> float:
     return 0.0 if denominator == 0 else float(numerator / denominator)
 
 
-def _build_training_losses_figure(metrics: _RoundMetrics) -> Figure | None:
+def _build_training_losses_figure(
+    metrics: _RoundMetrics,
+    max_points: int,
+) -> Figure | None:
     """Build a loss trajectory figure for the recorded training steps."""
     series = (
         ("online RTB", metrics.online_rtb_losses),
         ("replay", metrics.replay_losses),
-        ("auxiliary", metrics.auxiliary_losses),
+        ("contrastive", metrics.auxiliary_losses),
     )
     if not any(value is not None for _, values in series for value in values):
         return None
@@ -244,6 +278,7 @@ def _build_training_losses_figure(metrics: _RoundMetrics) -> Figure | None:
             for step, value in enumerate(values, start=1)
             if value is not None
         ]
+        points = _bounded(points, max_points)
         if points:
             axis.plot(
                 [step for step, _ in points],
@@ -251,7 +286,7 @@ def _build_training_losses_figure(metrics: _RoundMetrics) -> Figure | None:
                 label=label,
             )
     axis.set_xlabel("Training step")
-    axis.set_ylabel("Loss")
+    axis.set_ylabel("S3-GFN training loss")
     axis.set_title("S3-GFN training losses")
     axis.legend()
     axis.spines["top"].set_visible(False)
@@ -260,21 +295,76 @@ def _build_training_losses_figure(metrics: _RoundMetrics) -> Figure | None:
     return figure
 
 
-def _build_log_z_figure(metrics: _RoundMetrics) -> Figure | None:
+def _build_log_z_figure(metrics: _RoundMetrics, max_points: int) -> Figure | None:
     """Build a log-normalizer trajectory figure for the recorded steps."""
     if not metrics.log_z_values:
         return None
 
     figure = Figure(figsize=(8.0, 4.5))
     axis = figure.add_subplot(1, 1, 1)
-    axis.plot(
-        range(1, len(metrics.log_z_values) + 1),
-        metrics.log_z_values,
+    points = _bounded(
+        list(enumerate(metrics.log_z_values, start=1)),
+        max_points,
     )
+    axis.plot([step for step, _ in points], [value for _, value in points])
     axis.set_xlabel("Training step")
-    axis.set_ylabel("log Z")
-    axis.set_title("S3-GFN log Z")
+    axis.set_ylabel("S3-GFN log Z")
+    axis.set_title("Sampler S3-GFN: log Z")
     axis.spines["top"].set_visible(False)
     axis.spines["right"].set_visible(False)
     figure.tight_layout()
     return figure
+
+
+def _build_reward_figure(metrics: _RoundMetrics, max_points: int) -> Figure | None:
+    """Build a reward-score trajectory figure for recorded training batches.
+
+    Plots the per-step mean and max of ``r(x)``, the cost-weighted acquisition
+    value, before RTB exponentiates it into a reward.
+    """
+    if not metrics.reward_score_means:
+        return None
+
+    figure = Figure(figsize=(8.0, 4.5))
+    axis = figure.add_subplot(1, 1, 1)
+    mean_points = _bounded(
+        list(enumerate(metrics.reward_score_means, start=1)),
+        max_points,
+    )
+    axis.plot(
+        [step for step, _ in mean_points],
+        [value for _, value in mean_points],
+        label="mean",
+    )
+    if metrics.reward_score_maxes:
+        max_points_values = _bounded(
+            list(enumerate(metrics.reward_score_maxes, start=1)),
+            max_points,
+        )
+        axis.plot(
+            [step for step, _ in max_points_values],
+            [value for _, value in max_points_values],
+            label="max",
+        )
+    axis.set_xlabel("Training step")
+    axis.set_ylabel("S3-GFN reward score")
+    axis.set_title("Sampler S3-GFN: reward score trajectory")
+    axis.legend()
+    axis.spines["top"].set_visible(False)
+    axis.spines["right"].set_visible(False)
+    figure.tight_layout()
+    return figure
+
+
+def _bounded(
+    values: Sequence[tuple[int, float]], max_points: int
+) -> list[tuple[int, float]]:
+    """Return a deterministic evenly-spaced plot subset."""
+    if len(values) <= max_points:
+        return list(values)
+    if max_points == 1:
+        return [values[0]]
+    indices = [
+        index * (len(values) - 1) // (max_points - 1) for index in range(max_points)
+    ]
+    return [values[index] for index in indices]

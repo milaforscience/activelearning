@@ -21,6 +21,7 @@ nav = [
     {"Introduction" = [
         {"Framework Overview" = "concepts/overview.md"},
         {"Active Learning Loop" = "concepts/active_learning_loop.md"},
+        {"Monitoring and Diagnostics" = "concepts/monitoring_and_diagnostics.md"},
         {"Multi-Fidelity Setting" = "concepts/multi_fidelity.md"},
         {"Runtime and Configuration" = "concepts/runtime_and_configuration.md"},
         {"Related Work and Positioning" = "concepts/related-work.md"},

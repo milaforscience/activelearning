@@ -6,12 +6,20 @@ from typing import Any
 
 from matplotlib.figure import Figure as MatplotlibFigure
 
+from activelearning.monitoring.keys import validate_log_key
+
 
 class Logger(ABC):
-    """Abstract base class for experiment loggers.
+    """Live telemetry sink for active-learning metrics, figures, and configuration.
 
-    Defines a unified interface for logging metrics, figures, and configuration
-    across different backends (console, wandb, Comet ML, etc.).
+    Implementations print locally or submit data to a tracking backend such as
+    Aim, Weights & Biases, or Comet. The active-learning loop commits one
+    completed round through :meth:`log_step`. Loggers are independent of
+    :class:`~activelearning.monitoring.run_writer.RunWriter`, which persists
+    reproducible structured round records and local artifacts.
+
+    Use a logger to inspect a run while it executes, a run writer for later
+    analysis and reproducibility, or both when both forms of output are useful.
 
     Parameters
     ----------
@@ -122,6 +130,7 @@ class ConsoleLogger(Logger):
         value : Any
             Value of the metric.
         """
+        validate_log_key(key)
         self._buffer[key] = value
 
     def log_figure(self, key: str, figure: Any) -> None:
@@ -134,6 +143,7 @@ class ConsoleLogger(Logger):
         figure : Any
             The figure object (not rendered in console).
         """
+        validate_log_key(key)
         print(f"[Figure] {key!r} (not rendered in console)")
 
     def log_step(self, step: int) -> None:
@@ -200,6 +210,7 @@ class WandbLogger(Logger):
         value : Any
             Value of the metric.
         """
+        validate_log_key(key)
         self._buffer[key] = value
 
     def log_figure(self, key: str, figure: Any) -> None:
@@ -212,6 +223,7 @@ class WandbLogger(Logger):
         figure : Any
             The figure object (e.g., matplotlib Figure).
         """
+        validate_log_key(key)
         self._buffer[key] = self._wandb.Image(figure)
 
     def log_step(self, step: int) -> None:
@@ -265,6 +277,7 @@ class CometLogger(Logger):
             project_name=self.project_name,
             workspace=workspace,
             api_key=api_key,
+            auto_metric_logging=False,
         )
         self.experiment.set_name(self.run_name)
         self._buffer: dict[str, Any] = {}
@@ -293,6 +306,7 @@ class CometLogger(Logger):
         value : Any
             Value of the metric.
         """
+        validate_log_key(key)
         self._buffer[key] = value
 
     def log_figure(self, key: str, figure: Any) -> None:
@@ -305,6 +319,7 @@ class CometLogger(Logger):
         figure : Any
             The figure object (e.g., matplotlib Figure).
         """
+        validate_log_key(key)
         self._figure_buffer[key] = figure
 
     def log_step(self, step: int) -> None:
@@ -327,7 +342,7 @@ class CometLogger(Logger):
         self._buffer = {}
 
         for key, figure in self._figure_buffer.items():
-            self.experiment.log_figure(figure_name=key, figure=figure)
+            self.experiment.log_figure(figure_name=key, figure=figure, step=step)
         self._figure_buffer = {}
 
     def end(self) -> None:
@@ -391,6 +406,7 @@ class AimLogger(Logger):
         value : Any
             Value of the metric.
         """
+        validate_log_key(key)
         if isinstance(value, Real) and not isinstance(value, bool):
             self._buffer[key] = value
             return
@@ -409,6 +425,7 @@ class AimLogger(Logger):
             to avoid Aim's Plotly conversion path; other figure-like objects
             continue to use ``aim.Figure``.
         """
+        validate_log_key(key)
         if isinstance(figure, MatplotlibFigure):
             self._buffer[key] = self._aim.Image(figure)
             return
@@ -470,6 +487,7 @@ class MultiLogger(Logger):
         value : Any
             Value of the metric.
         """
+        validate_log_key(key)
         for logger in self._loggers:
             logger.log_metric(key, value)
 
@@ -483,6 +501,7 @@ class MultiLogger(Logger):
         figure : Any
             The figure object to log.
         """
+        validate_log_key(key)
         for logger in self._loggers:
             logger.log_figure(key, figure)
 

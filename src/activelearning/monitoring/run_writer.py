@@ -1,20 +1,57 @@
-"""Structured run writers for persisting active-learning artifacts."""
+"""Durable monitoring sinks for structured active-learning run outputs."""
 
 import csv
 import json
 import math
 from abc import ABC, abstractmethod
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
-from typing import Any, Literal, Sequence
+from typing import Any, Literal, Mapping, Sequence
 
+from matplotlib.figure import Figure
 from pydantic import BaseModel, Field
 
+from activelearning.monitoring.keys import validate_log_key
 from activelearning.utils.types import Candidate, Observation
 
 
+@dataclass(frozen=True)
+class RoundRecord:
+    """Immutable persistence-ready data from one completed active-learning round.
+
+    The record groups round identity, observations before and after the round,
+    sampled and selected candidates, oracle results, and budget state. Its
+    ``metrics``, ``profiling``, and ``diagnostics`` mappings contain core round
+    values, operational timings, and optional diagnostic enrichment,
+    respectively. Raw selector and acquisition score arrays are temporary data
+    used to calculate round diagnostics; they are deliberately not persisted.
+    """
+
+    round_index: int
+    observations_before: Sequence[Observation]
+    observations_after: Sequence[Observation]
+    sampled_candidates: Sequence[Candidate]
+    selected_candidates: Sequence[Candidate]
+    selected_costs: Sequence[float]
+    queried_observations: Sequence[Observation]
+    valid_observations: Sequence[Observation]
+    round_budget: float
+    initial_budget: float
+    cumulative_cost: float
+    remaining_budget: float
+    metrics: Mapping[str, int | float]
+    profiling: Mapping[str, float]
+    diagnostics: Mapping[str, int | float]
+
+
 class RunWriter(ABC):
-    """Interface for structured active-learning run outputs."""
+    """Durable structured-output sink for active-learning runs.
+
+    The active-learning loop owns this interface and supplies one completed
+    :class:`RoundRecord` per round. Writers persist reproducibility metadata,
+    records, and optional figures independently of live :class:`Logger`
+    telemetry; components never write directly to a run writer.
+    """
 
     @abstractmethod
     def start_run(self, metadata: dict[str, Any]) -> None:
@@ -23,18 +60,18 @@ class RunWriter(ABC):
     @abstractmethod
     def record_round(
         self,
-        *,
-        round_index: int,
-        sampled_candidates: Sequence[Candidate],
-        sampled_scores: Sequence[float] | None,
-        selected_candidates: Sequence[Candidate],
-        selected_scores: Sequence[float] | None,
-        selected_costs: Sequence[float],
-        observations: Sequence[Observation],
-        cumulative_cost: float,
-        remaining_budget: float,
+        record: RoundRecord,
+        figures: Mapping[str, Figure] | None = None,
     ) -> None:
-        """Write structured outputs for one completed round."""
+        """Persist one completed round and optional diagnostic figures.
+
+        Parameters
+        ----------
+        record : RoundRecord
+            Immutable, persistence-ready data for one completed round.
+        figures : Mapping[str, Figure] | None, optional
+            Diagnostic figures keyed by their stable metric namespace.
+        """
 
     @abstractmethod
     def end_run(self, summary: dict[str, Any]) -> None:
@@ -42,7 +79,12 @@ class RunWriter(ABC):
 
 
 class JSONLinesRunWriter(RunWriter):
-    """Write run metadata and per-round artifacts as JSON and JSONL files."""
+    """Write durable run outputs as JSON, JSONL, CSV, and local figure artifacts.
+
+    The output directory contains ``run_manifest.json``, ``round_history.jsonl``,
+    ``run_summary.json``, and ``experiment_log.csv``. Diagnostic figures are
+    written below ``artifacts/`` using their monitoring namespaces.
+    """
 
     def __init__(
         self,
@@ -71,52 +113,56 @@ class JSONLinesRunWriter(RunWriter):
         self._manifest = _deep_merge(self.metadata, metadata)
         self._method = _resolve_method(self._manifest, self.output_dir)
         self._seed = _resolve_seed(self._manifest)
-        if self.write_config:
-            self._write_json("run_manifest.json", self._manifest)
+        persisted_manifest = dict(self._manifest)
+        if not self.write_config:
+            persisted_manifest.pop("config", None)
+        self._write_json("run_manifest.json", persisted_manifest)
         self._write_experiment_log()
         self._started = True
 
     def record_round(
         self,
-        *,
-        round_index: int,
-        sampled_candidates: Sequence[Candidate],
-        sampled_scores: Sequence[float] | None,
-        selected_candidates: Sequence[Candidate],
-        selected_scores: Sequence[float] | None,
-        selected_costs: Sequence[float],
-        observations: Sequence[Observation],
-        cumulative_cost: float,
-        remaining_budget: float,
+        record: RoundRecord,
+        figures: Mapping[str, Figure] | None = None,
     ) -> None:
         """Append one round record to the JSONL history."""
         if not self._started:
             raise RuntimeError("Call start_run() before recording rounds.")
+        for values in (record.metrics, record.profiling, record.diagnostics):
+            for key in values:
+                validate_log_key(key)
+        for key in figures or {}:
+            validate_log_key(key)
 
-        record: dict[str, Any] = {
-            "round": round_index,
-            "round_index": round_index,
-            "selected_candidates": _jsonable(selected_candidates),
-            "selected_costs": _jsonable(selected_costs),
-            "observations": _jsonable(observations),
-            "new_observations": _jsonable(observations),
-            "round_cost": float(sum(selected_costs)),
-            "cumulative_cost": float(cumulative_cost),
-            "remaining_budget": float(remaining_budget),
+        artifact_paths = self._write_figures(
+            round_index=record.round_index,
+            figures=figures or {},
+        )
+        payload: dict[str, Any] = {
+            "round_index": record.round_index,
+            "selected_candidates": _jsonable(record.selected_candidates),
+            "selected_costs": _jsonable(record.selected_costs),
+            "queried_observations": _jsonable(record.queried_observations),
+            "valid_observations": _jsonable(record.valid_observations),
+            "round_budget": float(record.round_budget),
+            "round_cost": float(sum(record.selected_costs)),
+            "initial_budget": float(record.initial_budget),
+            "cumulative_cost": float(record.cumulative_cost),
+            "remaining_budget": float(record.remaining_budget),
+            "metrics": _jsonable(dict(record.metrics)),
+            "profiling": _jsonable(dict(record.profiling)),
+            "diagnostics": _jsonable(dict(record.diagnostics)),
+            "artifacts": artifact_paths,
         }
-        if selected_scores is not None:
-            record["selected_scores"] = _jsonable(selected_scores)
         if self.write_samples:
-            record["sampled_candidates"] = _jsonable(sampled_candidates)
-            if sampled_scores is not None:
-                record["sampled_scores"] = _jsonable(sampled_scores)
+            payload["sampled_candidates"] = _jsonable(record.sampled_candidates)
 
         with self._rounds_path.open("a", encoding="utf-8") as rounds_handle:
-            rounds_handle.write(json.dumps(record, sort_keys=True) + "\n")
+            rounds_handle.write(json.dumps(payload, sort_keys=True) + "\n")
         self._append_experiment_row(
-            round_index=round_index,
-            observations=observations,
-            cumulative_cost=cumulative_cost,
+            round_index=record.round_index,
+            observations=record.valid_observations,
+            cumulative_cost=record.cumulative_cost,
         )
 
     def end_run(self, summary: dict[str, Any]) -> None:
@@ -131,6 +177,22 @@ class JSONLinesRunWriter(RunWriter):
             json.dumps(_jsonable(payload), indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+
+    def _write_figures(
+        self,
+        *,
+        round_index: int,
+        figures: Mapping[str, Figure],
+    ) -> dict[str, str]:
+        """Persist diagnostic figures under deterministic component-round paths."""
+        artifact_paths: dict[str, str] = {}
+        for key, figure in figures.items():
+            relative_path = _figure_relative_path(key, round_index)
+            path = self.output_dir / relative_path
+            path.parent.mkdir(parents=True, exist_ok=True)
+            figure.savefig(path, dpi=150, bbox_inches="tight")
+            artifact_paths[key] = relative_path.as_posix()
+        return artifact_paths
 
     def _append_experiment_row(
         self,
@@ -183,7 +245,7 @@ class JSONLinesRunWriter(RunWriter):
 
 
 class JSONLinesRunWriterConfig(BaseModel):
-    """Configuration for JSON and JSONL active-learning run outputs."""
+    """Configure durable JSON, JSONL, CSV, and artifact outputs for one run."""
 
     type: Literal["JSONLinesRunWriter"] = "JSONLinesRunWriter"
     output_dir: Path
@@ -214,6 +276,25 @@ class JSONLinesRunWriterConfig(BaseModel):
 
 
 RunWriterConfig = JSONLinesRunWriterConfig
+
+
+def _figure_relative_path(key: str, round_index: int) -> Path:
+    """Return the local artifact path for a stable diagnostic figure key."""
+    segments = key.split("/")
+    if len(segments) < 2 or any(
+        not _is_safe_path_segment(segment) for segment in segments
+    ):
+        raise ValueError(f"Invalid diagnostic figure key: {key!r}")
+    return Path("artifacts", *segments[:-1], f"round_{round_index:04d}") / (
+        f"{segments[-1]}.png"
+    )
+
+
+def _is_safe_path_segment(segment: str) -> bool:
+    """Return whether one figure-key path segment is safe for local storage."""
+    return bool(segment) and all(
+        character.isalnum() or character in "_-." for character in segment
+    )
 
 
 def _jsonable(value: Any) -> Any:

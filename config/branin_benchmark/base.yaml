@@ -25,6 +25,11 @@ run_writer:
   type: JSONLinesRunWriter
   output_dir: outputs/branin_benchmark/${branin_benchmark.method}/seed_${runtime.seed}
 
+diagnostics:
+  enabled: true
+  figure_interval: 1
+  max_points: 1000
+
 branin_benchmark:
   top_k: 50
   negate_score: true

@@ -58,8 +58,10 @@ class _PreparedMoleculeBatch:
     input_ids : Tensor
         Padded token ids for ``smiles`` on the model device.
     reward_scores : Tensor
-        Acquisition reward scores associated with ``smiles``. The tensor uses the
-        sampler's bound runtime floating-point dtype.
+        Reward scores ``r(x)`` for ``smiles``: acquisition values, divided by
+        oracle cost when a cost function is supplied. They are not the positive
+        RTB reward ``exp(beta * r(x))``. The tensor uses the sampler's bound
+        runtime floating-point dtype.
     fidelity_indices : Tensor or None
         Optional terminal fidelity-action indices aligned with ``smiles``.
     synthesizable : tuple[bool, ...]
@@ -167,8 +169,9 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
         log_z_learning_rate : float, optional
             AdamW learning rate for the trainable RTB normalizer ``log Z``.
         beta : float, optional
-            Reward inverse temperature used to convert acquisition scores into
-            RTB log rewards.
+            Reward inverse temperature. RTB turns each reward score ``r(x)``
+            (the cost-weighted acquisition value) into the positive GFlowNet
+            reward ``R(x) = exp(beta * r(x))``.
         aux_coefficient : float, optional
             Weight of the negative replay contrastive loss. Zero disables the
             negative replay buffer and auxiliary loss.
@@ -273,7 +276,7 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
         ----------
         acquisition : Any, optional
             Singleton-scoring acquisition function used to turn generated
-            molecule-fidelity pairs into RTB reward scores. S3-GFN requires
+            molecule-fidelity pairs into reward scores ``r(x)``. S3-GFN requires
             ``supports_singleton_scoring`` to be true.
         observations : Iterable[Observation], optional
             Current active-learning observations. Accepted for the common
@@ -281,8 +284,9 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             the pretrained policy and does not warm-start from observations.
         cost_fn : callable, optional
             Function returning one positive cost per candidate. When provided,
-            acquisition scores are inverse-cost weighted before becoming
-            reward scores.
+            each acquisition value is divided by its cost to give the reward
+            score ``r(x)``; otherwise the reward score is the acquisition value
+            itself. The active-learning loop passes the oracle's cost function.
 
         Returns
         -------
@@ -343,9 +347,9 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
         self.round_metrics.generation_duration_s = (
             time.perf_counter() - generation_started
         )
-        self._log_round_metrics(
-            positive_buffer=positive_buffer,
-            negative_buffer=negative_buffer,
+        self.round_metrics.positive_buffer_size = len(positive_buffer)
+        self.round_metrics.negative_buffer_size = (
+            len(negative_buffer) if negative_buffer is not None else 0
         )
         _logger.info(
             "S3-GFN round %d complete: generated %d candidate(s).",
@@ -724,7 +728,7 @@ class S3GFNSampler(S3GFNLoggingMixin, Sampler):
             input_ids=input_ids,
             reward_scores=torch.tensor(
                 scores,
-                # Keep acquisition scores in the runtime floating-point dtype.
+                # Keep reward scores in the runtime floating-point dtype.
                 dtype=self.dtype,
                 device=input_ids.device,
             ),
@@ -1021,7 +1025,7 @@ def _score_candidates(
     *,
     cost_fn: Callable[[Sequence[Candidate]], list[float]] | None,
 ) -> list[float]:
-    """Score candidates and optionally apply inverse-cost weighting."""
+    """Return reward scores: acquisition values, divided by cost if given."""
     scores = (
         acquisition.score(candidates)
         if cost_fn is None

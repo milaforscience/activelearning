@@ -23,6 +23,23 @@ Subclass `activelearning.selector.selector.Selector` and implement one method:
 Return a **subset** of the input candidates — including an empty list if no candidates are feasible. Never query the oracle, compute
 observations, or modify the budget inside the selector.
 
+## Optional score diagnostics
+
+`TopKAcquisitionSelector` and `CostAwareSelector` expose standard score
+diagnostics through a transient snapshot consumed by monitoring. The metrics
+compare raw acquisition values and the ranking values actually used for
+selection, including the selected subset. The score distribution figure is
+available at `acquisition/general/score_distribution` when diagnostic figures
+are enabled.
+
+This telemetry is optional. A custom selector remains valid when it only
+implements `__call__` and returns `list[Candidate]`; it does not need to return
+metadata or rescore its acquisition function.
+Score snapshots are drained after each completed round and are never persisted
+in `RoundRecord` or JSON-lines output. Non-finite values are omitted from score
+summaries and plots, although an infinite cost-aware ratio may still affect
+selection.
+
 ## **Reference implementations**
 
 Review the built-in selectors as concrete examples before writing your own:

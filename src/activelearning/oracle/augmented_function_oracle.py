@@ -1,7 +1,6 @@
 from collections.abc import Sequence
 from typing import Any, Callable, Optional
 
-import matplotlib.pyplot as plt
 import torch
 from botorch.test_functions.multi_fidelity import AugmentedBranin, AugmentedHartmann
 from botorch.test_functions.synthetic import SyntheticTestFunction
@@ -136,6 +135,7 @@ class BraninOracle(AugmentedFunctionOracle):
         log_landscape: bool = False,
     ) -> None:
         self.log_landscape = log_landscape
+        self._pending_landscape_candidates: tuple[Candidate, ...] | None = None
         super().__init__(
             # negate=True flips Branin so maximizing the oracle minimizes the
             # original Branin objective.
@@ -145,17 +145,24 @@ class BraninOracle(AugmentedFunctionOracle):
         )
 
     def query(self, candidates: Sequence[Candidate]) -> list[Observation]:
-        """Query Branin observations and log the queried landscape when possible."""
+        """Query Branin observations and retain candidates for an optional plot."""
         observations = super().query(candidates)
         if self.log_landscape:
-            self._log_query_landscape(candidates)
+            self._pending_landscape_candidates = tuple(candidates)
         return observations
 
-    def _log_query_landscape(self, candidates: Sequence[Candidate]) -> None:
-        """Log a contour plot of the Branin landscape with queried candidates."""
-        if self.logger is None:
-            return
-
+    def drain_round_diagnostics(
+        self,
+        *,
+        include_figures: bool,
+        max_points: int,
+    ) -> tuple[dict[str, float | int], dict[str, Any]]:
+        """Return an optional query landscape for the most recent AL round."""
+        _ = max_points
+        candidates = self._pending_landscape_candidates
+        self._pending_landscape_candidates = None
+        if candidates is None or not include_figures:
+            return {}, {}
         figure = build_augmented_2d_landscape_figure(
             evaluator=self._function,
             candidates=candidates,
@@ -164,13 +171,10 @@ class BraninOracle(AugmentedFunctionOracle):
             supported_fidelities=self.get_supported_fidelities(),
             dtype=self.dtype,
             device=self.device,
-            title="Branin landscape with queried candidates",
+            title="Oracle Branin: landscape with queried candidates",
             minima=[(-3.14159, 12.275), (3.14159, 2.275), (9.42478, 2.475)],
         )
-        try:
-            self.logger.log_figure("branin_landscape_query", figure)
-        finally:
-            plt.close(figure)
+        return {}, {"oracle/branin/query_landscape": figure}
 
 
 class Hartmann6DOracle(AugmentedFunctionOracle):
