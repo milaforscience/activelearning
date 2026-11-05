@@ -393,7 +393,7 @@ class BoTorchGPSurrogate(MultiFidelitySurrogate):
             If a candidate fidelity is not present in the fidelity-confidence map
             in multi-fidelity mode.
         """
-        cand_list = list(candidates)
+        cand_list = candidates if isinstance(candidates, list) else list(candidates)
         if not cand_list:
             raise ValueError("Cannot encode an empty candidate iterable.")
 
@@ -446,7 +446,10 @@ class BoTorchGPSurrogate(MultiFidelitySurrogate):
             If no batches are provided, if batch sizes are ragged, or if any
             batch is incompatible with the fitted model.
         """
-        batch_list = [list(batch) for batch in candidate_batches]
+        batch_list = [
+            batch if isinstance(batch, list) else list(batch)
+            for batch in candidate_batches
+        ]
         if not batch_list:
             raise ValueError("Cannot encode an empty batch iterable.")
         if any(len(batch) == 0 for batch in batch_list):
